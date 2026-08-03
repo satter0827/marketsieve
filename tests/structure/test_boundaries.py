@@ -1,0 +1,45 @@
+from __future__ import annotations
+
+import ast
+from pathlib import Path
+
+ROOT = Path(__file__).parents[2]
+SDK_SOURCE = ROOT / "packages" / "core" / "src" / "marketsieve"
+FORBIDDEN_SDK_IMPORTS = {
+    "click",
+    "http",
+    "logging",
+    "marketsieve_app",
+    "os",
+    "smtplib",
+    "sqlite3",
+    "tomllib",
+}
+
+
+def imported_roots(path: Path) -> set[str]:
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    roots: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            roots.update(alias.name.partition(".")[0] for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            roots.add(node.module.partition(".")[0])
+    return roots
+
+
+def test_sdk_has_no_application_or_io_imports() -> None:
+    violations = {
+        str(path.relative_to(ROOT)): sorted(imported_roots(path) & FORBIDDEN_SDK_IMPORTS)
+        for path in SDK_SOURCE.rglob("*.py")
+        if imported_roots(path) & FORBIDDEN_SDK_IMPORTS
+    }
+
+    assert violations == {}
+
+
+def test_application_depends_on_public_sdk() -> None:
+    application_source = ROOT / "apps" / "marketsieve" / "src" / "marketsieve_app"
+    imports = set().union(*(imported_roots(path) for path in application_source.rglob("*.py")))
+
+    assert "marketsieve" in imports
