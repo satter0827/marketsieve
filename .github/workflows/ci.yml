@@ -1,0 +1,85 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [develop, main]
+  push:
+    branches: [develop, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  develop-gate:
+    if: >-
+      (github.event_name == 'pull_request' && github.base_ref == 'develop') ||
+      github.ref == 'refs/heads/develop'
+    name: Develop Gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          python-version: "3.13"
+          enable-cache: true
+      - run: uv sync --locked
+      - run: uv run python scripts/quality_gate.py check all
+
+  release-matrix:
+    if: >-
+      (github.event_name == 'pull_request' && github.base_ref == 'main') ||
+      github.ref == 'refs/heads/main'
+    name: Compatibility / Python ${{ matrix.python-version }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          python-version: ${{ matrix.python-version }}
+          enable-cache: true
+      - run: uv sync --locked
+      - run: uv run python scripts/quality_gate.py check all
+
+  main-source:
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+    name: Main / Source Branch
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Require develop from this repository
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+        run: |
+          test "$HEAD_REF" = "develop"
+          test "$HEAD_REPOSITORY" = "${{ github.repository }}"
+
+  release-gate:
+    if: >-
+      always() && (
+        (github.event_name == 'pull_request' && github.base_ref == 'main') ||
+        github.ref == 'refs/heads/main'
+      )
+    name: Release Gate
+    needs: [release-matrix, main-source]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Require successful release checks
+        env:
+          MATRIX_RESULT: ${{ needs.release-matrix.result }}
+          SOURCE_RESULT: ${{ needs.main-source.result }}
+        run: |
+          test "$MATRIX_RESULT" = "success"
+          test "$SOURCE_RESULT" = "success" -o "$SOURCE_RESULT" = "skipped"
