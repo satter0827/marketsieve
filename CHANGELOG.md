@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and stable releases
 will follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-08-05
+
+### Added
+
+- Explanation-only Agent with FakeListLLM as the offline default.
+- Explicit LM Studio, OpenAI, Anthropic, and Google model adapters with independent mock transport
+  contracts.
+- `agent doctor` and `agent explain` commands, credential-free dry runs, and versioned Agent JSON.
+
+### Changed
+
+- Agent output now selects only verified fact identifiers; numbers, dates, evidence, and the
+  disclaimer are inserted by a deterministic renderer.
+- Every unsafe, ungrounded, invalid, unavailable, or timed-out model response falls back to the
+  deterministic template without changing providers.
+
+### Security
+
+- Cloud calls require `--allow-cloud` on the same invocation. Non-loopback LM Studio endpoints
+  require `--allow-remote`.
+- Models receive no tools, source access, filesystem access, or calculation authority. Credentials
+  remain environment-only and are excluded from dry-run output and retained evidence.
+
 ## [0.2.0] - 2026-08-05
 
 ### Added
