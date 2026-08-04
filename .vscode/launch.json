@@ -1,0 +1,16 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "App: Doctor",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "marketsieve_app",
+      "args": [
+        "doctor"
+      ],
+      "console": "integratedTerminal",
+      "justMyCode": true
+    }
+  ]
+}

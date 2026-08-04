@@ -10,6 +10,7 @@ dependencies = [
 dev = [
     "build>=1.2,<2",
     "hatchling>=1.27,<2",
+    "import-linter>=2,<3",
     "mypy>=1.14,<2",
     "pytest>=8.3,<10",
     "ruff>=0.9,<1",
@@ -31,9 +32,11 @@ marketsieve-app = { workspace = true }
 
 [tool.pytest.ini_options]
 addopts = "-q --strict-config --strict-markers"
+cache_dir = ".marketsieve/cache/pytest"
 testpaths = ["tests"]
 
 [tool.ruff]
+cache-dir = ".marketsieve/cache/ruff"
 line-length = 100
 src = [
     "apps/marketsieve/src",
@@ -50,6 +53,7 @@ select = ["B", "E", "F", "I", "RUF", "SIM", "UP"]
 quote-style = "double"
 
 [tool.mypy]
+cache_dir = ".marketsieve/cache/mypy"
 files = [
     "apps/marketsieve/src",
     "packages/core/src",
@@ -59,3 +63,29 @@ files = [
 python_version = "3.12"
 strict = true
 warn_unused_ignores = true
+
+[tool.importlinter]
+root_packages = ["marketsieve", "marketsieve_app"]
+
+[[tool.importlinter.contracts]]
+name = "Application dependencies point inward"
+type = "layers"
+layers = [
+    "marketsieve_app.interfaces",
+    "marketsieve_app.bootstrap",
+    "marketsieve_app.application",
+    "marketsieve",
+]
+
+[[tool.importlinter.contracts]]
+name = "CLI depends on the composition root only"
+type = "forbidden"
+source_modules = ["marketsieve_app.interfaces"]
+forbidden_modules = ["marketsieve_app.application", "marketsieve"]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "Public SDK does not depend on the repository application"
+type = "forbidden"
+source_modules = ["marketsieve"]
+forbidden_modules = ["marketsieve_app"]

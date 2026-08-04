@@ -25,6 +25,15 @@ def check_quality() -> None:
     run(("uv", "run", "ruff", "format", "--check", "."))
     run(("uv", "run", "ruff", "check", "."))
     run(("uv", "run", "mypy"))
+    run(
+        (
+            "uv",
+            "run",
+            "lint-imports",
+            "--cache-dir",
+            str(ROOT / ".marketsieve" / "cache" / "import-linter"),
+        )
+    )
     if (ROOT / ".git").exists():
         run(("git", "diff", "--check"))
 
@@ -33,6 +42,7 @@ def check_tests() -> None:
     run(("uv", "run", "pytest"))
     run(("uv", "run", "marketsieve", "--version"))
     run(("uv", "run", "marketsieve", "doctor"))
+    run(("uv", "run", "python", "-m", "marketsieve_app", "doctor"))
 
 
 def python_in_venv(venv: Path) -> Path:

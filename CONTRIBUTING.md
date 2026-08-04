@@ -6,8 +6,8 @@ MarketSieve requires Python 3.12 through 3.14 and uses Python 3.13 as the primar
 version.
 
 ```shell
-uv sync --locked
-uv run python scripts/quality_gate.py check all
+make sync
+make check
 ```
 
 ## Branch workflow

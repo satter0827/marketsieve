@@ -34,11 +34,11 @@ temporary-note naming, and the absence of duplicate legacy authorities.
 Every handoff runs the focused checks used during development and then:
 
 ```shell
-uv run ruff format --check .
-uv run ruff check .
-uv run mypy
-uv run pytest
-uv run python scripts/quality_gate.py check all
+make format-check
+make lint
+make typecheck
+make test
+make check
 ```
 
 A failure is corrected and the affected checks are rerun. Environment or tool failures are reported

@@ -29,13 +29,13 @@ Python 3.12 through 3.14 is supported. Development uses Python 3.13 and
 [uv](https://docs.astral.sh/uv/).
 
 ```shell
-uv sync --locked
+make sync
 ```
 
 The public SDK can be built independently:
 
 ```shell
-uv build --package marketsieve
+make build
 ```
 
 ## CLI
@@ -45,7 +45,7 @@ Its current commands perform no network requests and require no secrets.
 
 ```shell
 uv run marketsieve --version
-uv run marketsieve doctor
+make doctor
 ```
 
 ## Architecture
@@ -57,12 +57,18 @@ libraries. See the [documentation index](docs/README.md) and formal
 
 ## Development
 
-Run the complete local gate before opening a pull request:
+The Makefile is the shared entry point for people, coding agents, VS Code, and CI. Use `make help`
+to list the available operations. Run tests and the complete local gate before opening a pull
+request:
 
 ```shell
-uv run pytest
-uv run python scripts/quality_gate.py check all
+make test
+make check
 ```
+
+VS Code uses the workspace `.venv` and provides tasks for dependency sync, formatting, the current
+test file, diagnostics, and the complete gate. Local caches and generated artifacts are kept under
+`.marketsieve`; `.venv` is the only generated environment at the repository root.
 
 Changes move through short-lived branches into `develop`. A human-reviewed `develop -> main` pull
 request is the release boundary. See [Contributing](CONTRIBUTING.md) for the workflow.
