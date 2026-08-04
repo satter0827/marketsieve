@@ -36,7 +36,7 @@ class DiagnosticsService:
         python_supported = detected_python[:2] in SUPPORTED_PYTHON
 
         try:
-            application_version = version("marketsieve-app")
+            application_version = version("marketsieve-cli")
             application_installed = True
         except PackageNotFoundError:
             application_version = "not installed"
@@ -53,7 +53,7 @@ class DiagnosticsService:
             ),
             DiagnosticCheck(name="MarketSieve SDK", detail=sdk_version, passed=True),
             DiagnosticCheck(
-                name="MarketSieve application",
+                name="MarketSieve CLI",
                 detail=application_version,
                 passed=application_installed,
                 action=None if application_installed else "Run make sync.",

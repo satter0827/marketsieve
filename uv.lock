@@ -5,7 +5,7 @@ requires-python = ">=3.12, <3.15"
 [manifest]
 members = [
     "marketsieve",
-    "marketsieve-app",
+    "marketsieve-cli",
     "marketsieve-workspace",
 ]
 
@@ -564,9 +564,9 @@ dependencies = [
 requires-dist = [{ name = "tzdata", specifier = ">=2025.2" }]
 
 [[package]]
-name = "marketsieve-app"
+name = "marketsieve-cli"
 version = "0.1.0"
-source = { editable = "apps/marketsieve" }
+source = { editable = "packages/cli" }
 dependencies = [
     { name = "click" },
     { name = "marketsieve" },
@@ -585,7 +585,7 @@ name = "marketsieve-workspace"
 version = "0.0.0"
 source = { virtual = "." }
 dependencies = [
-    { name = "marketsieve-app" },
+    { name = "marketsieve-cli" },
 ]
 
 [package.dev-dependencies]
@@ -603,7 +603,7 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "marketsieve-app", editable = "apps/marketsieve" }]
+requires-dist = [{ name = "marketsieve-cli", editable = "packages/cli" }]
 
 [package.metadata.requires-dev]
 dev = [

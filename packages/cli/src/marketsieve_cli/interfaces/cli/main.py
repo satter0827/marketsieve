@@ -8,7 +8,7 @@ from typing import Any
 
 import click
 
-from marketsieve_app.bootstrap import (
+from marketsieve_cli.bootstrap import (
     build_console_output,
     build_diagnostics_service,
     build_report_service,

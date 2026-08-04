@@ -63,9 +63,10 @@ unless log-file output is explicitly requested.
 
 ## Approved 0.2 CLI target
 
-The public `marketsieve-cli` distribution replaces the repository-only application. Japanese is the
-default human locale and `--locale {ja,en}` selects either projection. JSON keys, schema identifiers,
-error codes, and enum values remain English.
+The public `marketsieve-cli` distribution owns the executable application. The existing English
+0.1 projections remain available while Japanese-default, `--locale {ja,en}` projections are added
+with the 0.2 workbench commands. JSON keys, schema identifiers, error codes, and enum values remain
+English.
 
 ```shell
 marketsieve source list

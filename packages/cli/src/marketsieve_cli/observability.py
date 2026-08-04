@@ -12,7 +12,7 @@ from typing import Any
 
 LOG_SCHEMA_VERSION = "1.0.0"
 LOGGER_NAME = "marketsieve"
-SERVICE_NAME = "marketsieve-app"
+SERVICE_NAME = "marketsieve-cli"
 DEFAULT_STATE_DIR = Path(".marketsieve")
 
 

@@ -8,12 +8,12 @@ network clients, databases, delivery providers, or LLM providers.
 
 ## Current components
 
-The `marketsieve` distribution is the only public artifact currently built by this repository. It
-contains package metadata and the typed-package marker.
+The repository builds two public distributions at the same version. `marketsieve` contains the
+I/O-independent SDK. `marketsieve-cli` contains the executable application and depends on the SDK.
 
-The `marketsieve_app` package is repository-local. It owns the command-line interface, offline
-diagnostics, use-case orchestration, and console presentation and depends on the public SDK. It is
-not included in public SDK artifacts.
+The `marketsieve_cli` package owns the command-line interface, offline diagnostics, use-case
+orchestration, and console presentation. It is independently installable and is never included in
+the SDK wheel.
 
 ```text
 Interface
@@ -37,8 +37,8 @@ marketsieve SDK
 
 ## Executable module ownership
 
-The repository-local application uses one composition root. Command interfaces depend on
-`marketsieve_app.bootstrap`, the bootstrap module constructs application services, and application
+The CLI application uses one composition root. Command interfaces depend on
+`marketsieve_cli.bootstrap`, the bootstrap module constructs application services, and application
 services depend on the public SDK. Interfaces do not import application implementations directly,
 and application services do not import bootstrap or interface modules.
 
@@ -102,10 +102,11 @@ and provider-symbol mapping belong to the application or adapter packages. A sou
 
 ## Packaging boundary
 
-`uv build --package marketsieve` remains the supported public build. An explicit build allowlist
-prevents `marketsieve_app`, tests, local configuration, caches, notes, and generated reports from
-entering public artifacts. A future adapter distribution has its own dependencies, tests, and
-release evidence and does not expand the core SDK dependency set.
+The supported build produces independent `marketsieve` and `marketsieve-cli` wheels and source
+distributions. Explicit build allowlists prevent CLI code, tests, local configuration, caches,
+notes, and generated reports from entering the SDK artifact. Each distribution is also installed
+from the generated wheel set in an isolated environment. A future adapter distribution has its own
+dependencies, tests, and release evidence and does not expand the core SDK dependency set.
 
 ## Approved 0.2 target architecture
 

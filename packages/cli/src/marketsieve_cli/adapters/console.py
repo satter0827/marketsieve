@@ -13,8 +13,8 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from marketsieve_app.application.diagnostics import DiagnosticCheck
-from marketsieve_app.application.report import ReportDocument, serialize_report_document
+from marketsieve_cli.application.diagnostics import DiagnosticCheck
+from marketsieve_cli.application.report import ReportDocument, serialize_report_document
 
 DOCTOR_SCHEMA_VERSION = "1.0.0"
 CAPABILITIES_SCHEMA_VERSION = "1.0.0"

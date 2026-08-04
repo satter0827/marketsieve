@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from io import StringIO
 
-from marketsieve_app.adapters.console import ConsoleOutput, OutputMode
-from marketsieve_app.application.diagnostics import DiagnosticCheck
+from marketsieve_cli.adapters.console import ConsoleOutput, OutputMode
+from marketsieve_cli.application.diagnostics import DiagnosticCheck
 
 
 class TerminalBuffer(StringIO):

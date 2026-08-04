@@ -31,7 +31,7 @@ make build
 
 ## CLI
 
-CLIはリポジトリ内の運用アプリケーションに属し、公開SDK wheelには含まれません。Foundation段階ではネットワークへ接続せず、秘密情報も要求しません。
+公開`marketsieve-cli` distributionはSDKへ依存しますが、SDK wheelには含まれません。現在のcommandはネットワークへ接続せず、秘密情報も要求しません。
 
 ```shell
 uv run marketsieve --version
@@ -53,7 +53,7 @@ uv run marketsieve capabilities --output json
 
 ## アーキテクチャ
 
-公開SDKは`packages/core`、運用アプリケーションは`apps/marketsieve`に配置します。運用アプリケーションはSDKへ依存しますが、SDKはアプリケーションやインフラストラクチャ用ライブラリをimportできません。[文書索引](docs/README.md)と正式な[Architecture](docs/design/architecture.md)に依存規則を記載しています。
+公開SDKは`packages/core`、運用アプリケーションは`packages/cli`に配置します。運用アプリケーションはSDKへ依存しますが、SDKはアプリケーションやインフラストラクチャ用ライブラリをimportできません。[文書索引](docs/README.md)と正式な[Architecture](docs/design/architecture.md)に依存規則を記載しています。
 
 ## 開発
 

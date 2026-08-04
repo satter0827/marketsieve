@@ -3,8 +3,8 @@ from importlib.metadata import PackageNotFoundError
 
 import pytest
 
-import marketsieve_app.application.diagnostics as diagnostics_module
-from marketsieve_app.application.diagnostics import DiagnosticsService
+import marketsieve_cli.application.diagnostics as diagnostics_module
+from marketsieve_cli.application.diagnostics import DiagnosticsService
 
 LOGGER = logging.getLogger("marketsieve.tests.diagnostics")
 

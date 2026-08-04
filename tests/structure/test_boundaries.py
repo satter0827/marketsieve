@@ -9,7 +9,7 @@ FORBIDDEN_SDK_IMPORTS = {
     "click",
     "http",
     "logging",
-    "marketsieve_app",
+    "marketsieve_cli",
     "os",
     "smtplib",
     "sqlite3",
@@ -39,7 +39,7 @@ def test_sdk_has_no_application_or_io_imports() -> None:
 
 
 def test_application_depends_on_public_sdk() -> None:
-    application_source = ROOT / "apps" / "marketsieve" / "src" / "marketsieve_app"
+    application_source = ROOT / "packages" / "cli" / "src" / "marketsieve_cli"
     imports = set().union(*(imported_roots(path) for path in application_source.rglob("*.py")))
 
     assert "marketsieve" in imports
@@ -66,24 +66,24 @@ def test_analysis_and_synthetic_sources_do_not_reference_each_other() -> None:
 
 
 def test_cli_depends_on_composition_root_only() -> None:
-    cli_source = ROOT / "apps/marketsieve/src/marketsieve_app/interfaces/cli"
+    cli_source = ROOT / "packages/cli/src/marketsieve_cli/interfaces/cli"
     internal_imports = {
         node.module
         for path in cli_source.rglob("*.py")
         for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
         if isinstance(node, ast.ImportFrom)
         and node.module
-        and node.module.startswith("marketsieve_app")
+        and node.module.startswith("marketsieve_cli")
     }
 
     assert internal_imports <= {
-        "marketsieve_app.bootstrap",
-        "marketsieve_app.interfaces.cli.main",
+        "marketsieve_cli.bootstrap",
+        "marketsieve_cli.interfaces.cli.main",
     }
 
 
 def test_application_does_not_depend_on_output_adapters() -> None:
-    application = ROOT / "apps/marketsieve/src/marketsieve_app/application"
+    application = ROOT / "packages/cli/src/marketsieve_cli/application"
     imports = {
         node.module
         for path in application.rglob("*.py")
@@ -91,4 +91,4 @@ def test_application_does_not_depend_on_output_adapters() -> None:
         if isinstance(node, ast.ImportFrom) and node.module
     }
 
-    assert not any(module.startswith("marketsieve_app.adapters") for module in imports)
+    assert not any(module.startswith("marketsieve_cli.adapters") for module in imports)

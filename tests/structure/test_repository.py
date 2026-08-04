@@ -12,9 +12,12 @@ ROOT = Path(__file__).parents[2]
 
 def test_license_copies_match() -> None:
     root_license = (ROOT / "LICENSE").read_text(encoding="utf-8")
-    package_license = (ROOT / "packages" / "core" / "LICENSE").read_text(encoding="utf-8")
+    package_licenses = (
+        (ROOT / "packages" / "core" / "LICENSE").read_text(encoding="utf-8"),
+        (ROOT / "packages" / "cli" / "LICENSE").read_text(encoding="utf-8"),
+    )
 
-    assert package_license == root_license
+    assert all(package_license == root_license for package_license in package_licenses)
 
 
 def test_readmes_show_the_same_commands() -> None:
@@ -39,9 +42,7 @@ def test_readmes_show_the_same_commands() -> None:
 
 def test_workspace_package_versions_match() -> None:
     core = tomllib.loads((ROOT / "packages/core/pyproject.toml").read_text(encoding="utf-8"))
-    application = tomllib.loads(
-        (ROOT / "apps/marketsieve/pyproject.toml").read_text(encoding="utf-8")
-    )
+    application = tomllib.loads((ROOT / "packages/cli/pyproject.toml").read_text(encoding="utf-8"))
 
     assert core["project"]["version"] == application["project"]["version"]
 

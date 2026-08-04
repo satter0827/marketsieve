@@ -33,7 +33,7 @@ Python 3.12 through 3.14 is supported. Development uses Python 3.13 and
 make sync
 ```
 
-The public SDK can be built independently:
+The public SDK and CLI can be built as independent artifacts:
 
 ```shell
 make build
@@ -41,8 +41,8 @@ make build
 
 ## CLI
 
-The CLI belongs to the repository-local application and is not included in the public SDK wheel.
-Its current commands perform no network requests and require no secrets.
+The public `marketsieve-cli` distribution depends on, but is not included in, the SDK wheel. Its
+current commands perform no network requests and require no secrets.
 
 ```shell
 uv run marketsieve --version
@@ -67,7 +67,7 @@ uv run marketsieve capabilities --output json
 ## Architecture
 
 The public SDK lives under `packages/core`. The operational application lives under
-`apps/marketsieve` and depends on the SDK. The SDK cannot import the application or infrastructure
+`packages/cli` and depends on the SDK. The SDK cannot import the application or infrastructure
 libraries. See the [documentation index](docs/README.md) and formal
 [Architecture](docs/design/architecture.md) for the dependency rules.
 
