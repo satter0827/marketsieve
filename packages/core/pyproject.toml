@@ -25,7 +25,9 @@ classifiers = [
     "Programming Language :: Python :: 3.14",
     "Typing :: Typed",
 ]
-dependencies = []
+dependencies = [
+    "tzdata>=2025.2",
+]
 
 [project.urls]
 Homepage = "https://github.com/satter0827/marketsieve"

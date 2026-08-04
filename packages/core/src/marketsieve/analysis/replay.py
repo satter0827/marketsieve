@@ -8,6 +8,7 @@ import re
 from dataclasses import dataclass
 from datetime import datetime
 
+from marketsieve._time import as_utc
 from marketsieve.analysis.sma20 import Sma20Result, analyze
 from marketsieve.data.daily import DailyBarRequest, DailyBarSource, Provenance
 
@@ -44,7 +45,7 @@ class Sma20Replay:
             raise ValueError("a replay requires at least one point")
         if any(not isinstance(point, ReplayPoint) for point in self.points):
             raise TypeError("replay points must contain ReplayPoint values")
-        instants = tuple(point.as_of for point in self.points)
+        instants = tuple(as_utc(point.as_of) for point in self.points)
         if instants != tuple(sorted(instants)) or len(set(instants)) != len(instants):
             raise ValueError("replay points must have unique as-of instants in ascending order")
         if re.fullmatch(r"[0-9a-f]{64}", self.replay_id) is None:
@@ -56,9 +57,10 @@ def _validate_instants(instants: tuple[datetime, ...]) -> None:
         raise ValueError("a replay requires at least one as-of instant")
     if any(value.tzinfo is None or value.utcoffset() is None for value in instants):
         raise ValueError("replay as-of instants must include a UTC offset")
-    if instants != tuple(sorted(instants)):
+    utc_instants = tuple(as_utc(value) for value in instants)
+    if utc_instants != tuple(sorted(utc_instants)):
         raise ValueError("replay as-of instants must be in ascending order")
-    if len(set(instants)) != len(instants):
+    if len(set(utc_instants)) != len(utc_instants):
         raise ValueError("replay as-of instants must not contain duplicates")
 
 
@@ -73,7 +75,7 @@ def _replay_id(request: DailyBarRequest, points: tuple[ReplayPoint, ...]) -> str
         },
         "points": [
             {
-                "as_of": point.as_of.isoformat(),
+                "as_of": as_utc(point.as_of).isoformat(),
                 "evidence_id": point.result.evidence_id,
             }
             for point in points
@@ -98,7 +100,7 @@ def replay_sma20(
         series = source.load(request, as_of=as_of)
         if series.request != request:
             raise RuntimeError("daily-bar source changed the replay request")
-        if series.as_of != as_of:
+        if as_utc(series.as_of) != as_utc(as_of):
             raise RuntimeError("daily-bar source changed the replay as-of instant")
         provenance = tuple(dict.fromkeys(bar.provenance for bar in series.bars))
         points.append(ReplayPoint(as_of, analyze(series), provenance))

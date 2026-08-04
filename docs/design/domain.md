@@ -22,6 +22,8 @@ an ingestion timestamp and from an analysis `as-of` instant.
 - Observation and ingestion instants are timezone-aware.
 - Naive datetimes are invalid at public boundaries.
 - An analysis may use only observations available at or before its `as-of` instant.
+- Instant ordering, equality, duplicate detection, and availability compare normalized UTC values;
+  local wall-clock equality does not collapse the two sides of a daylight-saving fold.
 - Sorting, range validation, and duplicate detection use the exchange trading date.
 
 ## Daily observations
@@ -47,9 +49,11 @@ are not fabricated, forward-filled, or substituted with a different frequency.
 
 ## Analysis and evidence
 
-SMA20 is the arithmetic mean of the latest 20 eligible closing observations as of the analysis
-date. A state identifies whether the latest close is above, below, or equal to SMA20. A state change
-exists only when two consecutive eligible analysis points have different states.
+SMA20 is the exact arithmetic mean of the latest 20 eligible closing observations as of the
+analysis date. Its value and comparison do not depend on the process-wide decimal context. A state
+identifies whether the latest close is above, below, or equal to SMA20. A reported state change
+exists only when two consecutive valid replay points have different states; a point does not report
+changes inferred from observations that were not evaluated by the replay.
 
 Insufficient history is an explicit non-signal result. A state change is an observed market-data
 condition, not a buy, sell, suitability, or risk recommendation.
@@ -60,8 +64,9 @@ identity and result.
 
 ## Historical replay
 
-A replay evaluates one exact daily-bar request at a non-empty, strictly increasing sequence of
-timezone-aware as-of instants. The source is loaded independently at every instant. A replay does
+A replay evaluates one exact daily-bar request at a non-empty sequence of unique timezone-aware
+as-of instants that is strictly increasing after UTC normalization. The source is loaded
+independently at every instant. A replay does
 not derive earlier results by truncating the final dataset because that dataset may contain values
 revised after an earlier evaluation instant.
 
@@ -71,7 +76,9 @@ responses, and analysis definitions produce the same replay identity.
 
 ## Historical report
 
-The SMA20 replay report contains the latest evaluated state and only the points where the state
-changed. It references the replay, provenance, and analysis evidence without changing calculated
-facts. The report is channel-neutral and contains no recommendation, forecast, or suitability
-decision. Its identity is derived from normalized report content rather than rendered text.
+The SMA20 replay report contains the latest evaluated result and only changes observed between
+consecutive valid replay points. Insufficient-history points and repeated snapshots do not create
+transitions. It references the replay, provenance, and analysis evidence without changing
+calculated facts. The report is channel-neutral and contains no recommendation, forecast, or
+suitability decision. Its identity is derived from normalized report content rather than rendered
+text.

@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 
+from marketsieve._time import as_utc
 from marketsieve.data.daily import (
     Adjustment,
     DailyBar,
@@ -88,7 +89,7 @@ class SyntheticDailySource:
         DailyBarSeries(
             request=request,
             bars=bars,
-            as_of=max(bar.available_at for bar in bars),
+            as_of=max((bar.available_at for bar in bars), key=as_utc),
             excluded_after_as_of=0,
         )
         self._instrument = instrument
@@ -112,7 +113,8 @@ class SyntheticDailySource:
         requested = tuple(
             bar for bar in self._bars if request.start <= bar.trading_date <= request.end
         )
-        available = tuple(bar for bar in requested if bar.available_at <= as_of)
+        as_of_utc = as_utc(as_of)
+        available = tuple(bar for bar in requested if as_utc(bar.available_at) <= as_of_utc)
         return DailyBarSeries(
             request=request,
             bars=available,

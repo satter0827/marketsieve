@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from datetime import timedelta
 
 import pytest
 
@@ -34,3 +35,25 @@ def test_report_contains_latest_state_transitions_and_evidence() -> None:
         replace(first, evaluation_count=0)
     with pytest.raises(ValueError, match="SHA-256"):
         replace(first, report_id="not-a-digest")
+
+
+def test_report_transitions_compare_consecutive_valid_replay_points() -> None:
+    request = DailyBarRequest(
+        JP_INSTRUMENT, JP_BARS[0].trading_date, JP_BARS[-1].trading_date, Adjustment.RAW
+    )
+    sparse = replay_sma20(
+        jp_source(), request, (JP_BARS[19].available_at, JP_BARS[20].available_at)
+    )
+    first_valid_only = replay_sma20(jp_source(), request, (JP_BARS[20].available_at,))
+    repeated = replay_sma20(
+        jp_source(),
+        request,
+        (JP_BARS[20].available_at, JP_BARS[20].available_at + timedelta(minutes=1)),
+    )
+
+    transition = build_sma20_replay_report(sparse).transitions
+    assert [(item.previous_state.value, item.current_state.value) for item in transition] == [
+        ("below", "above")
+    ]
+    assert build_sma20_replay_report(first_valid_only).transitions == ()
+    assert build_sma20_replay_report(repeated).transitions == ()

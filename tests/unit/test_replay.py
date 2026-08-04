@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -55,6 +56,27 @@ def test_replay_rejects_invalid_evaluation_schedules(
 ) -> None:
     with pytest.raises(ValueError, match=message):
         replay_sma20(jp_source(), request(), as_ofs)
+
+
+def test_replay_orders_and_deduplicates_dst_fold_by_utc_instant() -> None:
+    timezone = ZoneInfo("America/New_York")
+    first = datetime(2026, 11, 1, 1, 30, tzinfo=timezone, fold=0)
+    second = datetime(2026, 11, 1, 1, 30, tzinfo=timezone, fold=1)
+
+    replay = replay_sma20(jp_source(), request(), (first, second))
+    assert tuple(point.as_of for point in replay.points) == (first, second)
+    equivalent = replay_sma20(
+        jp_source(), request(), (first.astimezone(UTC), second.astimezone(UTC))
+    )
+    assert replay.replay_id == equivalent.replay_id
+    assert tuple(point.result.evidence_id for point in replay.points) == tuple(
+        point.result.evidence_id for point in equivalent.points
+    )
+
+    with pytest.raises(ValueError, match="ascending"):
+        replay_sma20(jp_source(), request(), (second, first))
+    with pytest.raises(ValueError, match="duplicates"):
+        replay_sma20(jp_source(), request(), (first, first.astimezone(UTC)))
 
 
 def test_replay_rejects_a_source_that_changes_the_contract() -> None:

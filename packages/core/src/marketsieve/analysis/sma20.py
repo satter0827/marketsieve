@@ -6,10 +6,12 @@ import hashlib
 import json
 from dataclasses import dataclass
 from datetime import date
-from decimal import Decimal
+from decimal import Decimal, localcontext
 from enum import StrEnum
+from fractions import Fraction
 from typing import Any
 
+from marketsieve._time import as_utc
 from marketsieve.data.daily import DailyBar, DailyBarSeries
 
 PERIOD = 20
@@ -58,7 +60,27 @@ def state(close: Decimal, average: Decimal) -> SmaState:
 
 
 def average(bars: tuple[DailyBar, ...]) -> Decimal:
-    return sum((bar.close for bar in bars), start=Decimal(0)) / Decimal(PERIOD)
+    exact = sum((Fraction(bar.close) for bar in bars), start=Fraction()) / PERIOD
+    numerator, denominator = exact.as_integer_ratio()
+    twos = 0
+    fives = 0
+    while denominator % 2 == 0:
+        denominator //= 2
+        twos += 1
+    while denominator % 5 == 0:
+        denominator //= 5
+        fives += 1
+    if denominator != 1:
+        raise RuntimeError("finite decimal average must have a terminating expansion")
+    scale = max(twos, fives)
+    scaled = numerator * 2 ** (scale - twos) * 5 ** (scale - fives)
+    coefficient = Decimal(scaled)
+    precision = max(1, len(coefficient.as_tuple().digits))
+    with localcontext() as context:
+        context.prec = precision
+        context.Emax = max(context.Emax, precision + scale)
+        context.Emin = min(context.Emin, -(precision + scale))
+        return coefficient.scaleb(-scale)
 
 
 def evidence_payload(series: DailyBarSeries) -> dict[str, Any]:
@@ -75,7 +97,7 @@ def evidence_payload(series: DailyBarSeries) -> dict[str, Any]:
         "request": {
             "start": series.request.start.isoformat(),
             "end": series.request.end.isoformat(),
-            "as_of": series.as_of.isoformat(),
+            "as_of": as_utc(series.as_of).isoformat(),
             "adjustment": series.request.adjustment.value,
         },
         "excluded_after_as_of": series.excluded_after_as_of,
@@ -87,7 +109,7 @@ def evidence_payload(series: DailyBarSeries) -> dict[str, Any]:
                 "low": str(bar.low),
                 "close": str(bar.close),
                 "volume": bar.volume,
-                "available_at": bar.available_at.isoformat(),
+                "available_at": as_utc(bar.available_at).isoformat(),
                 "provenance": {
                     "source": bar.provenance.source,
                     "dataset": bar.provenance.dataset,
