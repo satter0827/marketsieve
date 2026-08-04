@@ -1,3 +1,4 @@
+import io
 import tarfile
 import zipfile
 from pathlib import Path
@@ -49,6 +50,21 @@ def test_secret_scan_rejects_sensitive_tracked_path(tmp_path: Path) -> None:
     assert [finding.kind for finding in scan_paths((path,))] == ["sensitive_path"]
 
 
+@pytest.mark.parametrize("name", ("client.p12", "client.pfx", "client.pem", "client.key"))
+def test_secret_scan_rejects_binary_credential_paths(tmp_path: Path, name: str) -> None:
+    path = tmp_path / name
+    path.write_bytes(b"\0opaque-binary-content")
+
+    assert [finding.kind for finding in scan_paths((path,))] == ["sensitive_path"]
+
+
+def test_secret_scan_recognizes_encrypted_private_key_header(tmp_path: Path) -> None:
+    header = "-----BEGIN " + "ENCRYPTED PRIVATE KEY-----\n"
+    path = write(tmp_path / "settings.txt", header)
+
+    assert [finding.kind for finding in scan_paths((path,))] == ["private_key"]
+
+
 def test_patch_scan_ignores_removed_credentials() -> None:
     value = "sk-" + "A" * 24
     patch = f"--- a/settings\n+++ b/settings\n-{value}\n+safe\n".encode()
@@ -62,7 +78,9 @@ def test_history_scan_checks_each_commit(monkeypatch: pytest.MonkeyPatch) -> Non
         (
             b"first\nsecond\n",
             f"+OPENAI_API_KEY={value}\n".encode(),
+            b"",
             b"-OPENAI_API_KEY=removed\n",
+            b"",
         )
     )
     monkeypatch.setattr("scripts.secret_gate._capture", lambda _command: next(responses))
@@ -73,6 +91,29 @@ def test_history_scan_checks_each_commit(monkeypatch: pytest.MonkeyPatch) -> Non
         ("git-commit:first", "credential_assignment"),
         ("git-commit:first", "openai_key"),
     ]
+
+
+def test_history_scan_reads_archive_before_later_removal(monkeypatch: pytest.MonkeyPatch) -> None:
+    value = "opaque-production-credential"
+    archive_path = Path("artifact.whl")
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("package/settings.txt", f"JQUANTS_API_KEY={value}\n")
+    responses = iter(
+        (
+            b"first\nsecond\n",
+            b"Binary files differ\n",
+            f"{archive_path}\0".encode(),
+            buffer.getvalue(),
+            b"Binary files differ\n",
+            b"",
+        )
+    )
+    monkeypatch.setattr("scripts.secret_gate._capture", lambda _command: next(responses))
+
+    findings = scan_history("base")
+
+    assert [finding.kind for finding in findings] == ["credential_assignment"]
 
 
 def test_secret_scan_reads_wheel_members(tmp_path: Path) -> None:

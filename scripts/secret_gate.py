@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import io
 import re
 import subprocess
 import tarfile
@@ -14,6 +15,8 @@ from pathlib import Path
 ROOT = Path(__file__).parents[1]
 MAX_TEXT_BYTES = 5 * 1024 * 1024
 SENSITIVE_NAMES = re.compile(r"(?:^|/)(?:\.env(?:\..+)?|credentials?|secrets?)(?:$|/)")
+SENSITIVE_SUFFIXES = (".key", ".p12", ".pem", ".pfx", ".private-key")
+ARCHIVE_SUFFIXES = (".tar", ".tar.gz", ".tgz", ".whl", ".zip")
 PERMITTED_NAMES = {".env.example"}
 PLACEHOLDERS = {"", "example", "placeholder", "replace-me", "set-me"}
 TEMPLATE_PLACEHOLDER = re.compile(r"^(?:\{[^{}]+}|<[^<>]+>)$")
@@ -24,7 +27,10 @@ def _joined(*parts: str) -> str:
 
 
 PATTERNS = (
-    ("private_key", re.compile(_joined("-----BEGIN ", "(?:RSA |EC |OPENSSH )?PRIVATE KEY-----"))),
+    (
+        "private_key",
+        re.compile(_joined("-----BEGIN ", "(?:ENCRYPTED |RSA |EC |OPENSSH )?PRIVATE KEY-----")),
+    ),
     ("openai_key", re.compile(_joined(r"\bsk-", r"[A-Za-z0-9_-]{20,}\b"))),
     ("google_key", re.compile(_joined(r"\bAIza", r"[A-Za-z0-9_-]{30,}\b"))),
     ("github_token", re.compile(_joined(r"\b(?:ghp_|github_pat_)", r"[A-Za-z0-9_]{20,}\b"))),
@@ -104,19 +110,32 @@ def _scan_text(label: str, text: str) -> list[Finding]:
     return findings
 
 
-def _scan_archive(path: Path, label: str) -> list[Finding]:
+def _is_archive(label: str) -> bool:
+    return label.lower().endswith(ARCHIVE_SUFFIXES)
+
+
+def _is_sensitive_path(label: str, name: str) -> bool:
+    return name not in PERMITTED_NAMES and (
+        SENSITIVE_NAMES.search(label) is not None or name.lower().endswith(SENSITIVE_SUFFIXES)
+    )
+
+
+def _scan_archive_payload(payload: bytes, label: str) -> list[Finding]:
     findings: list[Finding] = []
+    stream = io.BytesIO(payload)
     try:
-        if zipfile.is_zipfile(path):
-            with zipfile.ZipFile(path) as archive:
+        if zipfile.is_zipfile(stream):
+            stream.seek(0)
+            with zipfile.ZipFile(stream) as archive:
                 for zip_member in archive.infolist():
                     if zip_member.is_dir() or zip_member.file_size > MAX_TEXT_BYTES:
                         continue
                     text = _decode_text(archive.read(zip_member))
                     if text is not None:
                         findings.extend(_scan_text(f"{label}!{zip_member.filename}", text))
-        elif tarfile.is_tarfile(path):
-            with tarfile.open(path) as archive:
+        else:
+            stream.seek(0)
+            with tarfile.open(fileobj=stream, mode="r:*") as archive:
                 for tar_member in archive.getmembers():
                     if not tar_member.isfile() or tar_member.size > MAX_TEXT_BYTES:
                         continue
@@ -127,6 +146,15 @@ def _scan_archive(path: Path, label: str) -> list[Finding]:
     except (OSError, tarfile.TarError, zipfile.BadZipFile):
         return findings
     return findings
+
+
+def _scan_archive(path: Path, label: str) -> list[Finding]:
+    if not _is_archive(label):
+        return []
+    try:
+        return _scan_archive_payload(path.read_bytes(), label)
+    except OSError:
+        return []
 
 
 def _scan_added_lines(label: str, patch: bytes) -> list[Finding]:
@@ -145,7 +173,7 @@ def scan_paths(paths: Iterable[Path]) -> list[Finding]:
             label = str(path.relative_to(ROOT))
         except ValueError:
             label = str(path)
-        if path.name not in PERMITTED_NAMES and SENSITIVE_NAMES.search(label):
+        if _is_sensitive_path(label, path.name):
             findings.append(Finding(label, 0, "sensitive_path"))
         findings.extend(_scan_archive(path, label))
         text = _read_text(path)
@@ -178,6 +206,30 @@ def scan_history(base: str) -> list[Finding]:
             )
         )
         findings.extend(_scan_added_lines(f"git-commit:{sha}", patch))
+        paths = _capture(
+            (
+                "git",
+                "diff-tree",
+                "--root",
+                "-m",
+                "--no-commit-id",
+                "--name-only",
+                "--diff-filter=AM",
+                "-z",
+                sha,
+                "--",
+            )
+        ).split(b"\0")
+        for encoded_path in paths:
+            if not encoded_path:
+                continue
+            changed_path = encoded_path.decode("utf-8", errors="replace")
+            name = changed_path.rsplit("/", maxsplit=1)[-1]
+            if _is_sensitive_path(changed_path, name):
+                findings.append(Finding(f"git-commit:{sha}:{changed_path}", 0, "sensitive_path"))
+            if _is_archive(changed_path):
+                payload = _capture(("git", "show", f"{sha}:{changed_path}"))
+                findings.extend(_scan_archive_payload(payload, f"git-commit:{sha}:{changed_path}"))
     return findings
 
 
