@@ -144,7 +144,8 @@ def test_ci_and_rulesets_use_stable_gate_names() -> None:
     assert "name: Evidence Gate" in workflow
     assert "name: Review Gate" not in workflow
     assert "name: Release Gate" in workflow
-    assert "fetch-depth: 0" in workflow
+    assert workflow.count("fetch-depth: 0") == 2
+    assert 'make check BASE_SHA="$BASE_SHA"' in workflow
     assert "ref: ${{ github.event.pull_request.head.sha || github.sha }}" in workflow
     assert workflow.count(".marketsieve/artifacts/checks/${{ github.sha }}") == 0
     assert workflow.count("uv build") == 0

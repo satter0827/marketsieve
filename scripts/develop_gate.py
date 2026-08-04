@@ -229,18 +229,12 @@ def check_package(path: Path) -> None:
 
 
 def check_secrets(path: Path) -> None:
-    run(
-        (
-            "uv",
-            "run",
-            "python",
-            "scripts/secret_gate.py",
-            "--base",
-            "origin/develop",
-            "--path",
-            str(path),
-        )
-    )
+    command = ["uv", "run", "python", "scripts/secret_gate.py"]
+    base_sha = os.environ.get("BASE_SHA")
+    if base_sha:
+        command.extend(("--base", base_sha))
+    command.extend(("--path", str(path)))
+    run(tuple(command))
 
 
 def check_all() -> None:

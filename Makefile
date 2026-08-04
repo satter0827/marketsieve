@@ -44,7 +44,7 @@ secret-check: ## Scan tracked files and the current diff without printing secret
 	uv run python scripts/secret_gate.py --base "$(BASE_SHA)"
 
 check: ## Run the complete development gate.
-	EVIDENCE_DIR="$(EVIDENCE_DIR)" uv run python scripts/develop_gate.py check all
+	BASE_SHA="$(BASE_SHA)" EVIDENCE_DIR="$(EVIDENCE_DIR)" uv run python scripts/develop_gate.py check all
 
 doctor: ## Run offline installation diagnostics.
 	uv run marketsieve doctor
