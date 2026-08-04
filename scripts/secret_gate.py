@@ -385,6 +385,12 @@ def scan_history(base: str) -> list[Finding]:
     findings: list[Finding] = []
     for commit in commits:
         sha = commit.decode("ascii")
+        message = _capture(("git", "log", "-1", "--format=%B", sha))
+        message_text = _decode_text(message)
+        if message_text is None:
+            findings.append(Finding(f"git-message:{sha}", 0, "unscannable_content"))
+        else:
+            findings.extend(_scan_text(f"git-message:{sha}", message_text))
         patch = _capture(
             (
                 "git",

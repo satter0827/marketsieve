@@ -315,8 +315,10 @@ def test_history_scan_checks_each_commit(monkeypatch: pytest.MonkeyPatch) -> Non
     responses = iter(
         (
             b"first\nsecond\n",
+            b"first message\n",
             f"+OPENAI_API_KEY={value}\n".encode(),
             b"",
+            b"second message\n",
             b"-OPENAI_API_KEY=removed\n",
             b"",
         )
@@ -339,9 +341,11 @@ def test_history_scan_reads_archive_before_later_removal(monkeypatch: pytest.Mon
     responses = iter(
         (
             b"first\nsecond\n",
+            b"first message\n",
             b"Binary files differ\n",
             f"{archive_path}\0".encode(),
             buffer.getvalue(),
+            b"second message\n",
             b"Binary files differ\n",
             b"",
         )
@@ -366,9 +370,11 @@ def test_history_scan_fails_closed_for_binary_before_later_removal(
     responses = iter(
         (
             b"first\nsecond\n",
+            b"first message\n",
             b"Binary files differ\n",
             b"nested/content.bin\0",
             b"\0opaque-binary-content",
+            b"second message\n",
             b"Binary files differ\n",
             b"",
         )
@@ -378,6 +384,18 @@ def test_history_scan_fails_closed_for_binary_before_later_removal(
     findings = scan_history("base")
 
     assert [finding.kind for finding in findings] == ["unscannable_content"]
+
+
+def test_history_scan_checks_commit_messages(monkeypatch: pytest.MonkeyPatch) -> None:
+    value = "sk-" + "A" * 24
+    responses = iter((b"first\n", f"remove {value}\n".encode(), b"", b""))
+    monkeypatch.setattr("scripts.secret_gate._capture", lambda _command: next(responses))
+
+    findings = scan_history("base")
+
+    assert [(finding.path, finding.kind) for finding in findings] == [
+        ("git-message:first", "openai_key")
+    ]
 
 
 def test_secret_scan_reads_wheel_members(tmp_path: Path) -> None:

@@ -240,6 +240,7 @@ def check_secrets(path: Path) -> None:
 def check_all() -> None:
     path = evidence_dir()
     reset_evidence(path)
+    check_secrets(path)
     check_quality()
     check_tests(path)
     validate_schemas()

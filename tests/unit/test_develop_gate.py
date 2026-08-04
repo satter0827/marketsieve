@@ -44,3 +44,30 @@ def test_secret_check_does_not_guess_a_base(
             str(tmp_path),
         )
     ]
+
+
+def test_complete_gate_scans_before_and_after_execution(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    events: list[str] = []
+    monkeypatch.setattr(develop_gate, "evidence_dir", lambda: tmp_path)
+    monkeypatch.setattr(develop_gate, "reset_evidence", lambda _path: events.append("reset"))
+    monkeypatch.setattr(develop_gate, "check_secrets", lambda _path: events.append("secrets"))
+    monkeypatch.setattr(develop_gate, "check_quality", lambda: events.append("quality"))
+    monkeypatch.setattr(develop_gate, "check_tests", lambda _path: events.append("tests"))
+    monkeypatch.setattr(develop_gate, "validate_schemas", lambda: events.append("schemas"))
+    monkeypatch.setattr(develop_gate, "check_smoke", lambda _path: events.append("smoke"))
+    monkeypatch.setattr(develop_gate, "check_package", lambda _path: events.append("package"))
+
+    develop_gate.check_all()
+
+    assert events == [
+        "reset",
+        "secrets",
+        "quality",
+        "tests",
+        "schemas",
+        "smoke",
+        "package",
+        "secrets",
+    ]
