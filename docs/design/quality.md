@@ -11,8 +11,10 @@ The Offline Analysis Preview tests:
 - OHLC and volume invariants, date ordering, duplicates, and requested ranges;
 - raw versus adjusted semantics, completeness, and provenance;
 - deterministic Japanese and U.S. synthetic fixtures;
-- SMA20 arithmetic, exact 20-observation boundaries, equality, and state transitions;
-- explicit insufficient history and the absence of future-information leakage;
+- SMA20 arithmetic independent of ambient decimal precision, exact 20-observation boundaries,
+  equality, and state transitions;
+- explicit insufficient history and the absence of future-information leakage across UTC offsets
+  and daylight-saving folds;
 - stable evidence and results for identical inputs;
 - the source contract against its first synthetic implementation.
 
@@ -20,7 +22,8 @@ The historical-report candidate additionally tests:
 
 - independent source retrieval at every replay instant and rejection of invalid schedules;
 - stable replay, report, and evidence identities for identical inputs;
-- latest-state and transition-only report projection, including insufficient history;
+- latest-state and transition-only report projection across sparse, insufficient, and repeated
+  replay points;
 - Rich, text, and schema-valid JSON projections across TTY and non-TTY output;
 - capability metadata against the actual command and option definitions;
 - user output, errors, and opt-in structured logs on their defined streams.
@@ -38,6 +41,10 @@ reports remain excluded.
 Documentation structure tests verify the formal-design index, local links, required design files,
 temporary-note naming, and the absence of duplicate legacy authorities.
 
+Repository tests also verify rename-normalized evidence paths, VS Code bytecode-cache placement,
+Ruleset drift detection, and timezone availability when the operating system has no timezone
+database.
+
 ## Evidence gates
 
 The Develop Gate runs formatting, lint, strict typing, import contracts, structure and behavior
@@ -49,9 +56,7 @@ The Evidence Gate reuses that evidence. It creates `review.json` as the authorit
 `summary.md` as its deterministic human projection, a text-only patch, supporting evidence, JSON
 Lines logs, and checksums under `.marketsieve/artifacts/review/<commit>/`. Schema, commit identity,
 references, summary projection, and checksums must validate before merge. This bundle is review
-input; it does not claim that semantic code review occurred. During the required-check migration,
-CI emits a temporary `Review Gate` compatibility verdict until the active ruleset requires
-`Evidence Gate`.
+input; it does not claim that semantic code review occurred.
 
 After semantic review succeeds, `make review-attest REVIEWED_SHA=<full-commit-sha>` validates the
 matching local evidence and clean HEAD before publishing the `Pre-PR Review` commit status. The

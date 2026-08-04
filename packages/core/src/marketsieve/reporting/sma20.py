@@ -8,8 +8,9 @@ import re
 from dataclasses import dataclass
 from datetime import date, datetime
 
+from marketsieve._time import as_utc
 from marketsieve.analysis.replay import ReplayPoint, Sma20Replay
-from marketsieve.analysis.sma20 import Sma20Result, SmaState
+from marketsieve.analysis.sma20 import AnalysisStatus, Sma20Result, SmaState
 from marketsieve.data.daily import DailyBarRequest, Provenance
 
 
@@ -56,7 +57,7 @@ class Sma20ReplayReport:
             or self.last_as_of.utcoffset() is None
         ):
             raise ValueError("report as-of instants must include a UTC offset")
-        if self.first_as_of > self.last_as_of:
+        if as_utc(self.first_as_of) > as_utc(self.last_as_of):
             raise ValueError("report as-of instants must be in ascending order")
         if self.evaluation_count < 1:
             raise ValueError("report evaluation_count must be positive")
@@ -73,16 +74,19 @@ class Sma20ReplayReport:
             raise ValueError("report identities must be SHA-256 hexadecimal digests")
 
 
-def _transition(point: ReplayPoint) -> Sma20Transition | None:
-    result = point.result
-    if result.transition is None:
+def _transition(previous: ReplayPoint | None, current: ReplayPoint) -> Sma20Transition | None:
+    result = current.result
+    if previous is None:
         return None
-    if result.current_date is None or result.previous_state is None or result.current_state is None:
+    previous_state = previous.result.current_state
+    if previous_state is result.current_state:
+        return None
+    if result.current_date is None or previous_state is None or result.current_state is None:
         raise RuntimeError("a transition requires complete SMA20 state evidence")
     return Sma20Transition(
-        as_of=point.as_of,
+        as_of=current.as_of,
         trading_date=result.current_date,
-        previous_state=result.previous_state,
+        previous_state=previous_state,
         current_state=result.current_state,
         evidence_id=result.evidence_id,
     )
@@ -103,9 +107,16 @@ def _report_id(replay: Sma20Replay, transitions: tuple[Sma20Transition, ...]) ->
 def build_sma20_replay_report(replay: Sma20Replay) -> Sma20ReplayReport:
     """Project a replay into its latest state and observed transitions."""
 
-    transitions = tuple(
-        transition for point in replay.points if (transition := _transition(point)) is not None
-    )
+    transitions = []
+    previous_valid = None
+    for point in replay.points:
+        if point.result.status is not AnalysisStatus.OK:
+            continue
+        transition = _transition(previous_valid, point)
+        if transition is not None:
+            transitions.append(transition)
+        previous_valid = point
+    transition_values = tuple(transitions)
     provenance = tuple(dict.fromkeys(item for point in replay.points for item in point.provenance))
     return Sma20ReplayReport(
         request=replay.request,
@@ -113,8 +124,8 @@ def build_sma20_replay_report(replay: Sma20Replay) -> Sma20ReplayReport:
         last_as_of=replay.points[-1].as_of,
         evaluation_count=len(replay.points),
         latest=replay.points[-1].result,
-        transitions=transitions,
+        transitions=transition_values,
         provenance=provenance,
         replay_id=replay.replay_id,
-        report_id=_report_id(replay, transitions),
+        report_id=_report_id(replay, transition_values),
     )

@@ -9,6 +9,9 @@
       "args": [
         "doctor"
       ],
+      "env": {
+        "PYTHONPYCACHEPREFIX": "${workspaceFolder}/.marketsieve/cache/python"
+      },
       "console": "integratedTerminal",
       "justMyCode": true
     },
@@ -24,6 +27,9 @@
         "--output",
         "rich"
       ],
+      "env": {
+        "PYTHONPYCACHEPREFIX": "${workspaceFolder}/.marketsieve/cache/python"
+      },
       "console": "integratedTerminal",
       "justMyCode": true
     },
@@ -39,6 +45,9 @@
         "--output",
         "json"
       ],
+      "env": {
+        "PYTHONPYCACHEPREFIX": "${workspaceFolder}/.marketsieve/cache/python"
+      },
       "console": "integratedTerminal",
       "justMyCode": true
     }

@@ -72,16 +72,6 @@ jobs:
           path: .marketsieve/artifacts/review/${{ github.event.pull_request.head.sha }}
           retention-days: 30
 
-  legacy-review-gate:
-    if: always() && github.event_name == 'pull_request' && github.base_ref == 'develop'
-    name: Review Gate
-    needs: evidence-gate
-    runs-on: ubuntu-24.04
-    timeout-minutes: 2
-    steps:
-      - name: Preserve the required check during the ruleset migration
-        run: test "${{ needs.evidence-gate.result }}" = "success"
-
   main-source:
     if: github.event_name == 'pull_request' && github.base_ref == 'main'
     name: Main / Source Branch

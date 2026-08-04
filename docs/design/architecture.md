@@ -82,7 +82,9 @@ a working use case.
 
 ## Source extension policy
 
-Synthetic data is dependency-free and belongs with the SDK testing and demonstration support.
+Synthetic data is provider- and network-independent and belongs with the SDK testing and
+demonstration support. The SDK depends on `tzdata` so exchange timezones remain available on Python
+installations without an operating-system timezone database.
 Analysis and synthetic modules do not reference one another; the application combines them through
 the daily-source contract.
 Sources that perform file or network I/O are separate adapters and, when published, separate

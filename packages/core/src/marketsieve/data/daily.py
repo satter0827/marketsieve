@@ -8,6 +8,7 @@ from decimal import Decimal
 from enum import StrEnum
 from typing import Protocol, runtime_checkable
 
+from marketsieve._time import as_utc
 from marketsieve.domain import Instrument
 
 
@@ -122,7 +123,8 @@ class DailyBarSeries:
             raise ValueError("daily bars must preserve the requested adjustment")
         if self.as_of.tzinfo is None or self.as_of.utcoffset() is None:
             raise ValueError("series as_of must include a UTC offset")
-        if any(bar.available_at > self.as_of for bar in self.bars):
+        as_of_utc = as_utc(self.as_of)
+        if any(as_utc(bar.available_at) > as_of_utc for bar in self.bars):
             raise ValueError("series contains an observation unavailable at as_of")
         if self.excluded_after_as_of < 0:
             raise ValueError("excluded observation count must be non-negative")

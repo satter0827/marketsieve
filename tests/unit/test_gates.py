@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+import scripts.review_gate as review_gate
 from scripts.github_repository import repository_name
 from scripts.governance_gate import normalized_ruleset
 from scripts.release_gate import validate_inputs
@@ -87,6 +88,25 @@ def test_review_summary_is_a_stable_human_projection() -> None:
     assert "- Tests: 12" in summary
     assert "- Branch coverage: 95.50%" in summary
     assert summary.endswith("None.\n")
+
+
+def test_review_changes_normalize_renames_as_delete_and_add(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_capture(*command: str) -> str:
+        assert "--no-renames" in command
+        if "--name-status" in command:
+            return "D\told.py\nA\tnew.py"
+        if "--numstat" in command:
+            return "0\t3\told.py\n4\t0\tnew.py"
+        raise AssertionError(command)
+
+    monkeypatch.setattr(review_gate, "capture", fake_capture)
+
+    assert review_gate.changed_files("base", "head") == [
+        {"path": "new.py", "status": "A", "added_lines": 4, "deleted_lines": 0},
+        {"path": "old.py", "status": "D", "added_lines": 0, "deleted_lines": 3},
+    ]
 
 
 def create_review_bundle(tmp_path: Path) -> Path:

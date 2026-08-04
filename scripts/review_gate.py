@@ -49,12 +49,12 @@ def repository_name() -> str:
 
 def changed_files(base: str, head: str) -> list[dict[str, Any]]:
     statuses = {}
-    for line in capture("git", "diff", "--name-status", base, head).splitlines():
+    for line in capture("git", "diff", "--no-renames", "--name-status", base, head).splitlines():
         if line:
             status, path = line.split("\t", 1)
             statuses[path] = status
     counts = {}
-    for line in capture("git", "diff", "--numstat", base, head).splitlines():
+    for line in capture("git", "diff", "--no-renames", "--numstat", base, head).splitlines():
         if line:
             added, deleted, path = line.split("\t", 2)
             counts[path] = (

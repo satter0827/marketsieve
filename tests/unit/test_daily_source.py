@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -40,6 +42,18 @@ def test_synthetic_source_excludes_observations_not_available_as_of() -> None:
     cutoff = JP_BARS[-1].available_at - timedelta(seconds=1)
     series = jp_source().load(request(), as_of=cutoff)
     assert series.bars == JP_BARS[:-1]
+    assert series.excluded_after_as_of == 1
+
+
+def test_synthetic_source_excludes_the_later_dst_fold_instant() -> None:
+    timezone = ZoneInfo("America/New_York")
+    earlier = datetime(2026, 11, 1, 1, 30, tzinfo=timezone, fold=0)
+    later = datetime(2026, 11, 1, 1, 30, tzinfo=timezone, fold=1)
+    bars = (*JP_BARS[:-1], replace(JP_BARS[-1], available_at=later))
+
+    series = SyntheticDailySource(JP_INSTRUMENT, bars).load(request(), as_of=earlier)
+
+    assert series.bars == bars[:-1]
     assert series.excluded_after_as_of == 1
 
 

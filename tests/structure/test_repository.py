@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import json
+import os
+import subprocess
+import sys
 import tomllib
 from pathlib import Path
 
@@ -81,6 +84,26 @@ def test_shared_vscode_tasks_use_make_targets() -> None:
         "make report-json",
         "make capabilities-json",
     }
+    launches = json.loads((vscode / "launch.json").read_text(encoding="utf-8"))["configurations"]
+    assert launches
+    assert all(
+        launch.get("env", {}).get("PYTHONPYCACHEPREFIX")
+        == "${workspaceFolder}/.marketsieve/cache/python"
+        for launch in launches
+    )
+
+
+def test_synthetic_timezones_work_without_an_os_timezone_database() -> None:
+    code = """
+from zoneinfo import reset_tzpath
+reset_tzpath(())
+from marketsieve.synthetic.daily import JP_INSTRUMENT, US_INSTRUMENT
+assert JP_INSTRUMENT.exchange_timezone.key == "Asia/Tokyo"
+assert US_INSTRUMENT.exchange_timezone.key == "America/New_York"
+"""
+    environment = os.environ.copy()
+    environment["PYTHONTZPATH"] = ""
+    subprocess.run([sys.executable, "-c", code], check=True, env=environment)
 
 
 def test_makefile_exposes_stable_entry_points() -> None:
@@ -118,8 +141,7 @@ def test_ci_and_rulesets_use_stable_gate_names() -> None:
     workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
     assert "name: Develop Gate" in workflow
     assert "name: Evidence Gate" in workflow
-    assert "name: Review Gate" in workflow
-    assert "if: always() && github.event_name == 'pull_request'" in workflow
+    assert "name: Review Gate" not in workflow
     assert "name: Release Gate" in workflow
     assert "fetch-depth: 0" in workflow
     assert "ref: ${{ github.event.pull_request.head.sha || github.sha }}" in workflow
