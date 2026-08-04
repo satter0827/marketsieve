@@ -55,31 +55,27 @@ PATTERNS = (
     ("github_token", re.compile(_joined(r"\b(?:ghp_|github_pat_)", r"[A-Za-z0-9_]{20,}\b"))),
     ("aws_access_key", re.compile(_joined(r"\bAKIA", r"[A-Z0-9]{16}\b"))),
     ("slack_token", re.compile(_joined(r"\bxox[baprs]-", r"[A-Za-z0-9-]{20,}\b"))),
+)
+HEADER_CREDENTIALS = (
     (
         "bearer_token",
         re.compile(
-            _joined(
-                r"(?i)(?:^|[{,]\s*)[\"']?authorization[\"']?\s*[:=]\s*[\"']?bearer\s+",
-                r"[^\s\"'}]{12,}",
-            )
+            r"(?i)(?:^|[{,]\s*)[\"']?authorization[\"']?\s*[:=]\s*[\"']?bearer\s+"
+            r"([^\s\"']+)"
         ),
     ),
     (
         "basic_auth",
         re.compile(
-            _joined(
-                r"(?i)(?:^|[{,]\s*)[\"']?authorization[\"']?\s*:\s*[\"']?basic\s+",
-                r"[A-Za-z0-9+/=]{8,}",
-            )
+            r"(?i)(?:^|[{,]\s*)[\"']?authorization[\"']?\s*:\s*[\"']?basic\s+"
+            r"([^\s\"']+)"
         ),
     ),
     (
         "api_key_header",
         re.compile(
-            _joined(
-                r"(?i)(?:^|[{,]\s*)[\"']?(?:x-)?api-key[\"']?\s*:\s*[\"']?",
-                r"[^\s\"'}]{8,}",
-            )
+            r"(?i)(?:^|[{,]\s*)[\"']?(?:x-)?api-key[\"']?\s*:\s*[\"']?"
+            r"([^\s\"']+)"
         ),
     ),
 )
@@ -140,6 +136,15 @@ def _read_text(path: Path) -> str | None:
         return None
 
 
+def _is_literal_credential(value: str) -> bool:
+    normalized = value.strip().strip("\"'")
+    return (
+        normalized.lower() not in PLACEHOLDERS
+        and TEMPLATE_PLACEHOLDER.fullmatch(normalized) is None
+        and REFERENCE_VALUE.fullmatch(normalized) is None
+    )
+
+
 def _scan_text(label: str, text: str) -> list[Finding]:
     findings: list[Finding] = []
     for line_number, line in enumerate(text.splitlines(), start=1):
@@ -148,21 +153,15 @@ def _scan_text(label: str, text: str) -> list[Finding]:
         if assignment and line.lstrip().startswith("{"):
             value = value.removesuffix("}").rstrip()
         value = value.strip("\"'")
-        if (
-            assignment
-            and value.lower() not in PLACEHOLDERS
-            and TEMPLATE_PLACEHOLDER.fullmatch(value) is None
-            and REFERENCE_VALUE.fullmatch(value) is None
-        ):
+        if assignment and _is_literal_credential(value):
             findings.append(Finding(label, line_number, "credential_assignment"))
         for match in (*URL_CREDENTIAL.finditer(line), *URL_USERINFO_CREDENTIAL.finditer(line)):
-            url_value = match.group(1).strip("\"'")
-            if (
-                url_value.lower() not in PLACEHOLDERS
-                and TEMPLATE_PLACEHOLDER.fullmatch(url_value) is None
-                and REFERENCE_VALUE.fullmatch(url_value) is None
-            ):
+            if _is_literal_credential(match.group(1)):
                 findings.append(Finding(label, line_number, "url_credential"))
+        for kind, pattern in HEADER_CREDENTIALS:
+            for match in pattern.finditer(line):
+                if _is_literal_credential(match.group(1)):
+                    findings.append(Finding(label, line_number, kind))
         for kind, pattern in PATTERNS:
             if pattern.search(line):
                 findings.append(Finding(label, line_number, kind))

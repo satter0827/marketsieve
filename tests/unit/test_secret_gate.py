@@ -148,6 +148,22 @@ def test_secret_scan_rejects_serialized_credential_headers(
     assert [finding.kind for finding in scan_paths((path,))] == [expected]
 
 
+@pytest.mark.parametrize(
+    ("header_name", "scheme", "reference"),
+    (
+        ("Authorization", "Bearer ", "${OPENAI_API_KEY}"),
+        ("Authorization", "Basic ", "${BASIC_AUTH_VALUE}"),
+        ("X-" + "API-Key", "", "config.api_key"),
+    ),
+)
+def test_secret_scan_accepts_header_credential_references(
+    tmp_path: Path, header_name: str, scheme: str, reference: str
+) -> None:
+    path = write(tmp_path / "request.txt", f'{header_name}: "{scheme}{reference}"\n')
+
+    assert scan_paths((path,)) == []
+
+
 def test_secret_scan_rejects_sensitive_tracked_path(tmp_path: Path) -> None:
     path = write(tmp_path / ".env", "SAFE=placeholder\n")
 
