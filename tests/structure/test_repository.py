@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+import json
+import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).parents[2]
@@ -12,11 +16,11 @@ def test_license_copies_match() -> None:
 
 def test_readmes_show_the_same_commands() -> None:
     commands = (
-        "uv sync --locked",
-        "uv run marketsieve --version",
-        "uv run marketsieve doctor",
-        "uv build --package marketsieve",
-        "uv run pytest",
+        "make sync",
+        "make doctor",
+        "make test",
+        "make check",
+        "make build",
     )
     readmes = (
         (ROOT / "README.md").read_text(encoding="utf-8"),
@@ -25,3 +29,67 @@ def test_readmes_show_the_same_commands() -> None:
 
     for command in commands:
         assert all(command in readme for readme in readmes)
+
+
+def test_workspace_package_versions_match() -> None:
+    core = tomllib.loads((ROOT / "packages/core/pyproject.toml").read_text(encoding="utf-8"))
+    application = tomllib.loads(
+        (ROOT / "apps/marketsieve/pyproject.toml").read_text(encoding="utf-8")
+    )
+
+    assert core["project"]["version"] == application["project"]["version"]
+
+
+def test_generated_state_is_centralized() -> None:
+    forbidden = (
+        ".mypy_cache",
+        ".pytest_cache",
+        ".ruff_cache",
+        ".coverage",
+        "coverage.json",
+        "htmlcov",
+        "dist",
+        "build",
+    )
+
+    assert [name for name in forbidden if (ROOT / name).exists()] == []
+
+
+def test_shared_vscode_tasks_use_make_targets() -> None:
+    vscode = ROOT / ".vscode"
+    assert {path.name for path in vscode.glob("*.json")} == {
+        "extensions.json",
+        "launch.json",
+        "settings.json",
+        "tasks.json",
+    }
+
+    tasks = json.loads((vscode / "tasks.json").read_text(encoding="utf-8"))["tasks"]
+    commands = {task["command"] for task in tasks}
+    assert commands == {
+        "make check",
+        "make doctor",
+        "make format",
+        "make sync",
+        "make test TEST=${relativeFile}",
+    }
+
+
+def test_makefile_exposes_stable_entry_points() -> None:
+    makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+    targets = (
+        "help",
+        "sync",
+        "format",
+        "format-check",
+        "lint",
+        "typecheck",
+        "test",
+        "check",
+        "doctor",
+        "build",
+        "clean-generated",
+    )
+
+    for target in targets:
+        assert f"{target}:" in makefile

@@ -20,13 +20,13 @@ MarketSieveは、検証済みの市場情報から再現可能な分析、過去
 Python 3.12から3.14をサポートします。開発にはPython 3.13と[uv](https://docs.astral.sh/uv/)を使用します。
 
 ```shell
-uv sync --locked
+make sync
 ```
 
 公開SDKは単独でビルドできます。
 
 ```shell
-uv build --package marketsieve
+make build
 ```
 
 ## CLI
@@ -35,7 +35,7 @@ CLIはリポジトリ内の運用アプリケーションに属し、公開SDK w
 
 ```shell
 uv run marketsieve --version
-uv run marketsieve doctor
+make doctor
 ```
 
 ## アーキテクチャ
@@ -44,12 +44,14 @@ uv run marketsieve doctor
 
 ## 開発
 
-Pull Requestを作成する前に、完全なローカルゲートを実行します。
+Makefileを人、コーディングエージェント、VS Code、CIに共通する操作の入口とします。利用できる操作は`make help`で確認できます。Pull Requestを作成する前に、テストと完全なローカルゲートを実行します。
 
 ```shell
-uv run pytest
-uv run python scripts/quality_gate.py check all
+make test
+make check
 ```
+
+VS Codeはworkspaceの`.venv`を使用し、依存同期、format、現在のテストファイル、診断、完全Gateのtaskを提供します。ローカルcacheと生成物は`.marketsieve`に集約し、repository rootに置く生成環境は`.venv`だけとします。
 
 変更は短命ブランチから`develop`へ統合します。人間が確認する`develop -> main` Pull Requestをリリース境界とします。手順は[Contributing](CONTRIBUTING.md)を参照してください。
 

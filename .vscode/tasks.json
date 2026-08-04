@@ -1,0 +1,36 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Environment: Sync",
+      "type": "shell",
+      "command": "make sync",
+      "problemMatcher": []
+    },
+    {
+      "label": "Code: Format",
+      "type": "shell",
+      "command": "make format",
+      "problemMatcher": []
+    },
+    {
+      "label": "Tests: Current File",
+      "type": "shell",
+      "command": "make test TEST=${relativeFile}",
+      "problemMatcher": []
+    },
+    {
+      "label": "Gate: Check",
+      "type": "shell",
+      "command": "make check",
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "App: Doctor",
+      "type": "shell",
+      "command": "make doctor",
+      "problemMatcher": []
+    }
+  ]
+}

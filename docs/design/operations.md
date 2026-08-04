@@ -6,14 +6,18 @@ MarketSieve currently supports local development, public SDK builds, version rep
 foundation diagnostics on Python 3.12 through 3.14. Python 3.13 is the primary development version.
 
 ```shell
-uv sync --locked
+make sync
 uv run marketsieve --version
-uv run marketsieve doctor
-uv build --package marketsieve
+make doctor
+make build
 ```
 
 These operations require no secrets, provider accounts, network data, database, scheduler, or
 delivery configuration. The application does not persist operational state.
+
+Project-local caches and generated artifacts are rooted at `.marketsieve`. The `.venv` directory is
+the only repository-root development environment. Human, agent, editor, and CI workflows use the
+Makefile entry points so their commands do not drift.
 
 ## Approved preview operation
 

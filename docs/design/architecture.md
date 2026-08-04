@@ -31,6 +31,18 @@ marketsieve SDK
 - Interfaces translate external input and output and do not implement market rules.
 - Dependencies point inward; the SDK never imports application or infrastructure packages.
 
+## Executable module ownership
+
+The repository-local application uses one composition root. Command interfaces depend on
+`marketsieve_app.bootstrap`, the bootstrap module constructs application services, and application
+services depend on the public SDK. Interfaces do not import application implementations directly,
+and application services do not import bootstrap or interface modules.
+
+Import Linter is the executable authority for layer direction and cycles between these components.
+AST structure tests separately protect the SDK from I/O dependencies and protect the public
+distribution boundary. New layers or public ports are added only with a working use case and tests;
+empty adapter, repository, or base-class packages are prohibited.
+
 ## Approved Offline Analysis Preview
 
 The preview adds a vertical path in dependency order:

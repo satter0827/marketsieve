@@ -43,3 +43,20 @@ def test_application_depends_on_public_sdk() -> None:
     imports = set().union(*(imported_roots(path) for path in application_source.rglob("*.py")))
 
     assert "marketsieve" in imports
+
+
+def test_cli_depends_on_composition_root_only() -> None:
+    cli_source = ROOT / "apps/marketsieve/src/marketsieve_app/interfaces/cli"
+    internal_imports = {
+        node.module
+        for path in cli_source.rglob("*.py")
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
+        if isinstance(node, ast.ImportFrom)
+        and node.module
+        and node.module.startswith("marketsieve_app")
+    }
+
+    assert internal_imports <= {
+        "marketsieve_app.bootstrap",
+        "marketsieve_app.interfaces.cli.main",
+    }
