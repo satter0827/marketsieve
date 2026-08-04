@@ -1,6 +1,6 @@
 [project]
 name = "marketsieve-source-csv"
-version = "0.1.0"
+version = "0.2.0"
 description = "Manifest-backed CSV source for MarketSieve."
 readme = "README.md"
 requires-python = ">=3.12,<3.15"
@@ -10,8 +10,8 @@ authors = [
     { name = "MarketSieve contributors" },
 ]
 dependencies = [
-    "marketsieve==0.1.0",
-    "marketsieve-extension-api==0.1.0",
+    "marketsieve==0.2.0",
+    "marketsieve-extension-api==0.2.0",
 ]
 
 [project.entry-points."marketsieve.sources"]

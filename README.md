@@ -18,7 +18,7 @@ the SDK depend on email, LINE, an LLM provider, or a database.
 
 ## Current status
 
-`0.1.0` is the current public release. Develop now contains the 0.2 data-workbench foundation:
+`0.2.0` is the release candidate on `develop`. It provides the complete data workbench:
 independent CSV, J-Quants, and Alpha Vantage sources; immutable verified snapshots; price,
 financial, and event inspection; and seven deterministic technical indicators. Network access is
 limited to explicit `source fetch` commands. Offline inspection and analysis never refresh data
@@ -38,6 +38,14 @@ independent artifacts:
 
 ```shell
 make build
+```
+
+Published releases use a checksummed GitHub Release wheelhouse rather than PyPI. After verifying
+the assets against `release.json`, extract the wheelhouse ZIP and install offline:
+
+```shell
+python -m pip install --no-index --find-links ./marketsieve-wheelhouse \
+  "marketsieve-cli[all-sources]"
 ```
 
 ## CLI
@@ -105,9 +113,8 @@ request is the release boundary. See [Contributing](CONTRIBUTING.md) for the wor
 
 ## Roadmap
 
-The next 0.2 slice completes section aggregation, valuation, risk, comparison, and deterministic
-reporting. The grounded explanation agent follows in 0.3. See the [Roadmap](docs/roadmap.md) and
-the [formal design](docs/design/README.md).
+The 0.2 workbench is complete on `develop`. The grounded explanation agent follows in 0.3. See the
+[Roadmap](docs/roadmap.md) and the [formal design](docs/design/README.md).
 
 ## License
 
