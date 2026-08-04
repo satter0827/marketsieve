@@ -23,6 +23,15 @@ Project-local caches and generated artifacts are rooted at `.marketsieve`. The `
 the only repository-root development environment. Human, agent, editor, and CI workflows use the
 Makefile entry points so their commands do not drift.
 
+`make governance-check` is an authenticated, read-only maintenance command that compares active
+GitHub rulesets with `.github/rulesets`. It runs with host access after a ruleset change and before
+a release promotion; it is not part of the offline development gate. A mismatch blocks governance
+changes and release promotion until the checked-in policy and active repository setting agree.
+
+`make review-attest REVIEWED_SHA=<full-commit-sha>` is the only review-stage write. Run it after the
+final semantic review with GitHub network access. It publishes a success status only when the named
+SHA is the clean local HEAD and its evidence bundle validates.
+
 Application output is written to stdout and user-facing errors to stderr. Structured JSON Lines logs
 are written to stderr only when `--log-level` selects `DEBUG`, `INFO`, `WARNING`, or `ERROR`.
 `--log-file` additionally stores records under `.marketsieve/logs/`; no log file is created unless

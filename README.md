@@ -80,14 +80,14 @@ request:
 ```shell
 make test
 make check
-make review
+make evidence
 ```
 
 VS Code uses the workspace `.venv` and provides tasks for dependency sync, formatting, the current
 test file, diagnostics, and the complete gate. Local caches and generated artifacts are kept under
 `.marketsieve`; `.venv` is the only generated environment at the repository root.
 
-`make check` runs the Develop Gate. `make review` additionally creates a checksummed review bundle
+`make check` runs the Develop Gate. `make evidence` additionally creates a checksummed review bundle
 under `.marketsieve/artifacts/review/<commit>/`. Application results use stdout and structured JSON
 Lines logs use stderr. Pass `--log-level INFO` to collect informational evidence and `--log-file`
 to also retain it under `.marketsieve/logs/`.

@@ -7,6 +7,8 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from scripts.github_repository import repository_name
+from scripts.governance_gate import normalized_ruleset
 from scripts.release_gate import validate_inputs
 from scripts.review_gate import SCHEMA_VERSION, render_summary, validate
 
@@ -18,6 +20,54 @@ def test_release_inputs_require_pep440_version_and_complete_commit() -> None:
         validate_inputs("v0.1", "a" * 40)
     with pytest.raises(ValueError, match="commit"):
         validate_inputs("0.1.0", "abc")
+
+
+def test_governance_ruleset_comparison_ignores_github_metadata() -> None:
+    policy = {
+        "id": 123,
+        "name": "develop-quality",
+        "target": "branch",
+        "enforcement": "active",
+        "conditions": {"ref_name": {"include": ["refs/heads/develop"], "exclude": []}},
+        "rules": [{"type": "deletion"}],
+        "bypass_actors": [],
+        "current_user_can_bypass": "never",
+    }
+
+    assert normalized_ruleset(policy) == {
+        "name": "develop-quality",
+        "target": "branch",
+        "enforcement": "active",
+        "conditions": policy["conditions"],
+        "rules": policy["rules"],
+        "bypass_actors": [],
+    }
+    assert repository_name("https://github.com/satter0827/marketsieve.git") == (
+        "satter0827/marketsieve"
+    )
+    assert repository_name("git@github.com:satter0827/marketsieve.git") == (
+        "satter0827/marketsieve"
+    )
+
+
+def test_governance_ruleset_comparison_preserves_integration_bindings() -> None:
+    policy = {
+        "name": "develop-quality",
+        "target": "branch",
+        "enforcement": "active",
+        "conditions": {},
+        "rules": [
+            {
+                "type": "required_status_checks",
+                "parameters": {
+                    "required_status_checks": [{"context": "Develop Gate", "integration_id": 15368}]
+                },
+            }
+        ],
+        "bypass_actors": [],
+    }
+
+    assert normalized_ruleset(policy)["rules"] == policy["rules"]
 
 
 def test_review_summary_is_a_stable_human_projection() -> None:

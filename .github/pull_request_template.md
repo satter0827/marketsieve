@@ -10,6 +10,7 @@ no impact outside the implementation.
 ## Validation
 
 - [ ] Focused tests pass
-- [ ] `make review` passes
+- [ ] `make evidence` passes
+- [ ] `make review-attest REVIEWED_SHA=<full-commit-sha>` passes after the final review
 - [ ] Public behavior and documentation agree
 - [ ] No credentials, recipient data, or generated reports are included

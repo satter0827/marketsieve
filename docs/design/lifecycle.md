@@ -20,7 +20,7 @@ trigger, required input, completion condition, and retained evidence.
 | Inspect current code and formal design | Automated | Relevant sources and constraints are identified |
 | Convert approved requirements into code, tests, and documentation | Automated | Focused diff with matching behavior and prose |
 | Run format, lint, type, test, and package gates | Automated | Successful command and CI results |
-| Prepare and merge a focused pull request to `develop` | Automated | Develop and Review Gates pass, with no unresolved human judgment |
+| Prepare and merge a focused pull request to `develop` | Automated | Pre-PR review, Develop Gate, and Evidence Gate pass, with no unresolved human judgment |
 | Correct deterministic review or CI findings | Automated | Finding resolved and affected checks rerun |
 | Resolve ambiguous market meaning or product tradeoffs | Human decision | Decision recorded in formal design or roadmap |
 | Assess provider terms, licensing, and redistribution | Human decision | Approved scope and evidence of terms review |
@@ -32,9 +32,12 @@ Normal implementation branches start from `develop` and target `develop`. Automa
 proceed after required gates pass and no unresolved human judgment remains. Automation does not
 decide or merge the `develop -> main` release promotion.
 
-Review order is deterministic: focused checks, the complete local gate, local review-bundle
-inspection against the final diff, commit and pull-request creation, then CI and review of new
-evidence. A reviewer does not repeatedly reopen an unchanged deterministic concern; a later repair
+Review order is deterministic: focused checks, the complete local gate, evidence-bundle creation,
+semantic review of the final diff, finding correction, final commit creation, commit-bound review
+attestation, and then pull-request CI for the frozen commit. The ruleset requires `Pre-PR Review` for
+the current head, so any code change invalidates the attestation and returns the work to the pre-PR
+sequence. No asynchronous code review begins after CI. An environment-only failure may rerun the
+unchanged commit after diagnosis. A reviewer does not reopen an unchanged concern; a later repair
 cycle requires changed evidence or an explicitly recorded human decision.
 
 ## Documentation lifecycle
