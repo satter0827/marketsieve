@@ -67,3 +67,33 @@ Live-data acquisition, scheduled execution, persistent state, non-console delive
 fallback, and LLM-assisted reporting are not supported operations. When later milestones introduce them,
 their configuration, recovery, observability, and secret-handling procedures must be added here in
 the same change.
+
+## Approved 0.2 operation
+
+Shareable, non-secret source profiles and analysis settings live in `marketsieve.toml`. Generated
+snapshots, references, logs, caches, and artifacts live below `.marketsieve`. A source profile names
+the distribution and entry point selected for each data kind. Listing installed entry-point
+metadata does not load plugin code; doctor and fetch load only the selected profile.
+
+Acquisition is explicit and may use network access and provider credentials. Inspection, analysis,
+comparison, report rendering, and snapshot verification are offline. Credentials enter through
+provider-specific environment variables only. MarketSieve does not load `.env` files, persist
+credential values, or pass the complete parent environment to child processes.
+
+Content-addressed objects are written to a temporary sibling directory, verified, and atomically
+renamed. Raw responses are retained only when the adapter's approved terms policy permits local
+retention and its redaction step succeeds. Mutable references can be rebuilt from verified object
+manifests.
+
+GitHub Release is the approved distribution channel. Release evidence contains every wheel and
+source distribution, a wheelhouse archive, constraints, a SHA-256 manifest, and compatibility
+results. PyPI publication remains disabled, so installation uses an unpacked wheelhouse with
+`pip --no-index --find-links`.
+
+## Approved 0.3 operation
+
+FakeListLLM remains the default model. LM Studio accepts loopback endpoints by default. A cloud
+provider requires explicit provider configuration and `--allow-cloud` on every invocation. Dry-run
+shows the credential-free fact payload without contacting a model. Provider, model, prompt version,
+fact-catalog hash, selected fact identifiers, output status, and fallback reason are recorded; API
+keys and unrestricted prompts or responses are not written to logs.

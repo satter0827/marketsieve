@@ -106,3 +106,55 @@ and provider-symbol mapping belong to the application or adapter packages. A sou
 prevents `marketsieve_app`, tests, local configuration, caches, notes, and generated reports from
 entering public artifacts. A future adapter distribution has its own dependencies, tests, and
 release evidence and does not expand the core SDK dependency set.
+
+## Approved 0.2 target architecture
+
+The workbench replaces the report-specific application path with acquisition, immutable storage,
+deterministic analysis, section assembly, and independent projections:
+
+```text
+Provider or CSV package
+    -> acquisition capability
+    -> content-addressed snapshot store
+    -> normalized SDK values
+    -> independent equity sections
+    -> inspect / analyze / compare / report
+```
+
+The target workspace contains the `marketsieve` SDK, a minimal `marketsieve-extension-api`, the
+public `marketsieve-cli`, and independent CSV, J-Quants, and Alpha Vantage source distributions.
+The extension API is introduced with the working CSV integration, not as an empty plugin framework.
+The CLI and source packages depend inward through the extension API to the SDK. The SDK imports none
+of them.
+
+Source registration is explicit. Package metadata may be inspected without importing plugin code;
+only a source profile selected for `doctor` or `fetch` may load its configured entry point. Loading
+a Python plugin is equivalent to running any other trusted installed Python package and is not a
+sandbox boundary.
+
+Network acquisition and offline consumption are different use cases. `source fetch` and `source
+import` create immutable objects below `.marketsieve/data/objects`. Inspection, analysis,
+comparison, report rendering, and later agent rendering read verified snapshots and never trigger
+an implicit refresh. Mutable references are rebuildable indexes and are not evidence authorities.
+
+An equity view is a composition of independent instrument, price, technical, financial, valuation,
+risk, event, and data-quality sections. Each section owns status, completeness, missing reasons,
+provenance, and evidence. There is no universal market-data source and no monolithic snapshot object
+that requires every data kind to succeed.
+
+Shareable non-secret configuration lives in `marketsieve.toml`. Generated state, snapshots, logs,
+caches, and artifacts live below `.marketsieve`. Credentials enter only through provider-specific
+environment variables and are never copied into configuration, snapshots, logs, review evidence,
+or distributions.
+
+## Approved 0.3 target architecture
+
+The optional `marketsieve-agent` distribution consumes the same validated section facts used by
+the CLI. LangChain and provider packages remain outside the SDK. A model chooses fact identifiers,
+section order, and bounded non-numeric connective text; a deterministic renderer inserts factual
+values and evidence. The agent owns no source, calculation, file, tool, delivery, or trading access.
+
+FakeListLLM validates the application pipeline but does not claim behavioral equivalence with chat
+providers. Each real provider has separate mocked-transport contract tests. LM Studio is local and
+loopback-only by default. Cloud use requires an explicit invocation flag and never becomes a
+fallback for a failed local or cloud provider.

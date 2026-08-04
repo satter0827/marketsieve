@@ -228,14 +228,25 @@ def check_package(path: Path) -> None:
     )
 
 
+def check_secrets(path: Path) -> None:
+    command = ["uv", "run", "python", "scripts/secret_gate.py"]
+    base_sha = os.environ.get("BASE_SHA")
+    if base_sha:
+        command.extend(("--base", base_sha))
+    command.extend(("--path", str(path)))
+    run(tuple(command))
+
+
 def check_all() -> None:
     path = evidence_dir()
     reset_evidence(path)
+    check_secrets(path)
     check_quality()
     check_tests(path)
     validate_schemas()
     check_smoke(path)
     check_package(path)
+    check_secrets(path)
 
 
 def parse_args() -> argparse.Namespace:

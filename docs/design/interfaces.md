@@ -60,3 +60,54 @@ JSON mode.
 Exit code 0 means success, 1 means a runtime, data, or contract error, and 2 means invalid command
 usage. The commands perform no network requests, read no secrets, and create no operational state
 unless log-file output is explicitly requested.
+
+## Approved 0.2 CLI target
+
+The public `marketsieve-cli` distribution replaces the repository-only application. Japanese is the
+default human locale and `--locale {ja,en}` selects either projection. JSON keys, schema identifiers,
+error codes, and enum values remain English.
+
+```shell
+marketsieve source list
+marketsieve source doctor SOURCE_PROFILE
+marketsieve source fetch SOURCE_PROFILE MIC:SYMBOL --start DATE --end DATE
+marketsieve source import PATH
+marketsieve snapshot list
+marketsieve snapshot show ID
+marketsieve snapshot verify ID
+marketsieve inspect MIC:SYMBOL --source-profile PROFILE
+marketsieve analyze INDICATOR MIC:SYMBOL --source-profile PROFILE
+marketsieve compare MIC:SYMBOL MIC:SYMBOL --source-profile PROFILE
+marketsieve report MIC:SYMBOL --source-profile PROFILE
+```
+
+Only fetch and import commands may create source snapshots. Read commands never perform network
+access and explain the required acquisition command when no suitable snapshot exists. `inspect`
+projects independent sections; `analyze` exposes the approved indicator catalog and parameters;
+`compare` uses one knowledge-as-of instant; and `report` is a deterministic projection of the same
+facts rather than a separate analysis path.
+
+`--config` selects an explicit configuration file, otherwise the current directory's
+`marketsieve.toml` is used when present. Source profiles bind each data kind to a distribution and
+entry point. Environment variables supply credentials only and do not override normal settings.
+
+Versioned snapshot, indicator, comparison, source, report, and error schemas define machine output.
+Capabilities version 2 describes actual network, secret, read, write, plugin, schema, stream, and
+exit behavior. Partial results are successful only when their completeness and missing reasons are
+explicit.
+
+## Approved 0.3 agent target
+
+```shell
+marketsieve agent explain MIC:SYMBOL --source-profile PROFILE --provider fake
+marketsieve agent explain MIC:SYMBOL --source-profile PROFILE --provider lmstudio
+marketsieve agent explain MIC:SYMBOL --source-profile PROFILE --provider openai --allow-cloud
+marketsieve agent explain MIC:SYMBOL --source-profile PROFILE --provider anthropic --allow-cloud
+marketsieve agent explain MIC:SYMBOL --source-profile PROFILE --provider google --allow-cloud
+marketsieve agent explain MIC:SYMBOL --source-profile PROFILE --provider openai --dry-run
+```
+
+Fake is the default. Real model names are explicit configuration and are not frozen in source code.
+Dry-run shows the credential-free outgoing fact payload. Unsafe, invalid, or unavailable model
+output produces a warning on stderr and a deterministic template on stdout. No provider failure
+changes the selected destination.

@@ -3,10 +3,12 @@ from __future__ import annotations
 import hashlib
 import json
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
 import pytest
+import scripts.release_gate as release_gate
 import scripts.review_gate as review_gate
 from scripts.github_repository import repository_name
 from scripts.governance_gate import normalized_ruleset
@@ -24,6 +26,24 @@ def test_release_inputs_require_pep440_version_and_complete_commit() -> None:
         validate_inputs("0.1.0.dev0", "a" * 40)
     with pytest.raises(ValueError, match="commit"):
         validate_inputs("0.1.0", "abc")
+
+
+def test_release_artifacts_are_secret_scanned(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    commands: list[tuple[str, ...]] = []
+    monkeypatch.setattr(release_gate, "run", commands.append)
+
+    release_gate.verify_secrets(tmp_path)
+
+    assert commands == [
+        (
+            sys.executable,
+            str(release_gate.ROOT / "scripts" / "secret_gate.py"),
+            "--path",
+            str(tmp_path),
+        )
+    ]
 
 
 def test_governance_ruleset_comparison_ignores_github_metadata() -> None:
@@ -110,6 +130,50 @@ def test_review_changes_normalize_renames_as_delete_and_add(
         {"path": "new.py", "status": "A", "added_lines": 4, "deleted_lines": 0},
         {"path": "old.py", "status": "D", "added_lines": 0, "deleted_lines": 3},
     ]
+
+
+def test_review_patch_redacts_removed_credentials(tmp_path: Path) -> None:
+    value = "sk-" + "A" * 24
+    patch = tmp_path / "changes.patch"
+    patch.write_text(f"-OPENAI_API_KEY={value}\n+safe\n", encoding="utf-8")
+
+    review_gate.redact_patch(patch)
+
+    assert patch.read_text(encoding="utf-8") == "-[REDACTED CREDENTIAL]\n+safe\n"
+
+
+def test_review_patch_redacts_generic_added_assignment(tmp_path: Path) -> None:
+    key = "JQUANTS_" + "API_KEY"
+    patch = tmp_path / "changes.patch"
+    patch.write_text(f"+{key}=opaque-production-credential\n", encoding="utf-8")
+
+    review_gate.redact_patch(patch)
+
+    assert patch.read_text(encoding="utf-8") == "+[REDACTED CREDENTIAL]\n"
+
+
+def test_review_patch_redacts_complete_private_key_block(tmp_path: Path) -> None:
+    patch = tmp_path / "changes.patch"
+    header = "-----BEGIN " + "PRIVATE KEY-----"
+    footer = "-----END " + "PRIVATE KEY-----"
+    patch.write_text(f"-{header}\n-private-material\n-{footer}\n+safe\n", encoding="utf-8")
+
+    review_gate.redact_patch(patch)
+
+    assert patch.read_text(encoding="utf-8") == (
+        "-[REDACTED CREDENTIAL]\n-[REDACTED CREDENTIAL]\n-[REDACTED CREDENTIAL]\n+safe\n"
+    )
+
+
+def test_review_patch_redacts_escaped_private_key_on_one_line(tmp_path: Path) -> None:
+    patch = tmp_path / "changes.patch"
+    header = "-----BEGIN " + "PRIVATE KEY-----"
+    footer = "-----END " + "PRIVATE KEY-----"
+    patch.write_text(f'-KEY="{header}\\nmaterial\\n{footer}"\n+safe\n', encoding="utf-8")
+
+    review_gate.redact_patch(patch)
+
+    assert patch.read_text(encoding="utf-8") == "-[REDACTED CREDENTIAL]\n+safe\n"
 
 
 def create_review_bundle(tmp_path: Path) -> Path:

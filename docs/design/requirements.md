@@ -49,3 +49,47 @@ The 0.1.0 release does not include investment recommendations, live data, CSV in
 persistence, scheduling, email or LINE delivery, LLM reporting, portfolio management, automatic provider
 discovery, or automatic merging of provider data. These capabilities require later roadmap
 decisions and implementation evidence.
+
+## Approved 0.2 Data Workbench target
+
+- **DWB-01:** A separately installable CLI reads immutable local snapshots and does not perform
+  network access during inspection, analysis, comparison, or report rendering.
+- **DWB-02:** CSV, J-Quants, and Alpha Vantage integrations remain separate distributions and are
+  selected explicitly by a named source profile without automatic fallback or provider merging.
+- **DWB-03:** Acquisition distinguishes the market observation date, provider publication time,
+  local retrieval time, and the basis used to decide when a fact became available.
+- **DWB-04:** A content-addressed snapshot retains normalized facts, provenance, completeness, and
+  permitted raw-response evidence without retaining credentials or recipient or portfolio data.
+- **DWB-05:** Inspection presents independent price, technical, financial, valuation, risk, event,
+  and data-quality sections. One unavailable section does not invalidate the others.
+- **DWB-06:** SMA, EMA, RSI, MACD, ATR, period return, and maximum drawdown use versioned,
+  deterministic definitions and do not depend on process-wide decimal settings.
+- **DWB-07:** Financial facts retain accounting period, standard, consolidation, currency, scale,
+  publication, revision, and provenance semantics before a derived ratio is calculated.
+- **DWB-08:** Comparison identifies incompatible periods, accounting bases, and currencies rather
+  than ranking or converting incomparable values.
+- **DWB-09:** Japanese and English human output project the same versioned English-keyed machine
+  contracts. Partial results expose completeness and missing reasons.
+- **DWB-10:** The CLI, extension contract, and provider integrations build as isolated artifacts and
+  are distributed together through a checksummed GitHub Release wheelhouse.
+
+## Approved 0.3 Report Agent target
+
+- **RAG-01:** The report agent receives only a validated fact catalog derived from the same sections
+  used by deterministic CLI projections.
+- **RAG-02:** The model selects fact identifiers, section order, and non-numeric connective text. A
+  deterministic renderer owns numbers, dates, instruments, evidence, and disclaimers.
+- **RAG-03:** FakeListLLM is the default test model. LM Studio, OpenAI, Anthropic, and Google remain
+  explicit provider choices with no local-to-cloud or cloud-to-cloud fallback.
+- **RAG-04:** A cloud request requires an explicit per-invocation opt-in and offers a dry-run view of
+  the outgoing payload without credentials.
+- **RAG-05:** Invalid, ungrounded, unsafe, or unavailable model output is discarded and replaced by
+  a deterministic template derived from the same facts.
+- **RAG-06:** The agent cannot fetch sources, recalculate facts, call tools, access files, place
+  orders, rank investments, or produce buy, hold, or sell recommendations.
+
+## Exclusions from 0.2 and 0.3
+
+The approved targets exclude news, screening, portfolio management, scheduling, delivery channels,
+databases, foreign-exchange conversion, automatic provider discovery and execution, automatic
+fallback, automatic provider merging, investment scores, recommendations, and trading operations.

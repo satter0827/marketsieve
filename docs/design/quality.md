@@ -87,3 +87,27 @@ make evidence
 
 A failure is corrected and the affected checks are rerun. Environment or tool failures are reported
 as such and are not presented as successful test evidence.
+
+## Approved 0.2 and 0.3 acceptance additions
+
+The target gate adds deterministic reference vectors for every indicator, ambient-decimal-context
+tests, snapshot identity and atomicity tests, publication-versus-retrieval availability tests, and
+contract suites shared by CSV, J-Quants, and Alpha Vantage. Network clients are injected. Default
+tests use synthetic responses and never require accounts, credentials, wall-clock timing, or
+network access. Live provider checks use an explicit marker and manual credentials.
+
+CLI acceptance covers Japanese and English Rich and text projections, versioned JSON, partial
+sections, incompatible comparison warnings, installed plugin metadata without plugin import, and
+execution of only the selected source profile. Package acceptance builds and installs the SDK,
+extension API, CLI, and each source independently before verifying their wheelhouse combinations on
+Python 3.12 through 3.14.
+
+Agent acceptance uses FakeListLLM for ordinary tests and mocked transports for each real provider.
+It covers invalid schemas, unknown facts, numeric additions, recommendation language, timeouts,
+cloud consent, loopback restrictions, and deterministic fallback. Fake tests prove orchestration
+and safety behavior, not provider model behavior.
+
+Secret acceptance scans tracked files, the reviewed diff, generated evidence, distributions, and
+release assets without printing matched values. CI also scans repository history. Tests ensure
+credentials are removed from URLs, headers, exceptions, logs, subprocess environments, and stored
+request metadata.

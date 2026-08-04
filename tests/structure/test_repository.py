@@ -61,6 +61,14 @@ def test_generated_state_is_centralized() -> None:
     assert [name for name in forbidden if (ROOT / name).exists()] == []
 
 
+def test_ignore_files_exclude_private_key_suffixes() -> None:
+    required = {"*.key", "*.pem", "*.p12", "*.pfx", "*.private-key"}
+
+    for name in (".gitignore", ".dockerignore"):
+        patterns = set((ROOT / name).read_text(encoding="utf-8").splitlines())
+        assert required <= patterns
+
+
 def test_shared_vscode_tasks_use_make_targets() -> None:
     vscode = ROOT / ".vscode"
     assert {path.name for path in vscode.glob("*.json")} == {
@@ -116,6 +124,7 @@ def test_makefile_exposes_stable_entry_points() -> None:
         "lint",
         "typecheck",
         "test",
+        "secret-check",
         "check",
         "doctor",
         "report",
@@ -143,7 +152,8 @@ def test_ci_and_rulesets_use_stable_gate_names() -> None:
     assert "name: Evidence Gate" in workflow
     assert "name: Review Gate" not in workflow
     assert "name: Release Gate" in workflow
-    assert "fetch-depth: 0" in workflow
+    assert workflow.count("fetch-depth: 0") == 2
+    assert 'make check BASE_SHA="$BASE_SHA"' in workflow
     assert "ref: ${{ github.event.pull_request.head.sha || github.sha }}" in workflow
     assert workflow.count(".marketsieve/artifacts/checks/${{ github.sha }}") == 0
     assert workflow.count("uv build") == 0

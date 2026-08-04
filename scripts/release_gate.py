@@ -96,6 +96,10 @@ def verify_contents(wheel: Path, sdist: Path) -> None:
         raise RuntimeError(f"release contains private or generated files: {violations}")
 
 
+def verify_secrets(dist_dir: Path) -> None:
+    run((sys.executable, str(ROOT / "scripts" / "secret_gate.py"), "--path", str(dist_dir)))
+
+
 def build(version: str, commit: str, dist_dir: Path) -> None:
     validate_inputs(version, commit)
     validate_source_release(version)
@@ -110,6 +114,7 @@ def build(version: str, commit: str, dist_dir: Path) -> None:
     if metadata_version(wheel) != version:
         raise RuntimeError("built wheel version does not match the requested version")
     verify_contents(wheel, sdist)
+    verify_secrets(dist_dir)
     manifest = {
         "version": version,
         "commit": commit,
@@ -141,6 +146,7 @@ def verify(version: str, commit: str, dist_dir: Path) -> None:
     if metadata_version(wheel) != version:
         raise RuntimeError("wheel metadata version does not match the request")
     verify_contents(wheel, sdist)
+    verify_secrets(dist_dir)
     with tempfile.TemporaryDirectory(prefix="marketsieve-release-") as temp_dir:
         venv = Path(temp_dir) / "venv"
         run((sys.executable, "-m", "venv", str(venv)))
