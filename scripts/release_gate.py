@@ -38,6 +38,7 @@ PUBLIC_PACKAGES = (
     "marketsieve-source-jquants",
     "marketsieve-source-alphavantage",
 )
+GENERATED_ASSETS = ("constraints.txt", "VERIFY.md", "SHA256SUMS", "release.json")
 
 
 def run(command: Sequence[str], *, cwd: Path = ROOT) -> None:
@@ -82,6 +83,29 @@ def distributions(dist_dir: Path) -> tuple[tuple[Path, ...], tuple[Path, ...]]:
     return wheels, sdists
 
 
+def release_assets(dist_dir: Path, *, include_manifest: bool = True) -> tuple[Path, ...]:
+    return tuple(
+        sorted(
+            path
+            for path in dist_dir.iterdir()
+            if path.is_file()
+            and path.name != ".gitignore"
+            and (include_manifest or path.name != "release.json")
+        )
+    )
+
+
+def verify_runtime_wheels(dist_dir: Path) -> None:
+    expected = {path.name: sha256(path) for path in RUNTIME_WHEELHOUSE.glob("*.whl")}
+    actual = {
+        path.name: sha256(path)
+        for path in dist_dir.glob("*.whl")
+        if not path.name.startswith("marketsieve")
+    }
+    if actual != expected:
+        raise RuntimeError("third-party wheels do not match the locked runtime wheelhouse")
+
+
 def metadata_version(wheel: Path) -> str:
     with zipfile.ZipFile(wheel) as archive:
         metadata_name = next(
@@ -93,6 +117,87 @@ def metadata_version(wheel: Path) -> str:
         for line in metadata.splitlines()
         if line.startswith("Version: ")
     )
+
+
+def wheel_requirement(wheel: Path) -> str:
+    with zipfile.ZipFile(wheel) as archive:
+        metadata_name = next(
+            name for name in archive.namelist() if name.endswith(".dist-info/METADATA")
+        )
+        metadata = archive.read(metadata_name).decode("utf-8")
+    fields = {
+        key: value
+        for line in metadata.splitlines()
+        if ": " in line
+        for key, value in (line.split(": ", maxsplit=1),)
+        if key in {"Name", "Version"}
+    }
+    return f"{fields['Name']}=={fields['Version']}"
+
+
+def write_wheelhouse_assets(dist_dir: Path, version: str) -> None:
+    wheel_paths = tuple(sorted(dist_dir.glob("*.whl")))
+    constraints = "\n".join(sorted(wheel_requirement(path) for path in wheel_paths)) + "\n"
+    constraints_path = dist_dir / "constraints.txt"
+    constraints_path.write_text(constraints, encoding="utf-8")
+    instructions_path = dist_dir / "VERIFY.md"
+    instructions_path.write_text(
+        "# MarketSieve wheelhouse\n\n"
+        "Extract this archive, then install without an index:\n\n"
+        "```shell\n"
+        "python -m pip install --no-index --find-links ./marketsieve-wheelhouse "
+        '"marketsieve-cli[all-sources]"\n'
+        "```\n\n"
+        "Verify downloaded release assets against `release.json` before installation.\n",
+        encoding="utf-8",
+    )
+    archive_path = dist_dir / f"marketsieve-wheelhouse-{version}.zip"
+    with zipfile.ZipFile(archive_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for path in (*wheel_paths, constraints_path, instructions_path):
+            archive.write(path, f"marketsieve-wheelhouse/{path.name}")
+    checksum_paths = tuple(
+        sorted(
+            path
+            for path in release_assets(dist_dir, include_manifest=False)
+            if path.name != "SHA256SUMS"
+        )
+    )
+    (dist_dir / "SHA256SUMS").write_text(
+        "".join(f"{sha256(path)}  {path.name}\n" for path in checksum_paths),
+        encoding="utf-8",
+    )
+
+
+def verify_wheelhouse_assets(dist_dir: Path, version: str) -> None:
+    constraints = dist_dir / "constraints.txt"
+    instructions = dist_dir / "VERIFY.md"
+    archive_path = dist_dir / f"marketsieve-wheelhouse-{version}.zip"
+    checksums = dist_dir / "SHA256SUMS"
+    if not all(path.is_file() for path in (constraints, instructions, archive_path, checksums)):
+        raise RuntimeError("release wheelhouse assets are incomplete")
+    expected_requirements = {wheel_requirement(path) for path in dist_dir.glob("*.whl")}
+    if set(constraints.read_text(encoding="utf-8").splitlines()) != expected_requirements:
+        raise RuntimeError("release constraints do not match wheel metadata")
+    expected_checksums = {
+        path.name: sha256(path)
+        for path in release_assets(dist_dir, include_manifest=False)
+        if path.name != "SHA256SUMS"
+    }
+    actual_checksums = {
+        name: digest
+        for line in checksums.read_text(encoding="utf-8").splitlines()
+        for digest, name in (line.split("  ", maxsplit=1),)
+    }
+    if actual_checksums != expected_checksums:
+        raise RuntimeError("SHA256SUMS does not cover the release assets")
+    with zipfile.ZipFile(archive_path) as archive:
+        names = set(archive.namelist())
+    expected_names = {f"marketsieve-wheelhouse/{path.name}" for path in dist_dir.glob("*.whl")} | {
+        "marketsieve-wheelhouse/constraints.txt",
+        "marketsieve-wheelhouse/VERIFY.md",
+    }
+    if names != expected_names:
+        raise RuntimeError("wheelhouse ZIP contents do not match release wheels")
 
 
 def verify_contents(wheels: tuple[Path, ...], sdists: tuple[Path, ...]) -> None:
@@ -156,24 +261,25 @@ def build(version: str, commit: str, dist_dir: Path) -> None:
         raise RuntimeError("locked runtime wheelhouse is empty; run make sync")
     for runtime_wheel in runtime_wheels:
         shutil.copy2(runtime_wheel, dist_dir / runtime_wheel.name)
+    verify_runtime_wheels(dist_dir)
     wheels, sdists = distributions(dist_dir)
     run(("uv", "run", "twine", "check", *(str(path) for path in (*wheels, *sdists))))
     if any(metadata_version(wheel) != version for wheel in wheels):
         raise RuntimeError("built wheel versions do not match the requested version")
     verify_contents(wheels, sdists)
+    write_wheelhouse_assets(dist_dir, version)
     manifest = {
         "version": version,
         "commit": commit,
         "artifacts": [
             {"name": path.name, "sha256": sha256(path), "size": path.stat().st_size}
-            for path in sorted(dist_dir.iterdir())
-            if path.is_file()
+            for path in release_assets(dist_dir, include_manifest=False)
         ],
     }
     (dist_dir / "release.json").write_text(
         json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
-    verify_secrets((*wheels, *sdists, dist_dir / "release.json"))
+    verify_secrets((*wheels, *sdists, *(dist_dir / name for name in GENERATED_ASSETS)))
 
 
 def python_in_venv(venv: Path) -> Path:
@@ -188,11 +294,7 @@ def verify(version: str, commit: str, dist_dir: Path) -> None:
     if manifest["version"] != version or manifest["commit"] != commit:
         raise RuntimeError("release manifest provenance does not match the request")
     expected = {item["name"]: item["sha256"] for item in manifest["artifacts"]}
-    actual = {
-        path.name: path
-        for path in dist_dir.iterdir()
-        if path.is_file() and path.name != "release.json"
-    }
+    actual = {path.name: path for path in release_assets(dist_dir, include_manifest=False)}
     if set(actual) != set(expected):
         raise RuntimeError("release manifest does not cover exactly the release artifacts")
     for path in actual.values():
@@ -201,7 +303,9 @@ def verify(version: str, commit: str, dist_dir: Path) -> None:
     if any(metadata_version(wheel) != version for wheel in wheels):
         raise RuntimeError("wheel metadata versions do not match the request")
     verify_contents(wheels, sdists)
-    verify_secrets((*wheels, *sdists, dist_dir / "release.json"))
+    verify_runtime_wheels(dist_dir)
+    verify_wheelhouse_assets(dist_dir, version)
+    verify_secrets((*wheels, *sdists, *(dist_dir / name for name in GENERATED_ASSETS)))
     with tempfile.TemporaryDirectory(prefix="marketsieve-release-") as temp_dir:
         venv = Path(temp_dir) / "venv"
         run((sys.executable, "-m", "venv", str(venv)))

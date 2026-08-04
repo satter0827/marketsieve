@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and stable releases
 will follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-08-05
+
+### Added
+
+- Immutable, content-addressed CSV, J-Quants, and Alpha Vantage snapshots.
+- Deterministic SMA, EMA, RSI, MACD, ATR, period-return, and drawdown analysis.
+- Sectioned price, technical, financial, valuation, risk, event, and data-quality inspection.
+- Offline comparison and report projections with explicit comparability and missing-data reasons.
+- Japanese-default human output, English output, and versioned English-keyed JSON contracts.
+- Independently installable CLI, extension API, and source distributions.
+
+### Changed
+
+- Replaced the SMA20 replay and report-specific model with one shared sectioned equity view.
+- Made acquisition explicit; inspect, analyze, compare, and report never fetch implicitly.
+
+### Security
+
+- Credentials are accepted only from provider-specific environment variables and are redacted from
+  requests, snapshots, logs, evidence, and release artifacts.
+
 ## [0.1.0] - 2026-08-04
 
 ### Added

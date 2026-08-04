@@ -1,6 +1,6 @@
 # Design
 
-This directory is the normative system-level design for implemented `0.1.0` behavior. It does not
+This directory is the normative system-level design for implemented `0.2.0` behavior. It does not
 make later roadmap items available or public.
 
 ## Documents

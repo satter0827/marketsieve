@@ -17,8 +17,8 @@ from scripts.review_gate import SCHEMA_VERSION, render_summary, validate
 
 
 def test_release_inputs_require_pep440_version_and_complete_commit() -> None:
-    validate_inputs("0.1.0", "a" * 40)
-    validate_source_release("0.1.0")
+    validate_inputs("0.2.0", "a" * 40)
+    validate_source_release("0.2.0")
 
     with pytest.raises(ValueError, match="version"):
         validate_inputs("v0.1", "a" * 40)

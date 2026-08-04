@@ -13,7 +13,7 @@ MarketSieveは、検証済みの市場情報から再現可能な分析、過去
 
 ## 現在の状態
 
-`0.1.0`が現在の公開版です。developには、CSV、J-Quants、Alpha Vantageを独立した配布物として扱う0.2データワークベンチの基盤、変更不能な検証済みスナップショット、価格・財務・イベントの確認機能、7種類の決定論的なテクニカル指標が入っています。ネットワークへ接続するのは明示的な`source fetch`だけです。確認や分析が暗黙にデータを更新することはありません。CLIは根拠と欠損理由を提示し、投資判断を推奨しません。
+`0.2.0`はdevelop上のrelease candidateです。CSV、J-Quants、Alpha Vantageを独立した配布物として扱い、変更不能な検証済みスナップショット、価格・テクニカル・財務・valuation・risk・event・data qualityの総合確認、比較、レポートを提供します。ネットワークへ接続するのは明示的な`source fetch`だけです。CLIは根拠と欠損理由を提示し、投資判断を推奨しません。
 
 ## インストール
 
@@ -27,6 +27,14 @@ SDK、extension API、CLI、CSV source、J-Quants source、Alpha Vantage source�
 
 ```shell
 make build
+```
+
+公開releaseはPyPIではなく、checksum付きGitHub Release wheelhouseを使用します。assetを
+`release.json`で検証してwheelhouse ZIPを展開した後、offlineでinstallします。
+
+```shell
+python -m pip install --no-index --find-links ./marketsieve-wheelhouse \
+  "marketsieve-cli[all-sources]"
 ```
 
 ## CLI
@@ -78,7 +86,7 @@ VS Codeはworkspaceの`.venv`を使用し、依存同期、format、現在のテ
 
 ## Roadmap
 
-次の0.2段階では、section統合、valuation、risk、compare、決定論的reportを完成させます。検証済み情報を説明するAgentは0.3で追加します。順序は[Roadmap](docs/roadmap.md)、制約は[正式設計](docs/design/README.md)を参照してください。
+0.2 workbenchはdevelop上で完成しています。検証済み情報を説明するAgentは0.3で追加します。順序は[Roadmap](docs/roadmap.md)、制約は[正式設計](docs/design/README.md)を参照してください。
 
 ## ライセンス
 

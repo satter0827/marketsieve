@@ -25,8 +25,8 @@ Each milestone must remain usable without later milestones.
      confirmed split.~~
 7. ~~Add Alpha Vantage capabilities without weakening raw, adjusted, range, or plan requests.~~
 8. ~~Complete financial, valuation, risk, comparison, and deterministic report projections.~~
-9. Verify the same GitHub Release wheelhouse on every supported Python version before a human
-   `develop -> main` promotion.
+9. ~~Verify the same GitHub Release wheelhouse on every supported Python version before a human
+   `develop -> main` promotion.~~
 
 ## 0.3.0 Grounded Report Agent — approved
 
