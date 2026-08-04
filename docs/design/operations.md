@@ -30,11 +30,17 @@ Develop evidence, review bundles, and release candidates are stored below
 from it for human reading. Logs and schemas exclude credentials, recipients, portfolio data, and
 unbounded exception dumps.
 
-## Approved preview operation
+## Offline preview operation
 
-The Offline Analysis Preview adds a deterministic demo backed only by repository-licensed synthetic
-fixtures. It remains runnable after dependency installation without external accounts or live
-services. Generated command output is ephemeral and is not committed as a report or fixture.
+The deterministic demo is backed only by repository-owned synthetic fixtures. It remains runnable
+after dependency installation without external accounts or live services:
+
+```shell
+make demo
+make demo-json
+```
+
+Generated command output is ephemeral and is not committed as a report or fixture.
 
 Failures identify whether input validation, analysis prerequisites, or an internal contract caused
 the operation to stop. They do not expose environment secrets or silently switch data sources.

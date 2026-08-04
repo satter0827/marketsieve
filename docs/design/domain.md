@@ -1,7 +1,8 @@
 # Domain
 
-This document defines the approved semantics for the Offline Analysis Preview. Exact Python type
-names and signatures are established with their first working implementation and contract tests.
+This document defines the current semantics of the Offline Analysis Preview. The public types live
+in `marketsieve.domain`, `marketsieve.data.daily`, `marketsieve.analysis.sma20`, and
+`marketsieve.synthetic.daily`.
 
 ## Instrument identity
 
@@ -28,7 +29,7 @@ an ingestion timestamp and from an analysis `as-of` instant.
 A daily bar contains a trading date, open, high, low, close, volume, adjustment state, and
 provenance. Prices use an exact decimal representation at the domain boundary.
 
-- Prices are finite and non-negative; volume is a non-negative integer.
+- Prices are finite and positive; volume is a non-negative integer.
 - `low` is no greater than open, high, and close.
 - `high` is no less than open, low, and close.
 - A series is strictly ordered by trading date and contains no duplicate trading dates.
@@ -36,9 +37,10 @@ provenance. Prices use an exact decimal representation at the domain boundary.
 
 ## Completeness and provenance
 
-Completeness states whether the returned observations cover the accepted request. A partial range
-is never reported as complete. Provenance identifies the source, dataset or fixture identity,
-retrieval or generation context, and adjustment meaning needed to reproduce the input.
+Capability rejects an instrument, range, or adjustment that a source cannot satisfy. Observations
+inside an accepted request but unavailable at the `as-of` instant are excluded and counted
+explicitly. Provenance identifies the source, immutable dataset identity, and version; the request
+and each bar retain adjustment and availability meaning needed to reproduce the input.
 
 Data from different providers or adjustment states is not merged implicitly. Missing observations
 are not fabricated, forward-filled, or substituted with a different frequency.

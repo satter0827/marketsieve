@@ -14,14 +14,21 @@ SCHEMAS = ROOT / "schemas"
 
 def test_schemas_are_draft_2020_12_and_semantically_versioned() -> None:
     paths = sorted(SCHEMAS.glob("*/v1/schema.json"))
-    assert {path.parent.parent.name for path in paths} == {"log-record", "review-report"}
+    assert {path.parent.parent.name for path in paths} == {
+        "demo-result",
+        "log-record",
+        "review-report",
+    }
 
     for path in paths:
         schema = json.loads(path.read_text(encoding="utf-8"))
         Draft202012Validator.check_schema(schema)
         assert schema["$schema"] == "https://json-schema.org/draft/2020-12/schema"
-        assert re.fullmatch(r"urn:marketsieve:schema:[a-z-]+:1\.0\.0", schema["$id"])
-        assert schema["properties"]["schema_version"]["const"] == "1.0.0"
+        identifier = re.fullmatch(
+            r"urn:marketsieve:schema:[a-z-]+:([0-9]+\.[0-9]+\.[0-9]+)", schema["$id"]
+        )
+        assert identifier is not None
+        assert schema["properties"]["schema_version"]["const"] == identifier.group(1)
 
 
 def test_schemas_reject_unknown_major_versions() -> None:

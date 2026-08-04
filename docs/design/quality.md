@@ -5,7 +5,7 @@ corresponding implementation and tests exist.
 
 ## Domain acceptance
 
-The Offline Analysis Preview must test:
+The Offline Analysis Preview tests:
 
 - ambiguous instruments, invalid market identifiers, and naive timestamps;
 - OHLC and volume invariants, date ordering, duplicates, and requested ranges;

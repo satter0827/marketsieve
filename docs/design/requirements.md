@@ -16,7 +16,7 @@ report generation infrastructure, and delivery channels.
 - **FND-05:** Normal changes enter `develop`; a human-reviewed `develop -> main` promotion remains
   the release boundary.
 
-## Approved target: Offline Analysis Preview
+## Current Offline Analysis Preview
 
 - **OAP-01:** The system represents exchange-qualified Japanese and U.S. equity instruments and
   validated daily OHLCV observations without ambiguous symbols or times.
@@ -32,7 +32,7 @@ report generation infrastructure, and delivery channels.
 - **OAP-07:** A repository-local offline command demonstrates the complete path from synthetic data
   through validated analysis to an evidence-backed result.
 
-## Exclusions from the approved target
+## Exclusions from the current preview
 
 The preview does not include investment recommendations, live data, CSV ingestion, persistence,
 scheduling, email or LINE delivery, LLM reporting, portfolio management, automatic provider

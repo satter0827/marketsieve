@@ -13,7 +13,7 @@ MarketSieveは、検証済みの市場情報から再現可能な分析、過去
 
 ## 現在の状態
 
-リポジトリのFoundationは完成しています。公開`marketsieve` packageが現在公開するのはpackage metadataだけで、リポジトリ内の運用アプリケーションはオフラインのバージョン表示と診断コマンドを提供します。承認済みの次期マイルストーンは、日米の合成日足データを使用するOffline Analysis Previewです。市場モデルと分析はまだ現在の機能ではありません。
+Offline Analysis Previewは完成しています。公開`marketsieve` packageは、取引所を明示した銘柄、日足contract、決定論的な日米Synthetic source、SMA20状態変化分析を提供します。リポジトリ内の運用アプリケーションから全経路をoffline demoとして実行できます。この結果は投資推奨ではありません。
 
 ## インストール
 
@@ -36,7 +36,11 @@ CLIはリポジトリ内の運用アプリケーションに属し、公開SDK w
 ```shell
 uv run marketsieve --version
 make doctor
+make demo
+make demo-json
 ```
+
+`make demo`はJP、USの順に人間向け結果を表示します。`make demo-json`は入力期間、観測数、状態、遷移、provenance、evidence IDを含むversion付きmachine contractを出力します。
 
 ## アーキテクチャ
 
@@ -60,7 +64,7 @@ VS Codeはworkspaceの`.venv`を使用し、依存同期、format、現在のテ
 
 ## Roadmap
 
-次のマイルストーンでは、日米の合成日足データから根拠付きのSMA20状態変化とオフラインdemoを生成する決定論的な縦切りを完成させます。後続の順序は[Roadmap](docs/roadmap.md)、承認済みの制約は[正式設計](docs/design/README.md)を参照してください。
+次のマイルストーンでは、完成したPreviewへhistorical replayとchannel-neutral reportを追加し、`0.1.0` candidateとします。順序は[Roadmap](docs/roadmap.md)、制約は[正式設計](docs/design/README.md)を参照してください。
 
 ## ライセンス
 

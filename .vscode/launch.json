@@ -11,6 +11,36 @@
       ],
       "console": "integratedTerminal",
       "justMyCode": true
+    },
+    {
+      "name": "App: Demo Text",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "marketsieve_app",
+      "args": [
+        "demo",
+        "--market",
+        "all",
+        "--format",
+        "text"
+      ],
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
+      "name": "App: Demo JSON",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "marketsieve_app",
+      "args": [
+        "demo",
+        "--market",
+        "all",
+        "--format",
+        "json"
+      ],
+      "console": "integratedTerminal",
+      "justMyCode": true
     }
   ]
 }

@@ -45,6 +45,26 @@ def test_application_depends_on_public_sdk() -> None:
     assert "marketsieve" in imports
 
 
+def test_analysis_and_synthetic_sources_do_not_reference_each_other() -> None:
+    analysis = SDK_SOURCE / "analysis"
+    synthetic = SDK_SOURCE / "synthetic"
+    analysis_imports = {
+        node.module
+        for path in analysis.rglob("*.py")
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
+        if isinstance(node, ast.ImportFrom) and node.module
+    }
+    synthetic_imports = {
+        node.module
+        for path in synthetic.rglob("*.py")
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
+        if isinstance(node, ast.ImportFrom) and node.module
+    }
+
+    assert not any(module.startswith("marketsieve.synthetic") for module in analysis_imports)
+    assert not any(module.startswith("marketsieve.analysis") for module in synthetic_imports)
+
+
 def test_cli_depends_on_composition_root_only() -> None:
     cli_source = ROOT / "apps/marketsieve/src/marketsieve_app/interfaces/cli"
     internal_imports = {

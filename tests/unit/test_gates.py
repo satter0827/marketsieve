@@ -57,6 +57,23 @@ def create_review_bundle(tmp_path: Path) -> Path:
         "changes": [],
         "checks": [{"name": "Develop Gate", "status": "passed", "evidence": "evidence/"}],
         "metrics": {"tests": 1, "branch_coverage": 100.0},
+        "cli": {
+            "version": {},
+            "doctor": {},
+            "module_doctor": {},
+            "demo": {
+                "exit_code": 0,
+                "schema_valid": True,
+                "reproducible": True,
+                "results": [
+                    {
+                        "market": "jp",
+                        "analysis": {"status": "ok", "transition": None},
+                        "evidence_id": "a" * 64,
+                    }
+                ],
+            },
+        },
         "artifacts": [
             {
                 "path": "changes.patch",

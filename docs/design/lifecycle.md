@@ -32,6 +32,11 @@ Normal implementation branches start from `develop` and target `develop`. Automa
 proceed after required gates pass and no unresolved human judgment remains. Automation does not
 decide or merge the `develop -> main` release promotion.
 
+Review order is deterministic: focused checks, the complete local gate, local review-bundle
+inspection against the final diff, commit and pull-request creation, then CI and review of new
+evidence. A reviewer does not repeatedly reopen an unchanged deterministic concern; a later repair
+cycle requires changed evidence or an explicitly recorded human decision.
+
 ## Documentation lifecycle
 
 Approved current behavior and near-term constraints enter `docs/design`. Planned outcomes enter the

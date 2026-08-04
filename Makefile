@@ -16,7 +16,7 @@ RELEASE_DIR ?= $(STATE_DIR)/artifacts/release/$(COMMIT)
 export UV_CACHE_DIR := $(abspath $(STATE_DIR))/cache/uv
 export PYTHONPYCACHEPREFIX := $(abspath $(STATE_DIR))/cache/python
 
-.PHONY: help sync format format-check lint typecheck test check doctor build review review-bundle review-validate release-build release-verify release-check clean-generated
+.PHONY: help sync format format-check lint typecheck test check doctor demo demo-json build review review-bundle review-validate release-build release-verify release-check clean-generated
 
 help: ## Show the available project commands.
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z0-9_-]+:.*## / {printf "%-18s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -44,6 +44,12 @@ check: ## Run the complete development gate.
 
 doctor: ## Run offline installation diagnostics.
 	uv run marketsieve doctor
+
+demo: ## Run the deterministic JP and US offline demo as text.
+	uv run marketsieve demo --market all --format text
+
+demo-json: ## Run the deterministic JP and US offline demo as JSON.
+	uv run marketsieve demo --market all --format json
 
 build: ## Build the public SDK into the generated-artifact directory.
 	@mkdir -p "$(STATE_DIR)/artifacts/build"
