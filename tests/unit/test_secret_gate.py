@@ -1,3 +1,5 @@
+import tarfile
+import zipfile
 from pathlib import Path
 
 import pytest
@@ -23,6 +25,22 @@ def test_secret_scan_reports_location_without_value(tmp_path: Path) -> None:
 
     assert {finding.kind for finding in findings} == {"credential_assignment", "openai_key"}
     assert all(value not in repr(finding) for finding in findings)
+
+
+@pytest.mark.parametrize(
+    "document",
+    (
+        "export {key}={value}\n",
+        "{key}: {value}\n",
+        '{{"{key}": "{value}"}}\n',
+    ),
+)
+def test_secret_scan_recognizes_common_assignments(tmp_path: Path, document: str) -> None:
+    value = "opaque-production-credential"
+    key = "JQUANTS" + "_API_KEY"
+    path = write(tmp_path / "settings.txt", document.format(key=key, value=value))
+
+    assert [finding.kind for finding in scan_paths((path,))] == ["credential_assignment"]
 
 
 def test_secret_scan_rejects_sensitive_tracked_path(tmp_path: Path) -> None:
@@ -55,3 +73,22 @@ def test_history_scan_checks_each_commit(monkeypatch: pytest.MonkeyPatch) -> Non
         ("git-commit:first", "credential_assignment"),
         ("git-commit:first", "openai_key"),
     ]
+
+
+def test_secret_scan_reads_wheel_members(tmp_path: Path) -> None:
+    value = "opaque-production-credential"
+    path = tmp_path / "artifact.whl"
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr("package/settings.txt", f"JQUANTS_API_KEY={value}\n")
+
+    assert [finding.kind for finding in scan_paths((path,))] == ["credential_assignment"]
+
+
+def test_secret_scan_reads_sdist_members(tmp_path: Path) -> None:
+    value = "opaque-production-credential"
+    settings = write(tmp_path / "settings.txt", f"JQUANTS_API_KEY={value}\n")
+    path = tmp_path / "artifact.tar.gz"
+    with tarfile.open(path, "w:gz") as archive:
+        archive.add(settings, arcname="package/settings.txt")
+
+    assert [finding.kind for finding in scan_paths((path,))] == ["credential_assignment"]

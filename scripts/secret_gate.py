@@ -5,6 +5,8 @@ from __future__ import annotations
 import argparse
 import re
 import subprocess
+import tarfile
+import zipfile
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -14,6 +16,7 @@ MAX_TEXT_BYTES = 5 * 1024 * 1024
 SENSITIVE_NAMES = re.compile(r"(?:^|/)(?:\.env(?:\..+)?|credentials?|secrets?)(?:$|/)")
 PERMITTED_NAMES = {".env.example"}
 PLACEHOLDERS = {"", "example", "placeholder", "replace-me", "set-me"}
+TEMPLATE_PLACEHOLDER = re.compile(r"^(?:\{[^{}]+}|<[^<>]+>)$")
 
 
 def _joined(*parts: str) -> str:
@@ -33,8 +36,9 @@ PATTERNS = (
     ),
 )
 ASSIGNMENT = re.compile(
-    r"(?i)^\s*([A-Z0-9_]*(?:API_KEY|ACCESS_TOKEN|AUTH_TOKEN|CLIENT_SECRET|PASSWORD))"
-    r"\s*=\s*([^#\s]+)\s*$"
+    r"(?i)^\s*(?:export\s+)?(?:[{,]\s*)?[\"']?"
+    r"([A-Z0-9_]*(?:API_KEY|ACCESS_TOKEN|AUTH_TOKEN|CLIENT_SECRET|PASSWORD))[\"']?"
+    r"\s*(?:=|:)\s*(.+?)\s*,?\s*$"
 )
 
 
@@ -64,11 +68,7 @@ def _artifact_paths(roots: Iterable[Path]) -> tuple[Path, ...]:
     )
 
 
-def _read_text(path: Path) -> str | None:
-    try:
-        payload = path.read_bytes()
-    except OSError:
-        return None
+def _decode_text(payload: bytes) -> str | None:
     if len(payload) > MAX_TEXT_BYTES or b"\0" in payload:
         return None
     try:
@@ -77,15 +77,55 @@ def _read_text(path: Path) -> str | None:
         return None
 
 
+def _read_text(path: Path) -> str | None:
+    try:
+        return _decode_text(path.read_bytes())
+    except OSError:
+        return None
+
+
 def _scan_text(label: str, text: str) -> list[Finding]:
     findings: list[Finding] = []
     for line_number, line in enumerate(text.splitlines(), start=1):
         assignment = ASSIGNMENT.match(line)
-        if assignment and assignment.group(2).strip("\"'").lower() not in PLACEHOLDERS:
+        value = assignment.group(2).strip().removesuffix(",") if assignment else ""
+        if assignment and line.lstrip().startswith("{"):
+            value = value.removesuffix("}").rstrip()
+        value = value.strip("\"'")
+        if (
+            assignment
+            and value.lower() not in PLACEHOLDERS
+            and TEMPLATE_PLACEHOLDER.fullmatch(value) is None
+        ):
             findings.append(Finding(label, line_number, "credential_assignment"))
         for kind, pattern in PATTERNS:
             if pattern.search(line):
                 findings.append(Finding(label, line_number, kind))
+    return findings
+
+
+def _scan_archive(path: Path, label: str) -> list[Finding]:
+    findings: list[Finding] = []
+    try:
+        if zipfile.is_zipfile(path):
+            with zipfile.ZipFile(path) as archive:
+                for zip_member in archive.infolist():
+                    if zip_member.is_dir() or zip_member.file_size > MAX_TEXT_BYTES:
+                        continue
+                    text = _decode_text(archive.read(zip_member))
+                    if text is not None:
+                        findings.extend(_scan_text(f"{label}!{zip_member.filename}", text))
+        elif tarfile.is_tarfile(path):
+            with tarfile.open(path) as archive:
+                for tar_member in archive.getmembers():
+                    if not tar_member.isfile() or tar_member.size > MAX_TEXT_BYTES:
+                        continue
+                    handle = archive.extractfile(tar_member)
+                    text = _decode_text(handle.read()) if handle is not None else None
+                    if text is not None:
+                        findings.extend(_scan_text(f"{label}!{tar_member.name}", text))
+    except (OSError, tarfile.TarError, zipfile.BadZipFile):
+        return findings
     return findings
 
 
@@ -107,6 +147,7 @@ def scan_paths(paths: Iterable[Path]) -> list[Finding]:
             label = str(path)
         if path.name not in PERMITTED_NAMES and SENSITIVE_NAMES.search(label):
             findings.append(Finding(label, 0, "sensitive_path"))
+        findings.extend(_scan_archive(path, label))
         text = _read_text(path)
         if text is not None:
             findings.extend(_scan_text(label, text))
