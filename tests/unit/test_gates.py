@@ -34,14 +34,17 @@ def test_release_artifacts_are_secret_scanned(
     commands: list[tuple[str, ...]] = []
     monkeypatch.setattr(release_gate, "run", commands.append)
 
-    release_gate.verify_secrets(tmp_path)
+    paths = (tmp_path / "sdk.whl", tmp_path / "release.json")
+    release_gate.verify_secrets(paths)
 
     assert commands == [
         (
             sys.executable,
             str(release_gate.ROOT / "scripts" / "secret_gate.py"),
             "--path",
-            str(tmp_path),
+            str(paths[0]),
+            "--path",
+            str(paths[1]),
         )
     ]
 

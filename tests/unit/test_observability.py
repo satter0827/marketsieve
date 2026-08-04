@@ -7,7 +7,7 @@ from pathlib import Path
 
 from jsonschema import Draft202012Validator
 
-from marketsieve_app.observability import JsonLogFormatter, configure_logger
+from marketsieve_cli.observability import JsonLogFormatter, configure_logger
 
 ROOT = Path(__file__).parents[2]
 
@@ -31,7 +31,7 @@ def test_json_formatter_emits_stable_structured_fields() -> None:
     assert payload["severity_text"] == "INFO"
     assert payload["event_name"] == "test.completed"
     assert payload["attributes"] == {"count": 1}
-    assert payload["resource"] == {"service.name": "marketsieve-app"}
+    assert payload["resource"] == {"service.name": "marketsieve-cli"}
     assert payload["timestamp"].endswith("Z")
     schema = json.loads((ROOT / "schemas/log-record/v1/schema.json").read_text(encoding="utf-8"))
     Draft202012Validator(schema).validate(payload)

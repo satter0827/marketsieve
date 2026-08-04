@@ -3,7 +3,7 @@
 Read `docs/README.md`, `docs/design/architecture.md`, and the affected formal design before changing
 package boundaries, public APIs, delivery behavior, or release procedures.
 
-Keep the public SDK independent from `marketsieve_app`, configuration sources, logging setup,
+Keep the public SDK independent from `marketsieve_cli`, configuration sources, logging setup,
 network clients, databases, delivery providers, and LLM providers. Do not add a public port until a
 working implementation and tests define its actual inputs and outputs.
 

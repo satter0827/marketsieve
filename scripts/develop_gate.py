@@ -19,6 +19,7 @@ from jsonschema import Draft202012Validator, FormatChecker
 
 ROOT = Path(__file__).parents[1]
 STATE_ROOT = ROOT / ".marketsieve"
+RUNTIME_WHEELHOUSE = STATE_ROOT / "cache" / "runtime-wheelhouse"
 
 
 def run(command: Sequence[str], *, cwd: Path = ROOT) -> None:
@@ -106,7 +107,7 @@ def check_smoke(path: Path) -> None:
     doctor = capture(
         ("uv", "run", "marketsieve", "--log-level", "INFO", "doctor", "--output", "json")
     )
-    module = capture(("uv", "run", "python", "-m", "marketsieve_app", "doctor", "--output", "json"))
+    module = capture(("uv", "run", "python", "-m", "marketsieve_cli", "doctor", "--output", "json"))
     capabilities = capture(("uv", "run", "marketsieve", "capabilities", "--output", "json"))
     report_first = capture(
         ("uv", "run", "marketsieve", "--log-level", "INFO", "report", "--output", "json")
@@ -159,23 +160,33 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def verify_wheel(wheel: Path) -> list[str]:
+def verify_core_wheel(wheel: Path) -> list[str]:
     with zipfile.ZipFile(wheel) as archive:
         names = sorted(archive.namelist())
     required = ("marketsieve/__init__.py", "marketsieve/py.typed")
     if any(not any(name.endswith(suffix) for name in names) for suffix in required):
         raise RuntimeError("wheel is missing required SDK files")
-    forbidden = ("marketsieve_app/", "/tests/", "/schemas/", ".marketsieve/", "__pycache__")
+    forbidden = ("marketsieve_cli/", "/tests/", "/schemas/", ".marketsieve/", "__pycache__")
     violations = [name for name in names if any(fragment in name for fragment in forbidden)]
     if violations:
         raise RuntimeError(f"wheel contains private or generated files: {violations}")
     return names
 
 
-def verify_sdist(sdist: Path) -> list[str]:
+def verify_cli_wheel(wheel: Path) -> list[str]:
+    with zipfile.ZipFile(wheel) as archive:
+        names = sorted(archive.namelist())
+    if not any(name.endswith("marketsieve_cli/__init__.py") for name in names):
+        raise RuntimeError("CLI wheel is missing its public module")
+    if any(name.startswith("marketsieve/") for name in names):
+        raise RuntimeError("CLI wheel must depend on, not contain, the SDK")
+    return names
+
+
+def verify_sdist(sdist: Path, *, forbidden_package: str) -> list[str]:
     with tarfile.open(sdist) as archive:
         names = sorted(archive.getnames())
-    forbidden = ("marketsieve_app", "/tests/", "/schemas/", ".marketsieve", "__pycache__")
+    forbidden = (forbidden_package, "/tests/", "/schemas/", ".marketsieve", "__pycache__")
     violations = [name for name in names if any(fragment in name for fragment in forbidden)]
     if violations:
         raise RuntimeError(f"sdist contains private or generated files: {violations}")
@@ -189,36 +200,61 @@ def python_in_venv(venv: Path) -> Path:
 def check_package(path: Path) -> None:
     dist = path / "dist"
     dist.mkdir()
-    run(("uv", "build", "--package", "marketsieve", "--out-dir", str(dist)))
+    for package_name in ("marketsieve", "marketsieve-cli"):
+        run(("uv", "build", "--package", package_name, "--out-dir", str(dist)))
     wheels = tuple(dist.glob("*.whl"))
     sdists = tuple(dist.glob("*.tar.gz"))
-    if len(wheels) != 1 or len(sdists) != 1:
-        raise RuntimeError("the public build must produce one wheel and one sdist")
-    run(("uv", "run", "twine", "check", str(wheels[0]), str(sdists[0])))
-    wheel_files = verify_wheel(wheels[0])
-    sdist_files = verify_sdist(sdists[0])
+    if len(wheels) != 2 or len(sdists) != 2:
+        raise RuntimeError("the public build must produce two wheels and two sdists")
+    run(("uv", "run", "twine", "check", *(str(path) for path in (*wheels, *sdists))))
+    core_wheel = next(item for item in wheels if item.name.startswith("marketsieve-"))
+    cli_wheel = next(item for item in wheels if item.name.startswith("marketsieve_cli-"))
+    core_sdist = next(item for item in sdists if item.name.startswith("marketsieve-"))
+    cli_sdist = next(item for item in sdists if item.name.startswith("marketsieve_cli-"))
+    wheel_files = {
+        "marketsieve": verify_core_wheel(core_wheel),
+        "marketsieve-cli": verify_cli_wheel(cli_wheel),
+    }
+    sdist_files = {
+        "marketsieve": verify_sdist(core_sdist, forbidden_package="marketsieve_cli"),
+        "marketsieve-cli": verify_sdist(cli_sdist, forbidden_package="packages/core"),
+    }
 
     with tempfile.TemporaryDirectory(prefix="marketsieve-install-") as temp_dir:
         venv = Path(temp_dir) / "venv"
         run((sys.executable, "-m", "venv", str(venv)))
         isolated = python_in_venv(venv)
-        run((str(isolated), "-m", "pip", "install", "--no-deps", str(wheels[0])))
+        run(
+            (
+                str(isolated),
+                "-m",
+                "pip",
+                "install",
+                "--disable-pip-version-check",
+                "--no-index",
+                "--find-links",
+                str(RUNTIME_WHEELHOUSE),
+                str(core_wheel),
+                str(cli_wheel),
+            )
+        )
         installed = capture(
             (
                 str(isolated),
                 "-c",
-                "import marketsieve; import marketsieve.analysis.sma20; "
+                "import marketsieve; import marketsieve_cli; import marketsieve.analysis.sma20; "
                 "import marketsieve.analysis.replay; import marketsieve.data.daily; "
                 "import marketsieve.domain; import marketsieve.reporting.sma20; "
                 "import marketsieve.synthetic.daily; print(marketsieve.__version__)",
             )
         ).stdout.strip()
+        run((str(isolated), "-m", "marketsieve_cli", "doctor", "--output", "json"))
 
     package = {
         "version": installed,
         "artifacts": [
             {"name": item.name, "sha256": sha256(item), "size": item.stat().st_size}
-            for item in (wheels[0], sdists[0])
+            for item in (*wheels, *sdists)
         ],
         "wheel_files": wheel_files,
         "sdist_files": sdist_files,

@@ -24,6 +24,7 @@ help: ## Show the available project commands.
 
 sync: ## Install the locked workspace and development dependencies.
 	uv sync --locked
+	uv run python scripts/runtime_wheelhouse.py prepare --output "$(STATE_DIR)/cache/runtime-wheelhouse"
 
 format: ## Format source, tests, scripts, and configuration snippets.
 	uv run ruff format .
@@ -58,9 +59,10 @@ report-json: ## Emit the historical report machine contract.
 capabilities-json: ## Describe the CLI machine contract.
 	uv run marketsieve capabilities --output json
 
-build: ## Build the public SDK into the generated-artifact directory.
+build: ## Build the public SDK and CLI into the generated-artifact directory.
 	@mkdir -p "$(STATE_DIR)/artifacts/build"
 	uv build --package marketsieve --out-dir "$(STATE_DIR)/artifacts/build"
+	uv build --package marketsieve-cli --out-dir "$(STATE_DIR)/artifacts/build"
 
 evidence: check evidence-bundle ## Run the development gate and create a review bundle.
 

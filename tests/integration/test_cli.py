@@ -10,8 +10,8 @@ from jsonschema import Draft202012Validator, FormatChecker
 from marketsieve import __version__
 from marketsieve.data.daily import DailyBarRequest, DailyBarSeries
 from marketsieve.synthetic.daily import JP_BARS, SyntheticDailySource
-from marketsieve_app.application.diagnostics import DiagnosticCheck, DiagnosticsService
-from marketsieve_app.interfaces.cli import entrypoint, main
+from marketsieve_cli.application.diagnostics import DiagnosticCheck, DiagnosticsService
+from marketsieve_cli.interfaces.cli import entrypoint, main
 
 SCHEMAS = Path("schemas")
 

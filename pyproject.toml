@@ -3,7 +3,7 @@ name = "marketsieve-workspace"
 version = "0.0.0"
 requires-python = ">=3.12,<3.15"
 dependencies = [
-    "marketsieve-app",
+    "marketsieve-cli",
 ]
 
 [dependency-groups]
@@ -26,12 +26,12 @@ required-version = ">=0.12,<0.13"
 
 [tool.uv.workspace]
 members = [
-    "apps/marketsieve",
+    "packages/cli",
     "packages/core",
 ]
 
 [tool.uv.sources]
-marketsieve-app = { workspace = true }
+marketsieve-cli = { workspace = true }
 
 [tool.pytest.ini_options]
 addopts = "-q --strict-config --strict-markers"
@@ -43,7 +43,7 @@ testpaths = ["tests"]
 cache-dir = ".marketsieve/cache/ruff"
 line-length = 100
 src = [
-    "apps/marketsieve/src",
+    "packages/cli/src",
     "packages/core/src",
     "scripts",
     "tests",
@@ -59,7 +59,7 @@ quote-style = "double"
 [tool.mypy]
 cache_dir = ".marketsieve/cache/mypy"
 files = [
-    "apps/marketsieve/src",
+    "packages/cli/src",
     "packages/core/src",
     "scripts",
     "tests",
@@ -71,8 +71,8 @@ warn_unused_ignores = true
 [tool.coverage.run]
 branch = true
 data_file = ".marketsieve/coverage/data"
-source = ["marketsieve", "marketsieve_app"]
-omit = ["*/marketsieve_app/__main__.py"]
+source = ["marketsieve", "marketsieve_cli"]
+omit = ["*/marketsieve_cli/__main__.py"]
 
 [tool.coverage.report]
 fail_under = 90
@@ -83,28 +83,28 @@ skip_covered = true
 output = ".marketsieve/coverage/coverage.json"
 
 [tool.importlinter]
-root_packages = ["marketsieve", "marketsieve_app"]
+root_packages = ["marketsieve", "marketsieve_cli"]
 
 [[tool.importlinter.contracts]]
 name = "Application dependencies point inward"
 type = "layers"
 layers = [
-    "marketsieve_app.interfaces",
-    "marketsieve_app.bootstrap",
-    "marketsieve_app.adapters",
-    "marketsieve_app.application",
+    "marketsieve_cli.interfaces",
+    "marketsieve_cli.bootstrap",
+    "marketsieve_cli.adapters",
+    "marketsieve_cli.application",
     "marketsieve",
 ]
 
 [[tool.importlinter.contracts]]
 name = "CLI depends on the composition root only"
 type = "forbidden"
-source_modules = ["marketsieve_app.interfaces"]
-forbidden_modules = ["marketsieve_app.application", "marketsieve"]
+source_modules = ["marketsieve_cli.interfaces"]
+forbidden_modules = ["marketsieve_cli.application", "marketsieve"]
 allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
 name = "Public SDK does not depend on the repository application"
 type = "forbidden"
 source_modules = ["marketsieve"]
-forbidden_modules = ["marketsieve_app"]
+forbidden_modules = ["marketsieve_cli"]

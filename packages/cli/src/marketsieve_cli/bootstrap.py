@@ -1,4 +1,4 @@
-"""Composition root for repository-local application services."""
+"""Composition root for the public CLI application."""
 
 from __future__ import annotations
 
@@ -14,10 +14,10 @@ from marketsieve.synthetic.daily import (
     jp_source,
     us_source,
 )
-from marketsieve_app.adapters.console import ConsoleOutput, OutputMode
-from marketsieve_app.application.diagnostics import DiagnosticsService
-from marketsieve_app.application.report import ReportMarket, ReportService
-from marketsieve_app.observability import configure_logger
+from marketsieve_cli.adapters.console import ConsoleOutput, OutputMode
+from marketsieve_cli.application.diagnostics import DiagnosticsService
+from marketsieve_cli.application.report import ReportMarket, ReportService
+from marketsieve_cli.observability import configure_logger
 
 
 def build_console_output(
