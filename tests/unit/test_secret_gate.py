@@ -124,6 +124,30 @@ def test_secret_scan_rejects_credential_headers(
     assert [finding.kind for finding in scan_paths((path,))] == [expected]
 
 
+@pytest.mark.parametrize(
+    ("case", "expected"),
+    (
+        ("json_api", "api_key_header"),
+        ("mapping_api", "api_key_header"),
+        ("json_basic", "basic_auth"),
+        ("json_bearer", "bearer_token"),
+    ),
+)
+def test_secret_scan_rejects_serialized_credential_headers(
+    tmp_path: Path, case: str, expected: str
+) -> None:
+    documents = {
+        "json_api": '{"' + "X-API-Key" + '": "opaque-production-credential"}\n',
+        "mapping_api": "headers={'" + "X-API-Key" + "': 'opaque-production-credential'}\n",
+        "json_basic": '{"' + "Authorization" + '": "Basic b3BhcXVlLXByb2R1Y3Rpb24="}\n',
+        "json_bearer": '{"' + "Authorization" + '": "Bearer opaque-production-credential"}\n',
+    }
+    document = documents[case]
+    path = write(tmp_path / "request.txt", document)
+
+    assert [finding.kind for finding in scan_paths((path,))] == [expected]
+
+
 def test_secret_scan_rejects_sensitive_tracked_path(tmp_path: Path) -> None:
     path = write(tmp_path / ".env", "SAFE=placeholder\n")
 

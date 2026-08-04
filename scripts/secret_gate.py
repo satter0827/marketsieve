@@ -57,15 +57,30 @@ PATTERNS = (
     ("slack_token", re.compile(_joined(r"\bxox[baprs]-", r"[A-Za-z0-9-]{20,}\b"))),
     (
         "bearer_token",
-        re.compile(_joined(r"(?i)authorization\s*[:=]\s*bearer\s+", r"[^\s\"']{12,}")),
+        re.compile(
+            _joined(
+                r"(?i)(?:^|[{,]\s*)[\"']?authorization[\"']?\s*[:=]\s*[\"']?bearer\s+",
+                r"[^\s\"'}]{12,}",
+            )
+        ),
     ),
     (
         "basic_auth",
-        re.compile(_joined(r"(?i)^\s*authorization\s*:\s*basic\s+", r"[A-Za-z0-9+/=]{8,}")),
+        re.compile(
+            _joined(
+                r"(?i)(?:^|[{,]\s*)[\"']?authorization[\"']?\s*:\s*[\"']?basic\s+",
+                r"[A-Za-z0-9+/=]{8,}",
+            )
+        ),
     ),
     (
         "api_key_header",
-        re.compile(_joined(r"(?i)^\s*(?:x-)?api-key\s*:\s*", r"[^\s\"']{8,}")),
+        re.compile(
+            _joined(
+                r"(?i)(?:^|[{,]\s*)[\"']?(?:x-)?api-key[\"']?\s*:\s*[\"']?",
+                r"[^\s\"'}]{8,}",
+            )
+        ),
     ),
 )
 ASSIGNMENT = re.compile(
