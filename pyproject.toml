@@ -3,6 +3,7 @@ name = "marketsieve-workspace"
 version = "0.0.0"
 requires-python = ">=3.12,<3.15"
 dependencies = [
+    "marketsieve-agent",
     "marketsieve-cli",
     "marketsieve-source-csv",
     "marketsieve-source-jquants",
@@ -29,6 +30,7 @@ required-version = ">=0.12,<0.13"
 
 [tool.uv.workspace]
 members = [
+    "packages/agent",
     "packages/cli",
     "packages/core",
     "packages/extension-api",
@@ -38,6 +40,7 @@ members = [
 ]
 
 [tool.uv.sources]
+marketsieve-agent = { workspace = true }
 marketsieve-cli = { workspace = true }
 marketsieve-source-csv = { workspace = true }
 marketsieve-source-jquants = { workspace = true }
@@ -53,6 +56,7 @@ testpaths = ["tests"]
 cache-dir = ".marketsieve/cache/ruff"
 line-length = 100
 src = [
+    "packages/agent/src",
     "packages/cli/src",
     "packages/core/src",
     "packages/extension-api/src",
@@ -73,6 +77,7 @@ quote-style = "double"
 [tool.mypy]
 cache_dir = ".marketsieve/cache/mypy"
 files = [
+    "packages/agent/src",
     "packages/cli/src",
     "packages/core/src",
     "packages/extension-api/src",
@@ -89,7 +94,7 @@ warn_unused_ignores = true
 [tool.coverage.run]
 branch = true
 data_file = ".marketsieve/coverage/data"
-source = ["marketsieve", "marketsieve_cli", "marketsieve_extension_api", "marketsieve_source_csv", "marketsieve_source_jquants", "marketsieve_source_alphavantage"]
+source = ["marketsieve", "marketsieve_agent", "marketsieve_cli", "marketsieve_extension_api", "marketsieve_source_csv", "marketsieve_source_jquants", "marketsieve_source_alphavantage"]
 omit = ["*/marketsieve_cli/__main__.py"]
 
 [tool.coverage.report]
@@ -101,7 +106,7 @@ skip_covered = true
 output = ".marketsieve/coverage/coverage.json"
 
 [tool.importlinter]
-root_packages = ["marketsieve", "marketsieve_cli", "marketsieve_extension_api", "marketsieve_source_csv", "marketsieve_source_jquants", "marketsieve_source_alphavantage"]
+root_packages = ["marketsieve", "marketsieve_agent", "marketsieve_cli", "marketsieve_extension_api", "marketsieve_source_csv", "marketsieve_source_jquants", "marketsieve_source_alphavantage"]
 
 [[tool.importlinter.contracts]]
 name = "Application dependencies point inward"
@@ -111,6 +116,7 @@ layers = [
     "marketsieve_cli.bootstrap",
     "marketsieve_cli.adapters",
     "marketsieve_cli.application",
+    "marketsieve_agent",
     "marketsieve_source_csv",
     "marketsieve_source_jquants",
     "marketsieve_source_alphavantage",

@@ -8,12 +8,15 @@ network clients, databases, delivery providers, or LLM providers.
 
 ## Current components
 
-The repository builds six public distributions at the same version. `marketsieve` contains the
+The repository builds seven public distributions at the same version. `marketsieve` contains the
 I/O-independent SDK. `marketsieve-extension-api` defines the implemented daily-bar import contract,
 `marketsieve-source-csv` implements local import, `marketsieve-source-jquants` implements explicit
 J-Quants API V2 acquisition, `marketsieve-source-alphavantage` implements explicit Alpha Vantage
 acquisition, and `marketsieve-cli` owns the executable application and immutable
 snapshot store.
+The optional `marketsieve-agent` distribution now implements the FakeListLLM fact-selection
+pipeline and deterministic safe fallback. Real provider transports and CLI exposure remain later
+0.3 milestones.
 
 The `marketsieve_cli` package owns the command-line interface, offline diagnostics, use-case
 orchestration, and console presentation. It is independently installable and is never included in

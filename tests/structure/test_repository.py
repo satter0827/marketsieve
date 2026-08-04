@@ -13,6 +13,7 @@ ROOT = Path(__file__).parents[2]
 def test_license_copies_match() -> None:
     root_license = (ROOT / "LICENSE").read_text(encoding="utf-8")
     package_licenses = (
+        (ROOT / "packages" / "agent" / "LICENSE").read_text(encoding="utf-8"),
         (ROOT / "packages" / "core" / "LICENSE").read_text(encoding="utf-8"),
         (ROOT / "packages" / "cli" / "LICENSE").read_text(encoding="utf-8"),
         (ROOT / "packages" / "extension-api" / "LICENSE").read_text(encoding="utf-8"),
@@ -44,6 +45,7 @@ def test_readmes_show_the_same_commands() -> None:
 
 def test_workspace_package_versions_match() -> None:
     projects = (
+        ROOT / "packages/agent/pyproject.toml",
         ROOT / "packages/core/pyproject.toml",
         ROOT / "packages/extension-api/pyproject.toml",
         ROOT / "packages/cli/pyproject.toml",
