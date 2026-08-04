@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:marketsieve:schema:inspect-result:1.0.0",
+  "title": "MarketSieve equity inspection",
+  "type": "object",
+  "required": ["schema_version", "instrument", "source_profile", "snapshot_id", "sections"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "instrument": {
+      "type": "object",
+      "required": ["mic", "symbol", "currency", "timezone", "type"],
+      "additionalProperties": {"type": "string"}
+    },
+    "source_profile": {"type": "string", "minLength": 1},
+    "snapshot_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "sections": {
+      "type": "object",
+      "required": ["price", "technical", "financial", "valuation", "risk", "events", "data_quality"],
+      "additionalProperties": {"$ref": "#/$defs/section"}
+    }
+  },
+  "$defs": {
+    "section": {
+      "type": "object",
+      "required": ["status", "completeness", "values", "warnings", "missing_reasons", "provenance", "evidence_id"],
+      "properties": {
+        "status": {"enum": ["available", "unavailable"]},
+        "as_of": {"type": "string", "format": "date-time"},
+        "completeness": {"type": "string", "pattern": "^(0|1)$"},
+        "values": {"type": "object"},
+        "warnings": {"type": "array", "items": {"type": "string"}},
+        "missing_reasons": {"type": "array", "items": {"type": "string"}},
+        "provenance": {"type": "array", "items": {"type": "object"}},
+        "evidence_id": {"type": ["string", "null"]}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

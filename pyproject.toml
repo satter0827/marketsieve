@@ -4,6 +4,7 @@ version = "0.0.0"
 requires-python = ">=3.12,<3.15"
 dependencies = [
     "marketsieve-cli",
+    "marketsieve-source-csv",
 ]
 
 [dependency-groups]
@@ -28,10 +29,13 @@ required-version = ">=0.12,<0.13"
 members = [
     "packages/cli",
     "packages/core",
+    "packages/extension-api",
+    "packages/source-csv",
 ]
 
 [tool.uv.sources]
 marketsieve-cli = { workspace = true }
+marketsieve-source-csv = { workspace = true }
 
 [tool.pytest.ini_options]
 addopts = "-q --strict-config --strict-markers"
@@ -45,6 +49,8 @@ line-length = 100
 src = [
     "packages/cli/src",
     "packages/core/src",
+    "packages/extension-api/src",
+    "packages/source-csv/src",
     "scripts",
     "tests",
 ]
@@ -61,6 +67,8 @@ cache_dir = ".marketsieve/cache/mypy"
 files = [
     "packages/cli/src",
     "packages/core/src",
+    "packages/extension-api/src",
+    "packages/source-csv/src",
     "scripts",
     "tests",
 ]
@@ -71,7 +79,7 @@ warn_unused_ignores = true
 [tool.coverage.run]
 branch = true
 data_file = ".marketsieve/coverage/data"
-source = ["marketsieve", "marketsieve_cli"]
+source = ["marketsieve", "marketsieve_cli", "marketsieve_extension_api", "marketsieve_source_csv"]
 omit = ["*/marketsieve_cli/__main__.py"]
 
 [tool.coverage.report]
@@ -83,7 +91,7 @@ skip_covered = true
 output = ".marketsieve/coverage/coverage.json"
 
 [tool.importlinter]
-root_packages = ["marketsieve", "marketsieve_cli"]
+root_packages = ["marketsieve", "marketsieve_cli", "marketsieve_extension_api", "marketsieve_source_csv"]
 
 [[tool.importlinter.contracts]]
 name = "Application dependencies point inward"
@@ -93,6 +101,8 @@ layers = [
     "marketsieve_cli.bootstrap",
     "marketsieve_cli.adapters",
     "marketsieve_cli.application",
+    "marketsieve_source_csv",
+    "marketsieve_extension_api",
     "marketsieve",
 ]
 
@@ -107,4 +117,16 @@ allow_indirect_imports = true
 name = "Public SDK does not depend on the repository application"
 type = "forbidden"
 source_modules = ["marketsieve"]
+forbidden_modules = ["marketsieve_cli"]
+
+[[tool.importlinter.contracts]]
+name = "Extension API is independent from implementations"
+type = "forbidden"
+source_modules = ["marketsieve_extension_api"]
+forbidden_modules = ["marketsieve_cli", "marketsieve_source_csv"]
+
+[[tool.importlinter.contracts]]
+name = "CSV source does not depend on the CLI"
+type = "forbidden"
+source_modules = ["marketsieve_source_csv"]
 forbidden_modules = ["marketsieve_cli"]

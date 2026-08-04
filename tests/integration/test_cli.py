@@ -16,6 +16,41 @@ from marketsieve_cli.interfaces.cli import entrypoint, main
 SCHEMAS = Path("schemas")
 
 
+def write_csv_bundle(path: Path) -> Path:
+    path.mkdir()
+    (path / "manifest.json").write_text(
+        json.dumps(
+            {
+                "schema": "marketsieve-csv-daily-bars/v1",
+                "source_profile": "offline-jp",
+                "source": "csv",
+                "source_version": "fixture-1",
+                "retrieved_at": "2026-08-01T12:00:00+00:00",
+                "instrument": {
+                    "symbol": "7203",
+                    "mic": "XTKS",
+                    "currency": "JPY",
+                    "timezone": "Asia/Tokyo",
+                },
+                "dataset": {
+                    "name": "example-bars",
+                    "file": "daily-bars.csv",
+                    "adjustment": "raw",
+                    "availability_basis": "published",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    (path / "daily-bars.csv").write_text(
+        "trading_date,open,high,low,close,volume,published_at\n"
+        "2026-07-30,100,110,90,105,1000,2026-07-30T06:00:00+00:00\n"
+        "2026-07-31,105,115,101,112,1200,2026-07-31T06:00:00+00:00\n",
+        encoding="utf-8",
+    )
+    return path
+
+
 def validate(name: str, document: object, major: int = 1) -> None:
     schema = json.loads((SCHEMAS / name / f"v{major}" / "schema.json").read_text())
     Draft202012Validator(schema, format_checker=FormatChecker()).validate(document)
@@ -102,7 +137,17 @@ def test_capabilities_match_click_commands_and_validate_schema() -> None:
     assert result.exit_code == 0
     document = json.loads(result.stdout)
     validate("capabilities-result", document)
-    assert [item["name"] for item in document["commands"]] == sorted(main.commands)
+    assert [item["name"] for item in document["commands"]] == [
+        "capabilities",
+        "doctor",
+        "inspect",
+        "report",
+        "snapshot list",
+        "snapshot show",
+        "snapshot verify",
+        "source import",
+        "source list",
+    ]
     report = next(item for item in document["commands"] if item["name"] == "report")
     assert {option["name"] for option in report["options"]} == {"market", "output_mode"}
     assert {option["name"] for option in document["global_options"]} == {
@@ -178,3 +223,64 @@ def test_report_treats_insufficient_history_as_success(monkeypatch: pytest.Monke
     report = json.loads(result.stdout)["reports"][0]
     assert report["latest"]["status"] == "insufficient_history"
     assert report["transitions"] == []
+
+
+def test_csv_import_snapshot_and_price_inspect_are_one_offline_path(tmp_path: Path) -> None:
+    runner = CliRunner()
+    bundle = write_csv_bundle(tmp_path / "bundle")
+    with runner.isolated_filesystem():
+        sources = runner.invoke(main, ["source", "list", "--output", "json"])
+        imported = runner.invoke(main, ["source", "import", str(bundle), "--output", "json"])
+        import_document = json.loads(imported.stdout)
+        object_id = import_document["object_id"]
+        listed = runner.invoke(main, ["snapshot", "list", "--output", "json"])
+        shown = runner.invoke(main, ["snapshot", "show", object_id, "--output", "json"])
+        verified = runner.invoke(main, ["snapshot", "verify", object_id, "--output", "json"])
+        inspected = runner.invoke(
+            main,
+            [
+                "inspect",
+                "XTKS:7203",
+                "--source-profile",
+                "offline-jp",
+                "--output",
+                "json",
+            ],
+        )
+
+    assert sources.exit_code == imported.exit_code == 0
+    source_document = json.loads(sources.stdout)
+    validate("source-result", source_document)
+    assert source_document["sources"][0]["name"] == "csv"
+    assert source_document["sources"][0]["loaded"] is False
+    validate("source-result", import_document)
+    assert import_document["observations"] == 2
+    for result in (listed, shown, verified):
+        assert result.exit_code == 0
+        validate("snapshot-result", json.loads(result.stdout))
+    assert inspected.exit_code == 0
+    inspection = json.loads(inspected.stdout)
+    validate("inspect-result", inspection)
+    assert inspection["sections"]["price"]["values"]["close"] == "112"
+    assert inspection["sections"]["financial"]["missing_reasons"] == ["not_present_in_snapshot"]
+
+
+def test_inspect_never_fetches_and_explains_missing_snapshot() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        result = runner.invoke(
+            main,
+            [
+                "inspect",
+                "XTKS:7203",
+                "--source-profile",
+                "offline-jp",
+                "--output",
+                "json",
+            ],
+        )
+
+    assert result.exit_code == 1
+    error = json.loads(result.stderr)
+    assert error["error"] == "inspect_failed"
+    assert "marketsieve source import PATH" in error["message"]

@@ -8,8 +8,10 @@ network clients, databases, delivery providers, or LLM providers.
 
 ## Current components
 
-The repository builds two public distributions at the same version. `marketsieve` contains the
-I/O-independent SDK. `marketsieve-cli` contains the executable application and depends on the SDK.
+The repository builds four public distributions at the same version. `marketsieve` contains the
+I/O-independent SDK. `marketsieve-extension-api` defines the implemented daily-bar import contract,
+`marketsieve-source-csv` implements it, and `marketsieve-cli` owns the executable application and
+immutable snapshot store.
 
 The `marketsieve_cli` package owns the command-line interface, offline diagnostics, use-case
 orchestration, and console presentation. It is independently installable and is never included in
@@ -87,9 +89,33 @@ demonstration support. The SDK depends on `tzdata` so exchange timezones remain 
 installations without an operating-system timezone database.
 Analysis and synthetic modules do not reference one another; the application combines them through
 the daily-source contract.
-Sources that perform file or network I/O are separate adapters and, when published, separate
-distributions. CSV, J-Quants, and Alpha Vantage are roadmap candidates rather than current
-components.
+Sources that perform file or network I/O are separate distributions. CSV is the first working
+source. J-Quants and Alpha Vantage remain roadmap candidates.
+
+## CSV acquisition and snapshot path
+
+The implemented offline acquisition path is:
+
+```text
+Manifest-backed CSV bundle
+    -> explicitly loaded csv entry point
+    -> validated daily-bar import result
+    -> canonical normalized JSON
+    -> content-addressed immutable object
+    -> rebuildable source-profile reference
+    -> price-only equity inspection
+```
+
+`source list` reads entry-point package metadata without importing plugin code. `source import`
+loads only the named plugin. The CSV bundle declares instrument identity, MIC, timezone, currency,
+adjustment, retrieval time, and availability basis; none is inferred from filenames or locale.
+Raw input is not retained. Its digest is recorded beside normalized facts.
+
+Objects are written below `.marketsieve/data/objects/<sha256>` through a temporary sibling
+directory and an atomic rename. A manifest records the normalized checksum. `snapshot verify`
+recomputes both the file checksum and canonical object identity. Profile references below
+`.marketsieve/data/refs` are mutable indexes, not evidence authority. Pending directories are never
+listed as snapshots.
 
 Source registration, priority, fallback, authentication, retries, rate-limit handling, caching,
 and provider-symbol mapping belong to the application or adapter packages. A source must not:
@@ -102,11 +128,10 @@ and provider-symbol mapping belong to the application or adapter packages. A sou
 
 ## Packaging boundary
 
-The supported build produces independent `marketsieve` and `marketsieve-cli` wheels and source
-distributions. Explicit build allowlists prevent CLI code, tests, local configuration, caches,
-notes, and generated reports from entering the SDK artifact. Each distribution is also installed
-from the generated wheel set in an isolated environment. A future adapter distribution has its own
-dependencies, tests, and release evidence and does not expand the core SDK dependency set.
+The supported build produces independent SDK, extension API, CLI, and CSV source wheels and source
+distributions. Explicit build allowlists prevent sibling package code, tests, local configuration,
+caches, notes, and generated reports from crossing artifact boundaries. The complete wheel set is
+installed offline in an isolated environment. Source dependencies do not expand the core SDK.
 
 ## Approved 0.2 target architecture
 

@@ -59,10 +59,12 @@ report-json: ## Emit the historical report machine contract.
 capabilities-json: ## Describe the CLI machine contract.
 	uv run marketsieve capabilities --output json
 
-build: ## Build the public SDK and CLI into the generated-artifact directory.
+build: ## Build all public distributions into the generated-artifact directory.
 	@mkdir -p "$(STATE_DIR)/artifacts/build"
 	uv build --package marketsieve --out-dir "$(STATE_DIR)/artifacts/build"
 	uv build --package marketsieve-cli --out-dir "$(STATE_DIR)/artifacts/build"
+	uv build --package marketsieve-extension-api --out-dir "$(STATE_DIR)/artifacts/build"
+	uv build --package marketsieve-source-csv --out-dir "$(STATE_DIR)/artifacts/build"
 
 evidence: check evidence-bundle ## Run the development gate and create a review bundle.
 

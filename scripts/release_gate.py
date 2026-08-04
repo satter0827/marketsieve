@@ -24,9 +24,16 @@ COMMIT = re.compile(r"^[0-9a-f]{40}$")
 CHANGELOG_HEADING = re.compile(r"^## \[([^]]+)] - (\d{4}-\d{2}-\d{2})$", re.MULTILINE)
 PACKAGE_PROJECTS = (
     ROOT / "packages" / "core" / "pyproject.toml",
+    ROOT / "packages" / "extension-api" / "pyproject.toml",
     ROOT / "packages" / "cli" / "pyproject.toml",
+    ROOT / "packages" / "source-csv" / "pyproject.toml",
 )
-PUBLIC_PACKAGES = ("marketsieve", "marketsieve-cli")
+PUBLIC_PACKAGES = (
+    "marketsieve",
+    "marketsieve-extension-api",
+    "marketsieve-cli",
+    "marketsieve-source-csv",
+)
 
 
 def run(command: Sequence[str], *, cwd: Path = ROOT) -> None:
@@ -66,8 +73,8 @@ def sha256(path: Path) -> str:
 def distributions(dist_dir: Path) -> tuple[tuple[Path, ...], tuple[Path, ...]]:
     wheels = tuple(sorted(dist_dir.glob("marketsieve*.whl")))
     sdists = tuple(sorted(dist_dir.glob("marketsieve*.tar.gz")))
-    if len(wheels) != 2 or len(sdists) != 2:
-        raise RuntimeError("release directory must contain two project wheels and two sdists")
+    if len(wheels) != 4 or len(sdists) != 4:
+        raise RuntimeError("release directory must contain four project wheels and four sdists")
     return wheels, sdists
 
 
@@ -91,7 +98,13 @@ def verify_contents(wheels: tuple[Path, ...], sdists: tuple[Path, ...]) -> None:
             names = archive.namelist()
         forbidden = ["/tests/", "/schemas/", ".marketsieve", "__pycache__"]
         if wheel.name.startswith("marketsieve-"):
-            forbidden.append("marketsieve_cli/")
+            forbidden.extend(
+                (
+                    "marketsieve_cli/",
+                    "marketsieve_extension_api/",
+                    "marketsieve_source_csv/",
+                )
+            )
         violations.extend(name for name in names if any(item in name for item in forbidden))
     for sdist in sdists:
         with tarfile.open(sdist) as archive:
@@ -204,7 +217,8 @@ def verify(version: str, commit: str, dist_dir: Path) -> None:
             (
                 str(isolated),
                 "-c",
-                "import marketsieve; import marketsieve_cli; import marketsieve.analysis.sma20; "
+                "import marketsieve; import marketsieve_cli; import marketsieve_extension_api; "
+                "import marketsieve_source_csv; import marketsieve.analysis.sma20; "
                 "import marketsieve.data.daily; import marketsieve.domain; "
                 "import marketsieve.synthetic.daily; print(marketsieve.__version__)",
             )
