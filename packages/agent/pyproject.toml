@@ -1,6 +1,6 @@
 [project]
 name = "marketsieve-agent"
-version = "0.2.0"
+version = "0.3.0"
 description = "Grounded explanation pipeline for MarketSieve."
 readme = "README.md"
 requires-python = ">=3.12,<3.15"

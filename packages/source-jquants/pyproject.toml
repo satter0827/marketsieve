@@ -1,6 +1,6 @@
 [project]
 name = "marketsieve-source-jquants"
-version = "0.2.0"
+version = "0.3.0"
 description = "J-Quants API V2 source for MarketSieve."
 readme = "README.md"
 requires-python = ">=3.12,<3.15"
@@ -8,8 +8,8 @@ license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "MarketSieve contributors" }]
 dependencies = [
-    "marketsieve==0.2.0",
-    "marketsieve-extension-api==0.2.0",
+    "marketsieve==0.3.0",
+    "marketsieve-extension-api==0.3.0",
 ]
 
 [project.entry-points."marketsieve.sources"]

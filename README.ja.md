@@ -13,7 +13,7 @@ MarketSieveは、検証済みの市場情報から再現可能な分析、過去
 
 ## 現在の状態
 
-`0.2.0`はdevelop上のrelease candidateです。CSV、J-Quants、Alpha Vantageを独立した配布物として扱い、変更不能な検証済みスナップショット、価格・テクニカル・財務・valuation・risk・event・data qualityの総合確認、比較、レポートを提供します。ネットワークへ接続するのは明示的な`source fetch`だけです。CLIは根拠と欠損理由を提示し、投資判断を推奨しません。
+`0.3.0`はdevelop上のrelease candidateです。CSV、J-Quants、Alpha Vantageを独立した配布物として扱い、変更不能な検証済みスナップショット、価格・テクニカル・財務・valuation・risk・event・data qualityの総合確認、比較、レポート、説明専用Agentを提供します。FakeListLLMを既定とし、LM Studioと明示的に許可したOpenAI、Anthropic、Googleも同じgrounded pipelineを使用します。CLIは根拠と欠損理由を提示し、投資判断を推奨しません。
 
 ## インストール
 
@@ -23,7 +23,7 @@ Python 3.12から3.14をサポートします。開発にはPython 3.13と[uv](h
 make sync
 ```
 
-SDK、extension API、CLI、CSV source、J-Quants source、Alpha Vantage sourceは独立した配布物としてビルドできます。
+SDK、extension API、CLI、Agent、CSV source、J-Quants source、Alpha Vantage sourceは独立した配布物としてビルドできます。
 
 ```shell
 make build
@@ -36,6 +36,8 @@ make build
 python -m pip install --no-index --find-links ./marketsieve-wheelhouse \
   "marketsieve-cli[all-sources]"
 ```
+
+同じwheelhouseから`marketsieve-cli[all]`を指定すると、全sourceに加えて任意機能のAgentもinstallできます。
 
 ## CLI
 
@@ -62,6 +64,8 @@ uv run marketsieve inspect XTKS:7203 --source-profile offline-jp --output json
 uv run marketsieve analyze rsi XTKS:7203 --period 14 --source-profile offline-jp --output json
 uv run marketsieve compare XTKS:7203 XTKS:6758 --source-profile offline-jp --output json
 uv run marketsieve report XTKS:7203 --source-profile offline-jp --format rich
+uv run marketsieve agent explain XTKS:7203 --source-profile offline-jp --output json
+uv run marketsieve --config marketsieve.toml agent explain XTKS:7203 --source-profile offline-jp --provider openai --dry-run --output json
 ```
 
 ## アーキテクチャ
@@ -86,7 +90,7 @@ VS Codeはworkspaceの`.venv`を使用し、依存同期、format、現在のテ
 
 ## Roadmap
 
-0.2 workbenchはdevelop上で完成しています。検証済み情報を説明するAgentは0.3で追加します。順序は[Roadmap](docs/roadmap.md)、制約は[正式設計](docs/design/README.md)を参照してください。
+0.2 workbenchと0.3 grounded explanation Agentはdevelop上で完成しています。順序は[Roadmap](docs/roadmap.md)、制約は[正式設計](docs/design/README.md)を参照してください。
 
 ## ライセンス
 

@@ -35,7 +35,7 @@ Each milestone must remain usable without later milestones.
 3. ~~Add explicit, separately tested OpenAI, Anthropic, and Google integrations.~~
 4. ~~Reject ungrounded, numeric, unsafe, or recommendation-like model content before rendering.~~
 5. ~~Require per-invocation cloud consent and expose credential-free payload dry runs.~~
-6. Verify the multi-package artifacts before a human `develop -> main` promotion.
+6. ~~Verify the multi-package artifacts before a human `develop -> main` promotion.~~
 
 ## Later outcomes
 

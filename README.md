@@ -18,11 +18,12 @@ the SDK depend on email, LINE, an LLM provider, or a database.
 
 ## Current status
 
-`0.2.0` is the release candidate on `develop`. It provides the complete data workbench:
+`0.3.0` is the release candidate on `develop`. It provides the complete data workbench:
 independent CSV, J-Quants, and Alpha Vantage sources; immutable verified snapshots; price,
-financial, and event inspection; and seven deterministic technical indicators. Network access is
-limited to explicit `source fetch` commands. Offline inspection and analysis never refresh data
-implicitly. The CLI presents evidence and missing-data reasons, not an investment recommendation.
+financial, and event inspection; seven deterministic technical indicators; and an explanation-only
+Agent. FakeListLLM is the default. LM Studio and explicitly consented OpenAI, Anthropic, or Google
+calls use the same grounded pipeline. The CLI presents evidence and missing-data reasons, not an
+investment recommendation.
 
 ## Installation
 
@@ -33,7 +34,7 @@ Python 3.12 through 3.14 is supported. Development uses Python 3.13 and
 make sync
 ```
 
-The SDK, extension API, CLI, CSV source, J-Quants source, and Alpha Vantage source build as
+The SDK, extension API, CLI, Agent, CSV source, J-Quants source, and Alpha Vantage source build as
 independent artifacts:
 
 ```shell
@@ -47,6 +48,9 @@ the assets against `release.json`, extract the wheelhouse ZIP and install offlin
 python -m pip install --no-index --find-links ./marketsieve-wheelhouse \
   "marketsieve-cli[all-sources]"
 ```
+
+Install `marketsieve-cli[all]` from the same wheelhouse to include the optional Agent as well as all
+sources.
 
 ## CLI
 
@@ -77,6 +81,8 @@ uv run marketsieve inspect XTKS:7203 --source-profile offline-jp --output json
 uv run marketsieve analyze rsi XTKS:7203 --period 14 --source-profile offline-jp --output json
 uv run marketsieve compare XTKS:7203 XTKS:6758 --source-profile offline-jp --output json
 uv run marketsieve report XTKS:7203 --source-profile offline-jp --format rich
+uv run marketsieve agent explain XTKS:7203 --source-profile offline-jp --output json
+uv run marketsieve --config marketsieve.toml agent explain XTKS:7203 --source-profile offline-jp --provider openai --dry-run --output json
 ```
 
 ## Architecture
@@ -113,7 +119,7 @@ request is the release boundary. See [Contributing](CONTRIBUTING.md) for the wor
 
 ## Roadmap
 
-The 0.2 workbench is complete on `develop`. The grounded explanation agent follows in 0.3. See the
+The 0.2 workbench and 0.3 grounded explanation Agent are complete on `develop`. See the
 [Roadmap](docs/roadmap.md) and the [formal design](docs/design/README.md).
 
 ## License
