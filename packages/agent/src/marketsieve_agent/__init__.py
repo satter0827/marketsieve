@@ -9,6 +9,7 @@ from marketsieve_agent.pipeline import (
     explain,
 )
 from marketsieve_agent.providers import (
+    AnthropicModel,
     HttpResponse,
     HttpTransport,
     LmStudioModel,
@@ -17,6 +18,7 @@ from marketsieve_agent.providers import (
 )
 
 __all__ = [
+    "AnthropicModel",
     "ExplanationResult",
     "Fact",
     "FactCatalog",

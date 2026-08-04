@@ -19,7 +19,9 @@ deterministic safe fallback, and an injectable LM Studio OpenAI-compatible adapt
 one bounded non-streaming request, follows no redirects, and accepts only loopback endpoints unless
 remote access is separately allowed. OpenAI uses its fixed Responses endpoint only after explicit
 cloud consent, disables storage and tools, and has an independent mocked-transport contract. The
-remaining cloud transports and CLI exposure remain later 0.3 milestones.
+Anthropic adapter separately implements the fixed Messages API, API-version, authentication, and
+text-block contract with the same consent and request bounds. The remaining cloud transport and CLI
+exposure remain later 0.3 milestones.
 
 The `marketsieve_cli` package owns the command-line interface, offline diagnostics, use-case
 orchestration, and console presentation. It is independently installable and is never included in
