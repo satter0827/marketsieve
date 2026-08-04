@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tarfile
@@ -115,6 +116,11 @@ def build(version: str, commit: str, dist_dir: Path) -> None:
     dist_dir.mkdir(parents=True, exist_ok=True)
     for package in PUBLIC_PACKAGES:
         run(("uv", "build", "--package", package, "--out-dir", str(dist_dir)))
+    runtime_wheels = tuple(sorted(RUNTIME_WHEELHOUSE.glob("*.whl")))
+    if not runtime_wheels:
+        raise RuntimeError("locked runtime wheelhouse is empty; run make sync")
+    for runtime_wheel in runtime_wheels:
+        shutil.copy2(runtime_wheel, dist_dir / runtime_wheel.name)
     wheels, sdists = distributions(dist_dir)
     run(("uv", "run", "twine", "check", *(str(path) for path in (*wheels, *sdists))))
     if any(metadata_version(wheel) != version for wheel in wheels):
@@ -126,7 +132,8 @@ def build(version: str, commit: str, dist_dir: Path) -> None:
         "commit": commit,
         "artifacts": [
             {"name": path.name, "sha256": sha256(path), "size": path.stat().st_size}
-            for path in (*wheels, *sdists)
+            for path in sorted(dist_dir.iterdir())
+            if path.is_file()
         ],
     }
     (dist_dir / "release.json").write_text(
@@ -146,7 +153,14 @@ def verify(version: str, commit: str, dist_dir: Path) -> None:
     if manifest["version"] != version or manifest["commit"] != commit:
         raise RuntimeError("release manifest provenance does not match the request")
     expected = {item["name"]: item["sha256"] for item in manifest["artifacts"]}
-    for path in (*wheels, *sdists):
+    actual = {
+        path.name: path
+        for path in dist_dir.iterdir()
+        if path.is_file() and path.name != "release.json"
+    }
+    if set(actual) != set(expected):
+        raise RuntimeError("release manifest does not cover exactly the release artifacts")
+    for path in actual.values():
         if expected.get(path.name) != sha256(path):
             raise RuntimeError(f"release checksum mismatch: {path.name}")
     if any(metadata_version(wheel) != version for wheel in wheels):
@@ -166,7 +180,7 @@ def verify(version: str, commit: str, dist_dir: Path) -> None:
                 "--disable-pip-version-check",
                 "--no-index",
                 "--find-links",
-                str(RUNTIME_WHEELHOUSE),
+                str(dist_dir),
                 *(str(wheel) for wheel in wheels),
             )
         )
