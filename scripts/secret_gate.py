@@ -70,7 +70,7 @@ HEADER_CREDENTIALS = (
     (
         "basic_auth",
         re.compile(
-            r"(?i)(?:\[\s*)?[\"']?authorization[\"']?(?:\s*\])?\s*:\s*"
+            r"(?i)(?:\[\s*)?[\"']?authorization[\"']?(?:\s*\])?\s*[:=]\s*"
             r"[\"']?basic\s+"
             r"([^\s\"']+)"
         ),

@@ -180,6 +180,16 @@ def test_secret_scan_rejects_embedded_authorization_headers(
     assert [finding.kind for finding in scan_paths((path,))] == ["bearer_token"]
 
 
+def test_secret_scan_rejects_basic_subscript_header_assignment(tmp_path: Path) -> None:
+    header = "Authorization"
+    path = write(
+        tmp_path / "provider.py",
+        f'headers["{header}"] = "Basic b3BhcXVlLXByb2R1Y3Rpb24="\n',
+    )
+
+    assert [finding.kind for finding in scan_paths((path,))] == ["basic_auth"]
+
+
 @pytest.mark.parametrize("separator", ("_", "-"))
 def test_secret_scan_rejects_dotted_configuration_keys(tmp_path: Path, separator: str) -> None:
     key = "providers.openai.api" + separator + "key"
