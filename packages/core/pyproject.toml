@@ -29,7 +29,7 @@ dependencies = []
 
 [project.urls]
 Homepage = "https://github.com/satter0827/marketsieve"
-Documentation = "https://github.com/satter0827/marketsieve/blob/main/docs/architecture.md"
+Documentation = "https://github.com/satter0827/marketsieve/blob/main/docs/README.md"
 Repository = "https://github.com/satter0827/marketsieve"
 Issues = "https://github.com/satter0827/marketsieve/issues"
 

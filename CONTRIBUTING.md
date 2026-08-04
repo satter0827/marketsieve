@@ -27,7 +27,11 @@ commits so the promotion boundary remains visible.
 
 - Keep each pull request focused on one behavior or repository concern.
 - Change public behavior together with tests and relevant documentation.
-- Describe implemented behavior in the present tense and planned behavior only in the roadmap.
+- Follow the [documentation authority and change policy](docs/README.md).
+- Describe implemented behavior in the present tense, approved next-milestone constraints under an
+  explicit target heading, and other planned behavior only in the roadmap.
+- Keep temporary investigation in dated `docs/notes` files and promote accepted decisions into the
+  formal design or roadmap.
 - Do not add placeholder abstractions without a working implementation.
 - Do not commit credentials, recipient identifiers, live portfolio data, caches, or generated
   reports.

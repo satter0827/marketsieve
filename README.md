@@ -18,10 +18,10 @@ the SDK depend on email, LINE, an LLM provider, or a database.
 
 ## Current status
 
-The repository is in its foundation stage. The public `marketsieve` package currently exposes
-package metadata only. The repository-local application provides offline version and diagnostic
-commands. Market models, indicators, experiments, reports, and delivery adapters are roadmap work,
-not current features.
+The repository foundation is complete. The public `marketsieve` package currently exposes package
+metadata only, and the repository-local application provides offline version and diagnostic
+commands. The approved next milestone is an Offline Analysis Preview using synthetic Japanese and
+U.S. daily data; market models and analysis are not current features.
 
 ## Installation
 
@@ -41,7 +41,7 @@ uv build --package marketsieve
 ## CLI
 
 The CLI belongs to the repository-local application and is not included in the public SDK wheel.
-It performs no network requests and requires no secrets at the foundation stage.
+Its current commands perform no network requests and require no secrets.
 
 ```shell
 uv run marketsieve --version
@@ -52,7 +52,8 @@ uv run marketsieve doctor
 
 The public SDK lives under `packages/core`. The operational application lives under
 `apps/marketsieve` and depends on the SDK. The SDK cannot import the application or infrastructure
-libraries. See [Architecture](docs/architecture.md) for the dependency rules.
+libraries. See the [documentation index](docs/README.md) and formal
+[Architecture](docs/design/architecture.md) for the dependency rules.
 
 ## Development
 
@@ -68,9 +69,10 @@ request is the release boundary. See [Contributing](CONTRIBUTING.md) for the wor
 
 ## Roadmap
 
-The next milestone defines exchange-aware instruments and market-time semantics before adding
-synthetic JP/US data, indicators, experiments, reports, or external services. See the
-[Roadmap](docs/roadmap.md) for the ordered milestones.
+The next milestone completes a deterministic vertical path from synthetic Japanese and U.S. daily
+data to an evidence-backed SMA20 state change and offline demo. See the
+[Roadmap](docs/roadmap.md) for later milestones and the [formal design](docs/design/README.md) for
+approved constraints.
 
 ## License
 
