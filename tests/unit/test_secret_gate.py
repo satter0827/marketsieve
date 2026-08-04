@@ -81,8 +81,9 @@ def test_secret_scan_rejects_binary_credential_paths(tmp_path: Path, name: str) 
     assert [finding.kind for finding in scan_paths((path,))] == ["sensitive_path"]
 
 
-def test_secret_scan_recognizes_encrypted_private_key_header(tmp_path: Path) -> None:
-    header = "-----BEGIN " + "ENCRYPTED PRIVATE KEY-----\n"
+@pytest.mark.parametrize("kind", ("DSA ", "ENCRYPTED "))
+def test_secret_scan_recognizes_private_key_header(tmp_path: Path, kind: str) -> None:
+    header = "-----BEGIN " + kind + "PRIVATE KEY-----\n"
     path = write(tmp_path / "settings.txt", header)
 
     assert [finding.kind for finding in scan_paths((path,))] == ["private_key"]
@@ -118,7 +119,7 @@ def test_history_scan_checks_each_commit(monkeypatch: pytest.MonkeyPatch) -> Non
 
 def test_history_scan_reads_archive_before_later_removal(monkeypatch: pytest.MonkeyPatch) -> None:
     value = "opaque-production-credential"
-    archive_path = Path("artifact.whl")
+    archive_path = Path("nested/artifact.whl")
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w") as archive:
         archive.writestr("package/settings.txt", f"JQUANTS_API_KEY={value}\n")
@@ -132,11 +133,18 @@ def test_history_scan_reads_archive_before_later_removal(monkeypatch: pytest.Mon
             b"",
         )
     )
-    monkeypatch.setattr("scripts.secret_gate._capture", lambda _command: next(responses))
+    commands: list[tuple[str, ...]] = []
+
+    def capture(command: tuple[str, ...]) -> bytes:
+        commands.append(command)
+        return next(responses)
+
+    monkeypatch.setattr("scripts.secret_gate._capture", capture)
 
     findings = scan_history("base")
 
     assert [finding.kind for finding in findings] == ["credential_assignment"]
+    assert any("-r" in command for command in commands if "--name-only" in command)
 
 
 def test_secret_scan_reads_wheel_members(tmp_path: Path) -> None:

@@ -40,7 +40,9 @@ def _joined(*parts: str) -> str:
 PATTERNS = (
     (
         "private_key",
-        re.compile(_joined("-----BEGIN ", "(?:ENCRYPTED |RSA |EC |OPENSSH )?PRIVATE KEY-----")),
+        re.compile(
+            _joined("-----BEGIN ", "(?:DSA |ENCRYPTED |RSA |EC |OPENSSH )?PRIVATE KEY-----")
+        ),
     ),
     ("openai_key", re.compile(_joined(r"\bsk-", r"[A-Za-z0-9_-]{20,}\b"))),
     ("google_key", re.compile(_joined(r"\bAIza", r"[A-Za-z0-9_-]{30,}\b"))),
@@ -246,6 +248,7 @@ def scan_history(base: str) -> list[Finding]:
                 "diff-tree",
                 "--root",
                 "-m",
+                "-r",
                 "--no-commit-id",
                 "--name-only",
                 "--diff-filter=AM",
