@@ -44,8 +44,31 @@ def test_secret_scan_recognizes_common_assignments(tmp_path: Path, document: str
     assert [finding.kind for finding in scan_paths((path,))] == ["credential_assignment"]
 
 
+@pytest.mark.parametrize(
+    "reference",
+    (
+        'os.environ["OPENAI_API_KEY"]',
+        "config.api_key",
+        "${OPENAI_API_KEY}",
+    ),
+)
+def test_secret_scan_accepts_credential_references(tmp_path: Path, reference: str) -> None:
+    key = "OPENAI" + "_API_KEY"
+    path = write(tmp_path / "settings.txt", f"{key}={reference}\n")
+
+    assert scan_paths((path,)) == []
+
+
 def test_secret_scan_rejects_sensitive_tracked_path(tmp_path: Path) -> None:
     path = write(tmp_path / ".env", "SAFE=placeholder\n")
+
+    assert [finding.kind for finding in scan_paths((path,))] == ["sensitive_path"]
+
+
+def test_secret_scan_rejects_case_variant_sensitive_directory(tmp_path: Path) -> None:
+    directory = tmp_path / "Credentials"
+    directory.mkdir()
+    path = write(directory / "token.bin", "opaque\n")
 
     assert [finding.kind for finding in scan_paths((path,))] == ["sensitive_path"]
 

@@ -15,12 +15,22 @@ from pathlib import Path
 ROOT = Path(__file__).parents[1]
 MAX_TEXT_BYTES = 5 * 1024 * 1024
 MAX_ARCHIVE_DEPTH = 3
-SENSITIVE_NAMES = re.compile(r"(?:^|/)(?:\.env(?:\..+)?|credentials?|secrets?)(?:$|/)")
+SENSITIVE_NAMES = re.compile(
+    r"(?:^|/)(?:\.env(?:\..+)?|credentials?|secrets?)(?:$|/)", re.IGNORECASE
+)
 SENSITIVE_SUFFIXES = (".key", ".p12", ".pem", ".pfx", ".private-key")
 ARCHIVE_SUFFIXES = (".tar", ".tar.gz", ".tgz", ".whl", ".zip")
 PERMITTED_NAMES = {".env.example"}
 PLACEHOLDERS = {"", "example", "placeholder", "replace-me", "set-me"}
 TEMPLATE_PLACEHOLDER = re.compile(r"^(?:\{[^{}]+}|<[^<>]+>)$")
+REFERENCE_VALUE = re.compile(
+    r"^(?:"
+    r"\$\{[A-Z0-9_]+}|%[A-Z0-9_]+%|"
+    r"(?:os\.)?(?:environ(?:\[[^]]+]|\.get\([^)]*\))|getenv\([^)]*\))|"
+    r"(?:config|settings|secret|secrets)\.[A-Z_][A-Z0-9_.]*|"
+    r"[A-Z_][A-Z0-9_]*\[[^]]+])$",
+    re.IGNORECASE,
+)
 
 
 def _joined(*parts: str) -> str:
@@ -103,6 +113,7 @@ def _scan_text(label: str, text: str) -> list[Finding]:
             assignment
             and value.lower() not in PLACEHOLDERS
             and TEMPLATE_PLACEHOLDER.fullmatch(value) is None
+            and REFERENCE_VALUE.fullmatch(value) is None
         ):
             findings.append(Finding(label, line_number, "credential_assignment"))
         for kind, pattern in PATTERNS:
