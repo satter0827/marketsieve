@@ -24,32 +24,53 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
           python-version: "3.13"
-          enable-cache: true
-      - run: uv sync --locked
-      - run: uv run python scripts/quality_gate.py check all
+          enable-cache: false
+      - run: make sync
+      - run: make check
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: develop-evidence-${{ github.event.pull_request.head.sha || github.sha }}
+          path: .marketsieve/artifacts/checks/${{ github.event.pull_request.head.sha || github.sha }}
+          retention-days: 30
 
-  release-matrix:
-    if: >-
-      (github.event_name == 'pull_request' && github.base_ref == 'main') ||
-      github.ref == 'refs/heads/main'
-    name: Compatibility / Python ${{ matrix.python-version }}
+  evidence-gate:
+    if: github.event_name == 'pull_request' && github.base_ref == 'develop'
+    name: Evidence Gate
+    needs: develop-gate
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.12", "3.13", "3.14"]
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
       - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
-          python-version: ${{ matrix.python-version }}
-          enable-cache: true
-      - run: uv sync --locked
-      - run: uv run python scripts/quality_gate.py check all
+          python-version: "3.13"
+          enable-cache: false
+      - run: make sync
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: develop-evidence-${{ github.event.pull_request.head.sha }}
+          path: .marketsieve/artifacts/checks/${{ github.event.pull_request.head.sha }}
+      - name: Create review bundle
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          EVIDENCE_DIR: .marketsieve/artifacts/checks/${{ github.event.pull_request.head.sha }}
+        run: >-
+          make evidence-bundle BASE_SHA="$BASE_SHA" HEAD_SHA="$HEAD_SHA"
+          EVIDENCE_DIR="$EVIDENCE_DIR"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: review-${{ github.event.pull_request.head.sha }}
+          path: .marketsieve/artifacts/review/${{ github.event.pull_request.head.sha }}
+          retention-days: 30
 
   main-source:
     if: github.event_name == 'pull_request' && github.base_ref == 'main'
@@ -65,6 +86,63 @@ jobs:
           test "$HEAD_REF" = "develop"
           test "$HEAD_REPOSITORY" = "${{ github.repository }}"
 
+  release-build:
+    if: >-
+      (github.event_name == 'pull_request' && github.base_ref == 'main') ||
+      github.ref == 'refs/heads/main'
+    name: Release / Build Once
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      version: ${{ steps.metadata.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          python-version: "3.13"
+          enable-cache: false
+      - run: make sync
+      - id: metadata
+        run: echo "version=$(uv version --package marketsieve --short)" >> "$GITHUB_OUTPUT"
+      - name: Build release candidate
+        env:
+          VERSION: ${{ steps.metadata.outputs.version }}
+          COMMIT: ${{ github.sha }}
+        run: make release-build VERSION="$VERSION" COMMIT="$COMMIT"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-${{ github.sha }}
+          path: .marketsieve/artifacts/release/${{ github.sha }}
+          retention-days: 90
+
+  release-matrix:
+    if: >-
+      (github.event_name == 'pull_request' && github.base_ref == 'main') ||
+      github.ref == 'refs/heads/main'
+    name: Compatibility / Python ${{ matrix.python-version }}
+    needs: release-build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          python-version: ${{ matrix.python-version }}
+          enable-cache: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-${{ github.sha }}
+          path: .marketsieve/artifacts/release/${{ github.sha }}
+      - name: Verify release candidate
+        env:
+          VERSION: ${{ needs.release-build.outputs.version }}
+          COMMIT: ${{ github.sha }}
+        run: make release-verify VERSION="$VERSION" COMMIT="$COMMIT"
+
   release-gate:
     if: >-
       always() && (
@@ -72,14 +150,16 @@ jobs:
         github.ref == 'refs/heads/main'
       )
     name: Release Gate
-    needs: [release-matrix, main-source]
+    needs: [release-build, release-matrix, main-source]
     runs-on: ubuntu-24.04
     timeout-minutes: 2
     steps:
       - name: Require successful release checks
         env:
+          BUILD_RESULT: ${{ needs.release-build.result }}
           MATRIX_RESULT: ${{ needs.release-matrix.result }}
           SOURCE_RESULT: ${{ needs.main-source.result }}
         run: |
+          test "$BUILD_RESULT" = "success"
           test "$MATRIX_RESULT" = "success"
           test "$SOURCE_RESULT" = "success" -o "$SOURCE_RESULT" = "skipped"

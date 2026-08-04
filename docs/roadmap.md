@@ -1,34 +1,46 @@
 # Roadmap
 
-The roadmap is ordered by dependency and evidence. A later milestone does not begin by assuming an
-earlier contract that has not been implemented and tested.
+The roadmap orders planned outcomes by dependency and evidence. It is not a description of current
+behavior; current and approved near-term constraints live in the [formal design](design/README.md).
 
-## Foundation
+## Foundation — complete
 
 - Build and install the typed `marketsieve` SDK.
 - Run the repository-local CLI without network access or secrets.
 - Enforce dependency and distribution boundaries in local and CI gates.
 - Establish the `develop -> main` release-review path.
 
-## Market semantics
+## Offline Analysis Preview — complete
 
 - Define exchange-aware instruments, currencies, sessions, and timezone-aware observations.
 - Reject ambiguous symbols and naive timestamps at public boundaries.
 - Document adjustment and as-of semantics before accepting historical data.
-
-## Offline analysis
-
 - Add licensed-for-repository synthetic daily fixtures for Japanese and U.S. equities.
-- Implement the first deterministic indicator and state-change signal.
+- Implement SMA20 and an explainable close-versus-SMA20 state-change signal.
+- Demonstrate the complete synthetic-data-to-evidence path through an offline command.
+
+The preview validates the first data-kind-specific source contract with its synthetic implementation
+and tests. It publishes no file or network adapters.
+
+## 0.1.0 — complete
+
 - Add historical replay that prevents future-information leakage.
 - Generate channel-neutral template reports with evidence references.
 - Deliver reports through a console adapter.
 
-The completed offline analysis milestone is the first `0.1.0` release candidate.
+This path defines the first stable public SDK release.
+
+## External source expansion
+
+- Add a CSV daily-bar adapter as the first file-backed extension.
+- Add J-Quants and Alpha Vantage daily-bar adapters independently after reviewing authentication,
+  plans, terms, coverage, rate limits, and redistribution constraints.
+- Keep each provider in a separate adapter and distribution with its own dependencies and tests.
+- Add application-owned source selection and narrowly classified fallback only after at least two
+  implementations establish the need.
 
 ## Personal operation
 
-- Add selected live-data adapters after reviewing terms and redistribution constraints.
 - Persist operational state and delivery receipts independently from structured logs.
 - Add SMTP email delivery, followed by LINE Messaging API delivery.
 - Add schedules as external interfaces into the same application pipeline.

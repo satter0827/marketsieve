@@ -1,0 +1,265 @@
+"""Deterministic source checks and evidence generation for develop changes."""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+import shutil
+import subprocess
+import sys
+import tarfile
+import tempfile
+import zipfile
+from collections.abc import Sequence
+from pathlib import Path
+
+from jsonschema import Draft202012Validator, FormatChecker
+
+ROOT = Path(__file__).parents[1]
+STATE_ROOT = ROOT / ".marketsieve"
+
+
+def run(command: Sequence[str], *, cwd: Path = ROOT) -> None:
+    """Run a command and fail immediately when it is unsuccessful."""
+
+    subprocess.run(command, cwd=cwd, check=True)
+
+
+def capture(command: Sequence[str], *, cwd: Path = ROOT) -> subprocess.CompletedProcess[str]:
+    """Run a command and capture separate text streams."""
+
+    return subprocess.run(command, cwd=cwd, check=True, capture_output=True, text=True)
+
+
+def head_sha() -> str:
+    return capture(("git", "rev-parse", "HEAD")).stdout.strip()
+
+
+def evidence_dir() -> Path:
+    configured = os.environ.get("EVIDENCE_DIR")
+    return Path(configured) if configured else STATE_ROOT / "artifacts" / "checks" / head_sha()
+
+
+def reset_evidence(path: Path) -> None:
+    resolved = path.resolve()
+    state = STATE_ROOT.resolve()
+    if state not in resolved.parents:
+        raise RuntimeError("evidence directory must be inside .marketsieve")
+    shutil.rmtree(resolved, ignore_errors=True)
+    resolved.mkdir(parents=True)
+
+
+def check_quality() -> None:
+    run(("uv", "run", "ruff", "format", "--check", "."))
+    run(("uv", "run", "ruff", "check", "."))
+    run(("uv", "run", "mypy"))
+    run(
+        (
+            "uv",
+            "run",
+            "lint-imports",
+            "--cache-dir",
+            str(STATE_ROOT / "cache" / "import-linter"),
+        )
+    )
+    if (ROOT / ".git").exists():
+        run(("git", "diff", "--check"))
+
+
+def check_structure() -> None:
+    run(("uv", "run", "pytest", "tests/structure"))
+
+
+def check_tests(path: Path) -> None:
+    coverage_dir = STATE_ROOT / "coverage"
+    coverage_dir.mkdir(parents=True, exist_ok=True)
+    junit = path / "junit.xml"
+    coverage_json = path / "coverage.json"
+    run(
+        (
+            "uv",
+            "run",
+            "coverage",
+            "run",
+            "-m",
+            "pytest",
+            f"--junitxml={junit}",
+        )
+    )
+    run(("uv", "run", "coverage", "report"))
+    run(("uv", "run", "coverage", "json", "-o", str(coverage_json)))
+
+
+def validate_schemas() -> None:
+    schemas = sorted((ROOT / "schemas").glob("*/v*/schema.json"))
+    if not schemas:
+        raise RuntimeError("at least one versioned schema is required")
+    for path in schemas:
+        schema = json.loads(path.read_text(encoding="utf-8"))
+        Draft202012Validator.check_schema(schema)
+
+
+def check_smoke(path: Path) -> None:
+    version = capture(("uv", "run", "marketsieve", "--version"))
+    doctor = capture(
+        ("uv", "run", "marketsieve", "--log-level", "INFO", "doctor", "--output", "json")
+    )
+    module = capture(("uv", "run", "python", "-m", "marketsieve_app", "doctor", "--output", "json"))
+    capabilities = capture(("uv", "run", "marketsieve", "capabilities", "--output", "json"))
+    report_first = capture(
+        ("uv", "run", "marketsieve", "--log-level", "INFO", "report", "--output", "json")
+    )
+    report_second = capture(("uv", "run", "marketsieve", "report", "--output", "json"))
+    if report_first.stdout != report_second.stdout:
+        raise RuntimeError("historical report JSON is not reproducible")
+    documents = {
+        "doctor-result": json.loads(doctor.stdout),
+        "capabilities-result": json.loads(capabilities.stdout),
+        "report-result": json.loads(report_first.stdout),
+    }
+    for name, document in documents.items():
+        schema = json.loads((ROOT / f"schemas/{name}/v1/schema.json").read_text(encoding="utf-8"))
+        Draft202012Validator(schema, format_checker=FormatChecker()).validate(document)
+    smoke = {
+        "version": {"exit_code": version.returncode, "stdout": version.stdout},
+        "doctor": {"exit_code": doctor.returncode, "result": documents["doctor-result"]},
+        "module_doctor": {"exit_code": module.returncode, "result": json.loads(module.stdout)},
+        "capabilities": {
+            "exit_code": capabilities.returncode,
+            "result": documents["capabilities-result"],
+        },
+        "report": {
+            "exit_code": report_first.returncode,
+            "schema_valid": True,
+            "reproducible": True,
+            "reports": documents["report-result"]["reports"],
+        },
+    }
+    (path / "smoke.json").write_text(
+        json.dumps(smoke, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    logs = doctor.stderr + report_first.stderr
+    (path / "logs.jsonl").write_text(logs, encoding="utf-8")
+
+    log_schema = json.loads(
+        (ROOT / "schemas/log-record/v1/schema.json").read_text(encoding="utf-8")
+    )
+    validator = Draft202012Validator(log_schema)
+    for line in logs.splitlines():
+        validator.validate(json.loads(line))
+
+
+def sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def verify_wheel(wheel: Path) -> list[str]:
+    with zipfile.ZipFile(wheel) as archive:
+        names = sorted(archive.namelist())
+    required = ("marketsieve/__init__.py", "marketsieve/py.typed")
+    if any(not any(name.endswith(suffix) for name in names) for suffix in required):
+        raise RuntimeError("wheel is missing required SDK files")
+    forbidden = ("marketsieve_app/", "/tests/", "/schemas/", ".marketsieve/", "__pycache__")
+    violations = [name for name in names if any(fragment in name for fragment in forbidden)]
+    if violations:
+        raise RuntimeError(f"wheel contains private or generated files: {violations}")
+    return names
+
+
+def verify_sdist(sdist: Path) -> list[str]:
+    with tarfile.open(sdist) as archive:
+        names = sorted(archive.getnames())
+    forbidden = ("marketsieve_app", "/tests/", "/schemas/", ".marketsieve", "__pycache__")
+    violations = [name for name in names if any(fragment in name for fragment in forbidden)]
+    if violations:
+        raise RuntimeError(f"sdist contains private or generated files: {violations}")
+    return names
+
+
+def python_in_venv(venv: Path) -> Path:
+    return venv / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+
+
+def check_package(path: Path) -> None:
+    dist = path / "dist"
+    dist.mkdir()
+    run(("uv", "build", "--package", "marketsieve", "--out-dir", str(dist)))
+    wheels = tuple(dist.glob("*.whl"))
+    sdists = tuple(dist.glob("*.tar.gz"))
+    if len(wheels) != 1 or len(sdists) != 1:
+        raise RuntimeError("the public build must produce one wheel and one sdist")
+    run(("uv", "run", "twine", "check", str(wheels[0]), str(sdists[0])))
+    wheel_files = verify_wheel(wheels[0])
+    sdist_files = verify_sdist(sdists[0])
+
+    with tempfile.TemporaryDirectory(prefix="marketsieve-install-") as temp_dir:
+        venv = Path(temp_dir) / "venv"
+        run((sys.executable, "-m", "venv", str(venv)))
+        isolated = python_in_venv(venv)
+        run((str(isolated), "-m", "pip", "install", "--no-deps", str(wheels[0])))
+        installed = capture(
+            (
+                str(isolated),
+                "-c",
+                "import marketsieve; import marketsieve.analysis.sma20; "
+                "import marketsieve.analysis.replay; import marketsieve.data.daily; "
+                "import marketsieve.domain; import marketsieve.reporting.sma20; "
+                "import marketsieve.synthetic.daily; print(marketsieve.__version__)",
+            )
+        ).stdout.strip()
+
+    package = {
+        "version": installed,
+        "artifacts": [
+            {"name": item.name, "sha256": sha256(item), "size": item.stat().st_size}
+            for item in (wheels[0], sdists[0])
+        ],
+        "wheel_files": wheel_files,
+        "sdist_files": sdist_files,
+    }
+    (path / "package.json").write_text(
+        json.dumps(package, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+
+
+def check_all() -> None:
+    path = evidence_dir()
+    reset_evidence(path)
+    check_quality()
+    check_tests(path)
+    validate_schemas()
+    check_smoke(path)
+    check_package(path)
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    subparsers = parser.add_subparsers(dest="command", required=True)
+    check_parser = subparsers.add_parser("check")
+    check_parser.add_argument("scope", choices=("quality", "structure", "tests", "package", "all"))
+    return parser.parse_args()
+
+
+def main() -> None:
+    args = parse_args()
+    path = evidence_dir()
+    if args.scope in {"tests", "package"}:
+        path.mkdir(parents=True, exist_ok=True)
+    checks = {
+        "quality": check_quality,
+        "structure": check_structure,
+        "tests": lambda: check_tests(path),
+        "package": lambda: check_package(path),
+        "all": check_all,
+    }
+    checks[args.scope]()
+
+
+if __name__ == "__main__":
+    main()

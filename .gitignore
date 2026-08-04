@@ -1,11 +1,4 @@
 .venv/
 .marketsieve/
-.pytest_cache/
-.ruff_cache/
-.mypy_cache/
 __pycache__/
-*.py[cod]
-dist/
-build/
-*.egg-info/
 .DS_Store

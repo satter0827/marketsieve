@@ -1,0 +1,67 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Environment: Sync",
+      "type": "shell",
+      "command": "make sync",
+      "problemMatcher": []
+    },
+    {
+      "label": "Code: Format",
+      "type": "shell",
+      "command": "make format",
+      "problemMatcher": []
+    },
+    {
+      "label": "Tests: Current File",
+      "type": "shell",
+      "command": "make test TEST=${relativeFile}",
+      "problemMatcher": []
+    },
+    {
+      "label": "Gate: Check",
+      "type": "shell",
+      "command": "make check",
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "Gate: Review",
+      "type": "shell",
+      "command": "make evidence",
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "Review: Validate",
+      "type": "shell",
+      "command": "make evidence-validate",
+      "problemMatcher": []
+    },
+    {
+      "label": "App: Doctor",
+      "type": "shell",
+      "command": "make doctor",
+      "problemMatcher": []
+    },
+    {
+      "label": "App: Report",
+      "type": "shell",
+      "command": "make report",
+      "problemMatcher": []
+    },
+    {
+      "label": "App: Report JSON",
+      "type": "shell",
+      "command": "make report-json",
+      "problemMatcher": []
+    },
+    {
+      "label": "App: Capabilities JSON",
+      "type": "shell",
+      "command": "make capabilities-json",
+      "problemMatcher": []
+    }
+  ]
+}

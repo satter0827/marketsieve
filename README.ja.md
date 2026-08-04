@@ -13,20 +13,20 @@ MarketSieveは、検証済みの市場情報から再現可能な分析、過去
 
 ## 現在の状態
 
-このリポジトリは基盤構築段階です。公開`marketsieve` packageが現在公開するのはpackage metadataだけです。リポジトリ内の運用アプリケーションは、オフラインのバージョン表示と診断コマンドを提供します。市場モデル、指標、実験、レポート、配信アダプターはRoadmap上の項目であり、現在の機能ではありません。
+`0.1.0`が現在の公開基準です。公開`marketsieve` packageは、取引所を明示した銘柄、日足contract、決定論的な日米Synthetic source、SMA20状態変化分析、未来情報を排除したhistorical replay、channel-neutral reportを提供します。リポジトリ内のCLIは、人とmachine clientへ同じ根拠付きreportを提示します。この結果は投資推奨ではありません。
 
 ## インストール
 
 Python 3.12から3.14をサポートします。開発にはPython 3.13と[uv](https://docs.astral.sh/uv/)を使用します。
 
 ```shell
-uv sync --locked
+make sync
 ```
 
 公開SDKは単独でビルドできます。
 
 ```shell
-uv build --package marketsieve
+make build
 ```
 
 ## CLI
@@ -35,27 +35,45 @@ CLIはリポジトリ内の運用アプリケーションに属し、公開SDK w
 
 ```shell
 uv run marketsieve --version
-uv run marketsieve doctor
+make doctor
+make report
+make report-json
+make capabilities-json
+```
+
+`make report`は利用可能なterminalではRich表示を使用し、redirect時はANSIを含まないtextへ切り替えます。`make report-json`はversion付きreport contractを出力します。`make capabilities-json`はAI client向けにcommand、option、schema、exit code、stream、副作用を説明します。
+
+各output modeは直接指定できます。
+
+```shell
+uv run marketsieve doctor --output json
+uv run marketsieve report --market all --output rich
+uv run marketsieve capabilities --output json
 ```
 
 ## アーキテクチャ
 
-公開SDKは`packages/core`、運用アプリケーションは`apps/marketsieve`に配置します。運用アプリケーションはSDKへ依存しますが、SDKはアプリケーションやインフラストラクチャ用ライブラリをimportできません。依存規則は[Architecture](docs/architecture.md)を参照してください。
+公開SDKは`packages/core`、運用アプリケーションは`apps/marketsieve`に配置します。運用アプリケーションはSDKへ依存しますが、SDKはアプリケーションやインフラストラクチャ用ライブラリをimportできません。[文書索引](docs/README.md)と正式な[Architecture](docs/design/architecture.md)に依存規則を記載しています。
 
 ## 開発
 
-Pull Requestを作成する前に、完全なローカルゲートを実行します。
+Makefileを人、コーディングエージェント、VS Code、CIに共通する操作の入口とします。利用できる操作は`make help`で確認できます。Pull Requestを作成する前に、テストと完全なローカルゲートを実行します。
 
 ```shell
-uv run pytest
-uv run python scripts/quality_gate.py check all
+make test
+make check
+make evidence
 ```
+
+VS Codeはworkspaceの`.venv`を使用し、依存同期、format、現在のテストファイル、診断、完全Gateのtaskを提供します。ローカルcacheと生成物は`.marketsieve`に集約し、repository rootに置く生成環境は`.venv`だけとします。
+
+`make check`はDevelop Gateを実行します。`make evidence`はこれに加えて、checksum付きreview bundleを`.marketsieve/artifacts/review/<commit>/`へ生成します。bundleはcode reviewの入力であり、review完了の証拠ではありません。アプリケーション結果はstdout、構造化JSON Lines logはstderrへ出力します。情報logを取得する場合は`--log-level INFO`、`.marketsieve/logs/`にも保存する場合は`--log-file`を指定します。
 
 変更は短命ブランチから`develop`へ統合します。人間が確認する`develop -> main` Pull Requestをリリース境界とします。手順は[Contributing](CONTRIBUTING.md)を参照してください。
 
 ## Roadmap
 
-次のマイルストーンでは、日米の合成データ、指標、実験、レポート、外部サービスを追加する前に、取引所を識別できる銘柄と市場時刻の意味を定義します。順序は[Roadmap](docs/roadmap.md)を参照してください。
+historical reportの処理経路が`0.1.0`の基準です。外部data sourceと個人向け配信channelは後続milestoneです。順序は[Roadmap](docs/roadmap.md)、制約は[正式設計](docs/design/README.md)を参照してください。
 
 ## ライセンス
 

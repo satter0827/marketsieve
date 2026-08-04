@@ -1,6 +1,6 @@
 [project]
 name = "marketsieve"
-version = "0.1.0.dev0"
+version = "0.1.0"
 description = "A typed Python SDK for reproducible market analysis."
 readme = "README.md"
 requires-python = ">=3.12,<3.15"
@@ -25,11 +25,13 @@ classifiers = [
     "Programming Language :: Python :: 3.14",
     "Typing :: Typed",
 ]
-dependencies = []
+dependencies = [
+    "tzdata>=2025.2",
+]
 
 [project.urls]
 Homepage = "https://github.com/satter0827/marketsieve"
-Documentation = "https://github.com/satter0827/marketsieve/blob/main/docs/architecture.md"
+Documentation = "https://github.com/satter0827/marketsieve/blob/main/docs/README.md"
 Repository = "https://github.com/satter0827/marketsieve"
 Issues = "https://github.com/satter0827/marketsieve/issues"
 

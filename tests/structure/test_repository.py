@@ -1,3 +1,10 @@
+from __future__ import annotations
+
+import json
+import os
+import subprocess
+import sys
+import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).parents[2]
@@ -12,11 +19,14 @@ def test_license_copies_match() -> None:
 
 def test_readmes_show_the_same_commands() -> None:
     commands = (
-        "uv sync --locked",
-        "uv run marketsieve --version",
-        "uv run marketsieve doctor",
-        "uv build --package marketsieve",
-        "uv run pytest",
+        "make sync",
+        "make doctor",
+        "make test",
+        "make check",
+        "make build",
+        "make report",
+        "make report-json",
+        "make capabilities-json",
     )
     readmes = (
         (ROOT / "README.md").read_text(encoding="utf-8"),
@@ -25,3 +35,127 @@ def test_readmes_show_the_same_commands() -> None:
 
     for command in commands:
         assert all(command in readme for readme in readmes)
+
+
+def test_workspace_package_versions_match() -> None:
+    core = tomllib.loads((ROOT / "packages/core/pyproject.toml").read_text(encoding="utf-8"))
+    application = tomllib.loads(
+        (ROOT / "apps/marketsieve/pyproject.toml").read_text(encoding="utf-8")
+    )
+
+    assert core["project"]["version"] == application["project"]["version"]
+
+
+def test_generated_state_is_centralized() -> None:
+    forbidden = (
+        ".mypy_cache",
+        ".pytest_cache",
+        ".ruff_cache",
+        ".coverage",
+        "coverage.json",
+        "htmlcov",
+        "dist",
+        "build",
+    )
+
+    assert [name for name in forbidden if (ROOT / name).exists()] == []
+
+
+def test_shared_vscode_tasks_use_make_targets() -> None:
+    vscode = ROOT / ".vscode"
+    assert {path.name for path in vscode.glob("*.json")} == {
+        "extensions.json",
+        "launch.json",
+        "settings.json",
+        "tasks.json",
+    }
+
+    tasks = json.loads((vscode / "tasks.json").read_text(encoding="utf-8"))["tasks"]
+    commands = {task["command"] for task in tasks}
+    assert commands == {
+        "make check",
+        "make doctor",
+        "make format",
+        "make sync",
+        "make test TEST=${relativeFile}",
+        "make evidence",
+        "make evidence-validate",
+        "make report",
+        "make report-json",
+        "make capabilities-json",
+    }
+    launches = json.loads((vscode / "launch.json").read_text(encoding="utf-8"))["configurations"]
+    assert launches
+    assert all(
+        launch.get("env", {}).get("PYTHONPYCACHEPREFIX")
+        == "${workspaceFolder}/.marketsieve/cache/python"
+        for launch in launches
+    )
+
+
+def test_synthetic_timezones_work_without_an_os_timezone_database() -> None:
+    code = """
+from zoneinfo import reset_tzpath
+reset_tzpath(())
+from marketsieve.synthetic.daily import JP_INSTRUMENT, US_INSTRUMENT
+assert JP_INSTRUMENT.exchange_timezone.key == "Asia/Tokyo"
+assert US_INSTRUMENT.exchange_timezone.key == "America/New_York"
+"""
+    environment = os.environ.copy()
+    environment["PYTHONTZPATH"] = ""
+    subprocess.run([sys.executable, "-c", code], check=True, env=environment)
+
+
+def test_makefile_exposes_stable_entry_points() -> None:
+    makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+    targets = (
+        "help",
+        "sync",
+        "format",
+        "format-check",
+        "lint",
+        "typecheck",
+        "test",
+        "check",
+        "doctor",
+        "report",
+        "report-json",
+        "capabilities-json",
+        "build",
+        "clean-generated",
+        "evidence",
+        "evidence-bundle",
+        "evidence-validate",
+        "review-attest",
+        "governance-check",
+        "release-build",
+        "release-verify",
+        "release-check",
+    )
+
+    for target in targets:
+        assert f"{target}:" in makefile
+
+
+def test_ci_and_rulesets_use_stable_gate_names() -> None:
+    workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    assert "name: Develop Gate" in workflow
+    assert "name: Evidence Gate" in workflow
+    assert "name: Review Gate" not in workflow
+    assert "name: Release Gate" in workflow
+    assert "fetch-depth: 0" in workflow
+    assert "ref: ${{ github.event.pull_request.head.sha || github.sha }}" in workflow
+    assert workflow.count(".marketsieve/artifacts/checks/${{ github.sha }}") == 0
+    assert workflow.count("uv build") == 0
+    assert workflow.count("enable-cache: false") == workflow.count("astral-sh/setup-uv@")
+
+    develop = json.loads((ROOT / ".github/rulesets/develop.json").read_text(encoding="utf-8"))
+    main = json.loads((ROOT / ".github/rulesets/main.json").read_text(encoding="utf-8"))
+    develop_checks = develop["rules"][-1]["parameters"]["required_status_checks"]
+    main_checks = main["rules"][-1]["parameters"]["required_status_checks"]
+    assert {check["context"] for check in develop_checks} == {
+        "Pre-PR Review",
+        "Develop Gate",
+        "Evidence Gate",
+    }
+    assert {check["context"] for check in main_checks} == {"Release Gate"}

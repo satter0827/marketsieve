@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:marketsieve:schema:review-report:2.0.0",
+  "title": "MarketSieve review report",
+  "type": "object",
+  "required": ["schema_version", "repository", "base_sha", "head_sha", "environment", "changes", "checks", "metrics", "cli", "artifacts", "findings"],
+  "properties": {
+    "schema_version": {"const": "2.0.0"},
+    "repository": {"type": "string", "minLength": 1},
+    "base_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "head_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "environment": {
+      "type": "object",
+      "required": ["python", "platform", "tools"],
+      "properties": {
+        "python": {"type": "string"},
+        "platform": {"type": "string"},
+        "tools": {"type": "object", "additionalProperties": {"type": "string"}}
+      },
+      "additionalProperties": false
+    },
+    "changes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "status", "added_lines", "deleted_lines"],
+        "properties": {
+          "path": {"type": "string"},
+          "status": {"type": "string"},
+          "added_lines": {"type": ["integer", "null"], "minimum": 0},
+          "deleted_lines": {"type": ["integer", "null"], "minimum": 0}
+        },
+        "additionalProperties": false
+      }
+    },
+    "checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "status", "evidence"],
+        "properties": {
+          "name": {"type": "string"},
+          "status": {"enum": ["passed", "failed"]},
+          "evidence": {"type": "string"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "required": ["tests", "branch_coverage"],
+      "properties": {
+        "tests": {"type": "integer", "minimum": 0},
+        "branch_coverage": {"type": "number", "minimum": 0, "maximum": 100}
+      },
+      "additionalProperties": true
+    },
+    "cli": {
+      "type": "object",
+      "required": ["version", "doctor", "module_doctor", "capabilities", "report"],
+      "properties": {
+        "version": {"type": "object"},
+        "doctor": {"type": "object"},
+        "module_doctor": {"type": "object"},
+        "capabilities": {"type": "object"},
+        "report": {
+          "type": "object",
+          "required": ["exit_code", "schema_valid", "reproducible", "reports"],
+          "properties": {
+            "exit_code": {"const": 0},
+            "schema_valid": {"const": true},
+            "reproducible": {"const": true},
+            "reports": {"type": "array", "minItems": 1, "maxItems": 2}
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "media_type", "sha256"],
+        "properties": {
+          "path": {"type": "string"},
+          "media_type": {"type": "string"},
+          "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["finding_id", "rule_id", "severity", "category", "message", "location", "evidence"],
+        "properties": {
+          "finding_id": {"type": "string"},
+          "rule_id": {"type": "string"},
+          "severity": {"enum": ["error", "warning", "notice"]},
+          "category": {"type": "string"},
+          "message": {"type": "string"},
+          "location": {"type": "string"},
+          "evidence": {"type": "string"}
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}
