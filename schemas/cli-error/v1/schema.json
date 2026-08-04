@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:marketsieve:schema:cli-error:1.0.0",
+  "title": "MarketSieve CLI error",
+  "type": "object",
+  "required": ["schema_version", "error", "message"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "error": {"type": "string", "minLength": 1},
+    "message": {"type": "string", "minLength": 1}
+  },
+  "additionalProperties": false
+}

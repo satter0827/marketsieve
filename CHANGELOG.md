@@ -10,3 +10,9 @@ will follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 
 - Public SDK and repository-local application foundation.
+- Time-correct SMA20 historical replay and evidence-backed reports.
+- Rich, plain-text, and versioned JSON CLI output with machine-readable capability discovery.
+
+### Changed
+
+- Replaced the offline preview command with the historical `report` command.

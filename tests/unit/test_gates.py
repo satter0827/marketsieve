@@ -61,15 +61,17 @@ def create_review_bundle(tmp_path: Path) -> Path:
             "version": {},
             "doctor": {},
             "module_doctor": {},
-            "demo": {
+            "capabilities": {},
+            "report": {
                 "exit_code": 0,
                 "schema_valid": True,
                 "reproducible": True,
-                "results": [
+                "reports": [
                     {
                         "market": "jp",
-                        "analysis": {"status": "ok", "transition": None},
-                        "evidence_id": "a" * 64,
+                        "latest": {"status": "ok"},
+                        "transitions": [],
+                        "report_id": "a" * 64,
                     }
                 ],
             },

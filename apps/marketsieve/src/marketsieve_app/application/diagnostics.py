@@ -19,6 +19,7 @@ class DiagnosticCheck:
     name: str
     detail: str
     passed: bool
+    action: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,12 +47,16 @@ class DiagnosticsService:
                 name="Python",
                 detail=".".join(str(part) for part in detected_python),
                 passed=python_supported,
+                action=None
+                if python_supported
+                else "Use Python 3.12, 3.13, or 3.14 and run make sync.",
             ),
             DiagnosticCheck(name="MarketSieve SDK", detail=sdk_version, passed=True),
             DiagnosticCheck(
                 name="MarketSieve application",
                 detail=application_version,
                 passed=application_installed,
+                action=None if application_installed else "Run make sync.",
             ),
         )
         self.logger.info(

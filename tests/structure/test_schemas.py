@@ -13,10 +13,13 @@ SCHEMAS = ROOT / "schemas"
 
 
 def test_schemas_are_draft_2020_12_and_semantically_versioned() -> None:
-    paths = sorted(SCHEMAS.glob("*/v1/schema.json"))
+    paths = sorted(SCHEMAS.glob("*/v*/schema.json"))
     assert {path.parent.parent.name for path in paths} == {
-        "demo-result",
+        "capabilities-result",
+        "cli-error",
+        "doctor-result",
         "log-record",
+        "report-result",
         "review-report",
     }
 
@@ -29,10 +32,13 @@ def test_schemas_are_draft_2020_12_and_semantically_versioned() -> None:
         )
         assert identifier is not None
         assert schema["properties"]["schema_version"]["const"] == identifier.group(1)
+        assert path.parent.name == f"v{identifier.group(1).partition('.')[0]}"
 
 
 def test_schemas_reject_unknown_major_versions() -> None:
-    for path in SCHEMAS.glob("*/v1/schema.json"):
+    for path in SCHEMAS.glob("*/v*/schema.json"):
         schema = json.loads(path.read_text(encoding="utf-8"))
+        version = schema["properties"]["schema_version"]["const"]
+        major = int(version.partition(".")[0])
         with pytest.raises(ValidationError):
-            Draft202012Validator(schema).validate({"schema_version": "2.0.0"})
+            Draft202012Validator(schema).validate({"schema_version": f"{major + 1}.0.0"})

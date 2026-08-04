@@ -80,3 +80,15 @@ def test_cli_depends_on_composition_root_only() -> None:
         "marketsieve_app.bootstrap",
         "marketsieve_app.interfaces.cli.main",
     }
+
+
+def test_application_does_not_depend_on_output_adapters() -> None:
+    application = ROOT / "apps/marketsieve/src/marketsieve_app/application"
+    imports = {
+        node.module
+        for path in application.rglob("*.py")
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
+        if isinstance(node, ast.ImportFrom) and node.module
+    }
+
+    assert not any(module.startswith("marketsieve_app.adapters") for module in imports)

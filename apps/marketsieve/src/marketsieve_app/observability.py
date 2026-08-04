@@ -43,7 +43,7 @@ class JsonLogFormatter(logging.Formatter):
 
 def configure_logger(
     *,
-    level: str = "WARNING",
+    level: str | None = None,
     write_file: bool = False,
     state_dir: Path | None = None,
 ) -> logging.Logger:
@@ -52,12 +52,14 @@ def configure_logger(
     logger = logging.getLogger(LOGGER_NAME)
     logger.handlers.clear()
     logger.propagate = False
-    logger.setLevel(level)
+    effective_level = level or ("INFO" if write_file else "WARNING")
+    logger.setLevel(effective_level)
 
     formatter = JsonLogFormatter()
-    stderr_handler = logging.StreamHandler(sys.stderr)
-    stderr_handler.setFormatter(formatter)
-    logger.addHandler(stderr_handler)
+    if level is not None:
+        stderr_handler = logging.StreamHandler(sys.stderr)
+        stderr_handler.setFormatter(formatter)
+        logger.addHandler(stderr_handler)
 
     if write_file:
         root = state_dir or Path(os.environ.get("MARKETSIEVE_STATE_DIR", DEFAULT_STATE_DIR))
@@ -67,5 +69,8 @@ def configure_logger(
         file_handler = logging.FileHandler(log_dir / f"marketsieve-{stamp}.jsonl", encoding="utf-8")
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)
+
+    if not logger.handlers:
+        logger.addHandler(logging.NullHandler())
 
     return logger

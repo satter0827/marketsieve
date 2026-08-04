@@ -6,10 +6,11 @@ requires-python = ">=3.12,<3.15"
 dependencies = [
     "click>=8.1,<9",
     "marketsieve",
+    "rich>=14,<15",
 ]
 
 [project.scripts]
-marketsieve = "marketsieve_app.interfaces.cli:main"
+marketsieve = "marketsieve_app.interfaces.cli:entrypoint"
 
 [build-system]
 requires = ["hatchling>=1.27,<2"]

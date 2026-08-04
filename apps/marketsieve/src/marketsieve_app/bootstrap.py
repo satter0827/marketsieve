@@ -1,6 +1,11 @@
 """Composition root for repository-local application services."""
 
+from __future__ import annotations
+
+from typing import TextIO
+
 from marketsieve import __version__
+from marketsieve.data.daily import Adjustment, DailyBarRequest
 from marketsieve.synthetic.daily import (
     JP_BARS,
     JP_INSTRUMENT,
@@ -9,31 +14,66 @@ from marketsieve.synthetic.daily import (
     jp_source,
     us_source,
 )
-from marketsieve_app.application.demo import DemoMarket, DemoService
+from marketsieve_app.adapters.console import ConsoleOutput, OutputMode
 from marketsieve_app.application.diagnostics import DiagnosticsService
+from marketsieve_app.application.report import ReportMarket, ReportService
 from marketsieve_app.observability import configure_logger
 
 
+def build_console_output(
+    mode: str,
+    *,
+    stdout: TextIO,
+    stderr: TextIO,
+    width: int | None = None,
+) -> ConsoleOutput:
+    """Build the console projection selected by one command invocation."""
+
+    return ConsoleOutput(OutputMode(mode), stdout=stdout, stderr=stderr, width=width)
+
+
 def build_diagnostics_service(
-    *, level: str = "WARNING", write_log_file: bool = False
+    *, level: str | None = None, write_log_file: bool = False
 ) -> DiagnosticsService:
     """Build the diagnostics use case with its default dependencies."""
 
     return DiagnosticsService(logger=configure_logger(level=level, write_file=write_log_file))
 
 
-def build_demo_service(*, level: str = "WARNING", write_log_file: bool = False) -> DemoService:
-    """Build the deterministic offline-demo use case."""
+def build_report_service(
+    output: ConsoleOutput,
+    *,
+    level: str | None = None,
+    write_log_file: bool = False,
+) -> ReportService:
+    """Build the deterministic historical-report use case."""
 
     markets = (
-        DemoMarket(
-            "jp", JP_INSTRUMENT, jp_source(), JP_BARS[0].trading_date, JP_BARS[-1].trading_date
+        ReportMarket(
+            "jp",
+            jp_source(),
+            DailyBarRequest(
+                JP_INSTRUMENT,
+                JP_BARS[0].trading_date,
+                JP_BARS[-1].trading_date,
+                Adjustment.RAW,
+            ),
+            tuple(bar.available_at for bar in JP_BARS),
         ),
-        DemoMarket(
-            "us", US_INSTRUMENT, us_source(), US_BARS[0].trading_date, US_BARS[-1].trading_date
+        ReportMarket(
+            "us",
+            us_source(),
+            DailyBarRequest(
+                US_INSTRUMENT,
+                US_BARS[0].trading_date,
+                US_BARS[-1].trading_date,
+                Adjustment.RAW,
+            ),
+            tuple(bar.available_at for bar in US_BARS),
         ),
     )
-    return DemoService(markets, configure_logger(level=level, write_file=write_log_file))
+    logger = configure_logger(level=level, write_file=write_log_file)
+    return ReportService(markets, output, logger)
 
 
 def sdk_version() -> str:
