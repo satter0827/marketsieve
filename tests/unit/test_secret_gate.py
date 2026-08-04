@@ -74,6 +74,15 @@ def test_secret_scan_accepts_credential_references(tmp_path: Path, reference: st
     assert scan_paths((path,)) == []
 
 
+@pytest.mark.parametrize("parameter", ("apikey", "api_key", "access_token"))
+def test_secret_scan_rejects_url_credentials(tmp_path: Path, parameter: str) -> None:
+    value = "opaque-production-credential"
+    url = f"https://provider.invalid/data?{parameter}={value}\n"
+    path = write(tmp_path / "request.txt", url)
+
+    assert [finding.kind for finding in scan_paths((path,))] == ["url_credential"]
+
+
 def test_secret_scan_rejects_sensitive_tracked_path(tmp_path: Path) -> None:
     path = write(tmp_path / ".env", "SAFE=placeholder\n")
 

@@ -31,6 +31,10 @@ REFERENCE_VALUE = re.compile(
     r"[A-Z_][A-Z0-9_]*\[[^]]+])$",
     re.IGNORECASE,
 )
+URL_CREDENTIAL = re.compile(
+    r"(?i)[?&](?:api_?key|access_token|auth_token|client_secret|password)="
+    r"([^&#\s\"']+)"
+)
 
 
 def _joined(*parts: str) -> str:
@@ -125,6 +129,14 @@ def _scan_text(label: str, text: str) -> list[Finding]:
             and REFERENCE_VALUE.fullmatch(value) is None
         ):
             findings.append(Finding(label, line_number, "credential_assignment"))
+        for match in URL_CREDENTIAL.finditer(line):
+            url_value = match.group(1).strip("\"'")
+            if (
+                url_value.lower() not in PLACEHOLDERS
+                and TEMPLATE_PLACEHOLDER.fullmatch(url_value) is None
+                and REFERENCE_VALUE.fullmatch(url_value) is None
+            ):
+                findings.append(Finding(label, line_number, "url_credential"))
         for kind, pattern in PATTERNS:
             if pattern.search(line):
                 findings.append(Finding(label, line_number, kind))
