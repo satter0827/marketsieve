@@ -147,6 +147,7 @@ def test_ci_and_rulesets_use_stable_gate_names() -> None:
     assert "ref: ${{ github.event.pull_request.head.sha || github.sha }}" in workflow
     assert workflow.count(".marketsieve/artifacts/checks/${{ github.sha }}") == 0
     assert workflow.count("uv build") == 0
+    assert workflow.count("enable-cache: false") == workflow.count("astral-sh/setup-uv@")
 
     develop = json.loads((ROOT / ".github/rulesets/develop.json").read_text(encoding="utf-8"))
     main = json.loads((ROOT / ".github/rulesets/main.json").read_text(encoding="utf-8"))
