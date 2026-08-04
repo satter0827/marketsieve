@@ -191,6 +191,18 @@ def _python_literal(node: ast.expr | None) -> str | None:
     return None
 
 
+def _header_credential_kind(name: str, value: str) -> str | None:
+    normalized_name = name.lower().replace("_", "-")
+    if normalized_name in {"api-key", "x-api-key"}:
+        return "api_key_header" if _is_literal_credential(f'"{value}"') else None
+    if normalized_name != "authorization":
+        return None
+    scheme, separator, credential = value.partition(" ")
+    if not separator or not _is_literal_credential(f'"{credential}"'):
+        return None
+    return {"bearer": "bearer_token", "basic": "basic_auth"}.get(scheme.lower())
+
+
 def _scan_python_assignments(label: str, text: str) -> list[Finding]:
     try:
         tree = ast.parse(text)
@@ -221,10 +233,18 @@ def _scan_python_assignments(label: str, text: str) -> list[Finding]:
             for key, item in zip(node.keys, node.values, strict=True):
                 key_literal = _python_literal(key)
                 item_literal = _python_literal(item)
+                header_kind = (
+                    _header_credential_kind(key_literal, item_literal)
+                    if key_literal is not None and item_literal is not None
+                    else None
+                )
+                if header_kind is not None:
+                    findings.append(Finding(label, node.lineno, header_kind))
                 if (
                     key_literal is not None
                     and CREDENTIAL_NAME.search(key_literal) is not None
                     and item_literal is not None
+                    and header_kind is None
                     and _is_literal_credential(f'"{item_literal}"')
                 ):
                     findings.append(Finding(label, node.lineno, "credential_assignment"))
@@ -253,6 +273,19 @@ def _scan_python_assignments(label: str, text: str) -> list[Finding]:
                     and _is_literal_credential(f'"{value_literal}"')
                 ):
                     findings.append(Finding(label, node.lineno, "credential_assignment"))
+        if isinstance(node, (ast.Assign, ast.AnnAssign, ast.NamedExpr)):
+            for target in targets:
+                header_name = (
+                    _python_literal(target.slice) if isinstance(target, ast.Subscript) else None
+                )
+                header_value = _python_literal(value)
+                header_kind = (
+                    _header_credential_kind(header_name, header_value)
+                    if header_name is not None and header_value is not None
+                    else None
+                )
+                if header_kind is not None:
+                    findings.append(Finding(label, getattr(node, "lineno", 0), header_kind))
     return findings
 
 
@@ -269,10 +302,11 @@ def _scan_text(label: str, text: str, *, scan_assignments: bool = True) -> list[
         for match in (*URL_CREDENTIAL.finditer(line), *URL_USERINFO_CREDENTIAL.finditer(line)):
             if _is_literal_credential(match.group(1)):
                 findings.append(Finding(label, line_number, "url_credential"))
-        for kind, pattern in HEADER_CREDENTIALS:
-            for match in pattern.finditer(line):
-                if _is_literal_credential(match.group(1)):
-                    findings.append(Finding(label, line_number, kind))
+        if not python_source:
+            for kind, pattern in HEADER_CREDENTIALS:
+                for match in pattern.finditer(line):
+                    if _is_literal_credential(match.group(1)):
+                        findings.append(Finding(label, line_number, kind))
         for kind, pattern in PATTERNS:
             if pattern.search(line):
                 findings.append(Finding(label, line_number, kind))

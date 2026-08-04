@@ -190,6 +190,48 @@ def test_secret_scan_rejects_basic_subscript_header_assignment(tmp_path: Path) -
     assert [finding.kind for finding in scan_paths((path,))] == ["basic_auth"]
 
 
+@pytest.mark.parametrize(
+    "value",
+    (
+        "api_key",
+        'os.environ["PROVIDER_API_KEY"]',
+        'os.environ.get("PROVIDER_API_KEY")',
+        "settings.api_key",
+    ),
+)
+def test_secret_scan_accepts_python_runtime_header_references(tmp_path: Path, value: str) -> None:
+    header = "X-" + "API-Key"
+    path = write(tmp_path / "provider.py", f'headers = {{"{header}": {value}}}\n')
+
+    assert scan_paths((path,)) == []
+
+
+@pytest.mark.parametrize(
+    "value",
+    (
+        '"Bearer " + token',
+        'f"Bearer {token}"',
+        '"Basic " + encoded_credentials',
+    ),
+)
+def test_secret_scan_accepts_python_runtime_authorization_headers(
+    tmp_path: Path, value: str
+) -> None:
+    path = write(tmp_path / "provider.py", f'headers = {{"Authorization": {value}}}\n')
+
+    assert scan_paths((path,)) == []
+
+
+def test_secret_scan_rejects_python_literal_api_key_header(tmp_path: Path) -> None:
+    header = "X-" + "API-Key"
+    path = write(
+        tmp_path / "provider.py",
+        f'headers = {{"{header}": "opaque-production-credential"}}\n',
+    )
+
+    assert [finding.kind for finding in scan_paths((path,))] == ["api_key_header"]
+
+
 @pytest.mark.parametrize("separator", ("_", "-"))
 def test_secret_scan_rejects_dotted_configuration_keys(tmp_path: Path, separator: str) -> None:
     key = "providers.openai.api" + separator + "key"
@@ -273,7 +315,7 @@ def test_secret_scan_rejects_python_dict_and_keyword_credentials(tmp_path: Path)
     )
 
     assert [finding.kind for finding in scan_paths((path,))] == [
-        "credential_assignment",
+        "api_key_header",
         "credential_assignment",
     ]
 
