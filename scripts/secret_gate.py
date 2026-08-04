@@ -70,7 +70,8 @@ PATTERNS = (
 )
 ASSIGNMENT = re.compile(
     r"(?i)^\s*(?:export\s+)?(?:[{,]\s*)?[\"']?"
-    r"([A-Z0-9_]*(?:API_KEY|ACCESS_TOKEN|AUTH_TOKEN|CLIENT_SECRET|PASSWORD))[\"']?"
+    r"([A-Z0-9_]*(?:API_KEY|ACCESS_KEY|SECRET_KEY|PRIVATE_KEY|ACCESS_TOKEN|AUTH_TOKEN|"
+    r"REFRESH_TOKEN|TOKEN|CLIENT_SECRET|SECRET|PASSWORD))[\"']?"
     r"\s*(?:=|:)\s*(.+?)\s*,?\s*$"
 )
 

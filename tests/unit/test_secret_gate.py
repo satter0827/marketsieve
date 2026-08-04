@@ -60,6 +60,22 @@ def test_secret_scan_recognizes_common_assignments(tmp_path: Path, document: str
 
 
 @pytest.mark.parametrize(
+    "key",
+    (
+        "AWS_" + "SECRET_ACCESS_KEY",
+        "JQUANTS_" + "REFRESH_TOKEN",
+        "PRIVATE_" + "KEY",
+        "SLACK_" + "TOKEN",
+        "CLIENT_" + "SECRET_KEY",
+    ),
+)
+def test_secret_scan_recognizes_standard_secret_names(tmp_path: Path, key: str) -> None:
+    path = write(tmp_path / "settings.txt", f"{key}=opaque-production-credential\n")
+
+    assert [finding.kind for finding in scan_paths((path,))] == ["credential_assignment"]
+
+
+@pytest.mark.parametrize(
     "reference",
     (
         'os.environ["OPENAI_API_KEY"]',
