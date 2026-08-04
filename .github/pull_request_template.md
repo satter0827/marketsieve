@@ -10,6 +10,6 @@ no impact outside the implementation.
 ## Validation
 
 - [ ] Focused tests pass
-- [ ] `uv run python scripts/quality_gate.py check all` passes
+- [ ] `make review` passes
 - [ ] Public behavior and documentation agree
 - [ ] No credentials, recipient data, or generated reports are included

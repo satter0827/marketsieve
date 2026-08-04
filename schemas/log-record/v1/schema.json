@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:marketsieve:schema:log-record:1.0.0",
+  "title": "MarketSieve log record",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "timestamp",
+    "severity_text",
+    "body",
+    "event_name",
+    "attributes",
+    "resource"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0.0"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "severity_text": {
+      "enum": ["DEBUG", "INFO", "WARNING", "ERROR"]
+    },
+    "body": {
+      "type": "string"
+    },
+    "event_name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "attributes": {
+      "type": "object"
+    },
+    "resource": {
+      "type": "object",
+      "required": ["service.name"],
+      "properties": {
+        "service.name": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": {
+        "type": ["string", "number", "integer", "boolean", "null"]
+      }
+    },
+    "trace_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{32}$"
+    },
+    "span_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{16}$"
+    }
+  },
+  "additionalProperties": false
+}

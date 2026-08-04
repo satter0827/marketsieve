@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import sys
 from dataclasses import dataclass
 from importlib.metadata import PackageNotFoundError, version
@@ -24,6 +25,7 @@ class DiagnosticCheck:
 class DiagnosticsService:
     """Collect diagnostics without reading secrets or performing I/O."""
 
+    logger: logging.Logger
     python_version: tuple[int, int, int] | None = None
 
     def collect(self) -> tuple[DiagnosticCheck, ...]:
@@ -39,7 +41,7 @@ class DiagnosticsService:
             application_version = "not installed"
             application_installed = False
 
-        return (
+        checks = (
             DiagnosticCheck(
                 name="Python",
                 detail=".".join(str(part) for part in detected_python),
@@ -52,6 +54,17 @@ class DiagnosticsService:
                 passed=application_installed,
             ),
         )
+        self.logger.info(
+            "Offline diagnostics completed",
+            extra={
+                "event_name": "diagnostics.completed",
+                "attributes": {
+                    "check_count": len(checks),
+                    "succeeded": self.succeeded(checks),
+                },
+            },
+        )
+        return checks
 
     def succeeded(self, checks: tuple[DiagnosticCheck, ...]) -> bool:
         """Return whether every diagnostic check passed."""

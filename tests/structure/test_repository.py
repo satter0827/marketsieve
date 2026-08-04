@@ -72,6 +72,8 @@ def test_shared_vscode_tasks_use_make_targets() -> None:
         "make format",
         "make sync",
         "make test TEST=${relativeFile}",
+        "make review",
+        "make review-validate",
     }
 
 
@@ -89,7 +91,29 @@ def test_makefile_exposes_stable_entry_points() -> None:
         "doctor",
         "build",
         "clean-generated",
+        "review",
+        "review-bundle",
+        "review-validate",
+        "release-build",
+        "release-verify",
+        "release-check",
     )
 
     for target in targets:
         assert f"{target}:" in makefile
+
+
+def test_ci_and_rulesets_use_stable_gate_names() -> None:
+    workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    assert "name: Develop Gate" in workflow
+    assert "name: Review Gate" in workflow
+    assert "name: Release Gate" in workflow
+    assert "fetch-depth: 0" in workflow
+    assert workflow.count("uv build") == 0
+
+    develop = json.loads((ROOT / ".github/rulesets/develop.json").read_text(encoding="utf-8"))
+    main = json.loads((ROOT / ".github/rulesets/main.json").read_text(encoding="utf-8"))
+    develop_checks = develop["rules"][-1]["parameters"]["required_status_checks"]
+    main_checks = main["rules"][-1]["parameters"]["required_status_checks"]
+    assert {check["context"] for check in develop_checks} == {"Develop Gate", "Review Gate"}
+    assert {check["context"] for check in main_checks} == {"Release Gate"}
