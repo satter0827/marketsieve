@@ -69,6 +69,10 @@ Historical report command
     -> Rich, text, or JSON console output
 ```
 
+The legacy historical projection now delegates SMA calculation to the generic indicator engine.
+Replay and report projection remain scheduled for removal when the section-based report replaces
+this transitional command.
+
 The daily-data boundary remains the small `DailyBarSource` structural protocol. Its capability model
 describes whether an exact request is supported before retrieval. The protocol is public together
 with the synthetic implementation and contract tests.
@@ -116,6 +120,12 @@ directory and an atomic rename. A manifest records the normalized checksum. `sna
 recomputes both the file checksum and canonical object identity. Profile references below
 `.marketsieve/data/refs` are mutable indexes, not evidence authority. Pending directories are never
 listed as snapshots.
+
+Verified normalized bars are reconstructed as SDK `DailyBar` values before technical analysis.
+The core indicator engine owns all seven calculations and evidence; snapshot adapters and CLI
+renderers perform no indicator arithmetic. `analyze` returns one generic indicator result, while
+`inspect` composes the default seven definitions into its technical section and reports
+insufficient-history completeness explicitly.
 
 Source registration, priority, fallback, authentication, retries, rate-limit handling, caching,
 and provider-symbol mapping belong to the application or adapter packages. A source must not:

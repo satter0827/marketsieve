@@ -7,6 +7,14 @@ import json
 from pathlib import Path
 from typing import Any, Protocol
 
+from marketsieve.analysis.indicators import (
+    IndicatorName,
+    IndicatorResult,
+    IndicatorSpec,
+    IndicatorStatus,
+    calculate,
+)
+from marketsieve.data.daily import DailyBar
 from marketsieve_extension_api import DailyBarBundleImporter, ImportedDailyBars
 
 
@@ -50,6 +58,33 @@ class SnapshotRepository(Protocol):
     def resolve(self, profile: str, instrument: str) -> StoredSnapshotInfo: ...
 
     def normalized(self, object_id: str) -> dict[str, Any]: ...
+
+    def daily_bars(self, object_id: str) -> tuple[DailyBar, ...]: ...
+
+
+DEFAULT_INDICATORS = (
+    IndicatorSpec.create(IndicatorName.SMA, period=20),
+    IndicatorSpec.create(IndicatorName.EMA, period=20),
+    IndicatorSpec.create(IndicatorName.RSI, period=14),
+    IndicatorSpec.create(IndicatorName.MACD, fast_period=12, slow_period=26, signal_period=9),
+    IndicatorSpec.create(IndicatorName.ATR, period=14),
+    IndicatorSpec.create(IndicatorName.PERIOD_RETURN, period=20),
+    IndicatorSpec.create(IndicatorName.MAX_DRAWDOWN, period=252),
+)
+
+
+def indicator_document(result: IndicatorResult) -> dict[str, Any]:
+    return {
+        "name": result.name.value,
+        "definition_version": result.definition_version,
+        "parameters": dict(result.parameters),
+        "status": result.status.value,
+        "as_of": result.as_of.isoformat() if result.as_of is not None else None,
+        "values": dict(result.values),
+        "observation_count": result.observation_count,
+        "numeric_policy": result.numeric_policy,
+        "evidence_id": result.evidence_id,
+    }
 
 
 class SnapshotService:
@@ -104,6 +139,7 @@ class SnapshotService:
     def inspect(self, instrument: str, profile: str) -> dict[str, Any]:
         stored = self._repository.resolve(profile, instrument)
         normalized = self._repository.normalized(stored.object_id)
+        daily_bars = self._repository.daily_bars(stored.object_id)
         bars = normalized["bars"]
         latest = bars[-1]
         evidence = hashlib.sha256(
@@ -121,6 +157,33 @@ class SnapshotService:
             "missing_reasons": ["not_present_in_snapshot"],
             "provenance": [],
             "evidence_id": None,
+        }
+        indicators = tuple(calculate(spec, daily_bars) for spec in DEFAULT_INDICATORS)
+        available_count = sum(result.status is IndicatorStatus.OK for result in indicators)
+        completeness = (
+            "0"
+            if available_count == 0
+            else "1"
+            if available_count == len(indicators)
+            else f"{available_count / len(indicators):.6f}".rstrip("0")
+        )
+        technical_evidence = hashlib.sha256(
+            json.dumps(
+                [result.evidence_id for result in indicators],
+                separators=(",", ":"),
+            ).encode()
+        ).hexdigest()
+        technical = {
+            "status": "available" if available_count == len(indicators) else "partial",
+            "as_of": latest["available_at"],
+            "completeness": completeness,
+            "values": {result.name.value: indicator_document(result) for result in indicators},
+            "warnings": [],
+            "missing_reasons": (
+                [] if available_count == len(indicators) else ["insufficient_history"]
+            ),
+            "provenance": [latest["provenance"]],
+            "evidence_id": technical_evidence,
         }
         return {
             "schema_version": "1.0.0",
@@ -146,10 +209,10 @@ class SnapshotService:
                     "provenance": [latest["provenance"]],
                     "evidence_id": evidence,
                 },
+                "technical": technical,
                 **{
                     section: unavailable
                     for section in (
-                        "technical",
                         "financial",
                         "valuation",
                         "risk",
@@ -158,4 +221,24 @@ class SnapshotService:
                     )
                 },
             },
+        }
+
+    def analyze(
+        self,
+        instrument: str,
+        profile: str,
+        name: IndicatorName | str,
+        **parameters: int,
+    ) -> dict[str, Any]:
+        stored = self._repository.resolve(profile, instrument)
+        result = calculate(
+            IndicatorSpec.create(name, **parameters),
+            self._repository.daily_bars(stored.object_id),
+        )
+        return {
+            "schema_version": "1.0.0",
+            "instrument": instrument,
+            "source_profile": profile,
+            "snapshot_id": stored.object_id,
+            "indicator": indicator_document(result),
         }

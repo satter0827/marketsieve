@@ -57,6 +57,21 @@ COMMAND_METADATA = {
         "output_schema": "urn:marketsieve:schema:inspect-result:1.0.0",
         "effects": {"network": False, "secrets": False, "optional_writes": []},
     },
+    **{
+        f"analyze {name}": {
+            "output_schema": "urn:marketsieve:schema:indicator-result:1.0.0",
+            "effects": {"network": False, "secrets": False, "optional_writes": []},
+        }
+        for name in (
+            "atr",
+            "ema",
+            "macd",
+            "maximum-drawdown",
+            "period-return",
+            "rsi",
+            "sma",
+        )
+    },
 }
 
 
@@ -248,6 +263,167 @@ def inspect(context: click.Context, instrument: str, source_profile: str, output
         console.emit_error("inspect_failed", str(error))
         raise click.exceptions.Exit(1) from None
     console.emit_document(document, title="Equity inspection")
+
+
+@main.group()
+def analyze() -> None:
+    """Calculate one deterministic technical indicator offline."""
+
+
+def _run_analysis(
+    context: click.Context,
+    output_mode: str,
+    instrument: str,
+    source_profile: str,
+    indicator: str,
+    parameters: dict[str, int],
+) -> None:
+    console = _console(context, output_mode)
+    try:
+        document = build_snapshot_service().analyze(
+            instrument, source_profile, indicator, **parameters
+        )
+    except (LookupError, RuntimeError, TypeError, ValueError, OSError) as error:
+        console.emit_error("analyze_failed", str(error))
+        raise click.exceptions.Exit(1) from None
+    console.emit_document(document, title="Indicator analysis")
+
+
+def period_option(default: int) -> Callable[[Any], Any]:
+    return click.option(
+        "--period",
+        type=click.IntRange(min=1),
+        default=default,
+        show_default=True,
+    )
+
+
+def _period_analysis(
+    context: click.Context,
+    instrument: str,
+    source_profile: str,
+    period: int,
+    output_mode: str,
+    indicator: str,
+) -> None:
+    _run_analysis(context, output_mode, instrument, source_profile, indicator, {"period": period})
+
+
+@analyze.command("sma")
+@click.argument("instrument")
+@period_option(20)
+@click.option("--source-profile", required=True)
+@output_option
+@click.pass_context
+def analyze_sma(
+    context: click.Context, instrument: str, period: int, source_profile: str, output_mode: str
+) -> None:
+    """Calculate a simple moving average."""
+
+    _period_analysis(context, instrument, source_profile, period, output_mode, "sma")
+
+
+@analyze.command("ema")
+@click.argument("instrument")
+@period_option(20)
+@click.option("--source-profile", required=True)
+@output_option
+@click.pass_context
+def analyze_ema(
+    context: click.Context, instrument: str, period: int, source_profile: str, output_mode: str
+) -> None:
+    """Calculate an exponential moving average."""
+
+    _period_analysis(context, instrument, source_profile, period, output_mode, "ema")
+
+
+@analyze.command("rsi")
+@click.argument("instrument")
+@period_option(14)
+@click.option("--source-profile", required=True)
+@output_option
+@click.pass_context
+def analyze_rsi(
+    context: click.Context, instrument: str, period: int, source_profile: str, output_mode: str
+) -> None:
+    """Calculate Wilder's relative strength index."""
+
+    _period_analysis(context, instrument, source_profile, period, output_mode, "rsi")
+
+
+@analyze.command("atr")
+@click.argument("instrument")
+@period_option(14)
+@click.option("--source-profile", required=True)
+@output_option
+@click.pass_context
+def analyze_atr(
+    context: click.Context, instrument: str, period: int, source_profile: str, output_mode: str
+) -> None:
+    """Calculate Wilder's average true range."""
+
+    _period_analysis(context, instrument, source_profile, period, output_mode, "atr")
+
+
+@analyze.command("period-return")
+@click.argument("instrument")
+@period_option(20)
+@click.option("--source-profile", required=True)
+@output_option
+@click.pass_context
+def analyze_period_return(
+    context: click.Context, instrument: str, period: int, source_profile: str, output_mode: str
+) -> None:
+    """Calculate simple return over a closing-price period."""
+
+    _period_analysis(context, instrument, source_profile, period, output_mode, "period_return")
+
+
+@analyze.command("maximum-drawdown")
+@click.argument("instrument")
+@period_option(252)
+@click.option("--source-profile", required=True)
+@output_option
+@click.pass_context
+def analyze_maximum_drawdown(
+    context: click.Context, instrument: str, period: int, source_profile: str, output_mode: str
+) -> None:
+    """Calculate maximum peak-relative drawdown over a period."""
+
+    _period_analysis(context, instrument, source_profile, period, output_mode, "maximum_drawdown")
+
+
+@analyze.command("macd")
+@click.argument("instrument")
+@click.option("--fast-period", type=click.IntRange(min=1), default=12, show_default=True)
+@click.option("--slow-period", type=click.IntRange(min=1), default=26, show_default=True)
+@click.option("--signal-period", type=click.IntRange(min=1), default=9, show_default=True)
+@click.option("--source-profile", required=True)
+@output_option
+@click.pass_context
+def analyze_macd(
+    context: click.Context,
+    instrument: str,
+    fast_period: int,
+    slow_period: int,
+    signal_period: int,
+    source_profile: str,
+    output_mode: str,
+) -> None:
+    """Calculate MACD, signal, and histogram values."""
+
+    _run_analysis(
+        context,
+        output_mode,
+        instrument,
+        source_profile,
+        "macd",
+        {
+            "fast_period": fast_period,
+            "slow_period": slow_period,
+            "signal_period": signal_period,
+        },
+    )
 
 
 def capabilities_document() -> dict[str, Any]:

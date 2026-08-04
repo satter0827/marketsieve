@@ -19,6 +19,7 @@ def test_schemas_are_draft_2020_12_and_semantically_versioned() -> None:
         "cli-error",
         "doctor-result",
         "inspect-result",
+        "indicator-result",
         "log-record",
         "report-result",
         "review-report",

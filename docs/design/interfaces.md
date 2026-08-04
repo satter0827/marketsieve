@@ -105,6 +105,23 @@ market-data state. Snapshot and inspection commands are offline. `inspect` curre
 available price section and explicitly unavailable technical, financial, valuation, risk, event,
 and data-quality sections. It never treats those omissions as zero values.
 
+### Implemented indicator commands
+
+```shell
+marketsieve analyze sma MIC:SYMBOL --period 20 --source-profile PROFILE
+marketsieve analyze ema MIC:SYMBOL --period 20 --source-profile PROFILE
+marketsieve analyze rsi MIC:SYMBOL --period 14 --source-profile PROFILE
+marketsieve analyze macd MIC:SYMBOL --fast-period 12 --slow-period 26 --signal-period 9 --source-profile PROFILE
+marketsieve analyze atr MIC:SYMBOL --period 14 --source-profile PROFILE
+marketsieve analyze period-return MIC:SYMBOL --period 20 --source-profile PROFILE
+marketsieve analyze maximum-drawdown MIC:SYMBOL --period 252 --source-profile PROFILE
+```
+
+These commands read one verified snapshot and never fetch. JSON output conforms to
+`schemas/indicator-result/v1/schema.json`. Insufficient history is a successful result with an
+empty `values` object and explicit status. Invalid periods, extra parameters, and invalid MACD
+period ordering are errors.
+
 ## Approved 0.3 agent target
 
 ```shell

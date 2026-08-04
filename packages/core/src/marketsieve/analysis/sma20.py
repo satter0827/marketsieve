@@ -6,12 +6,12 @@ import hashlib
 import json
 from dataclasses import dataclass
 from datetime import date
-from decimal import Decimal, localcontext
+from decimal import Decimal
 from enum import StrEnum
-from fractions import Fraction
 from typing import Any
 
 from marketsieve._time import as_utc
+from marketsieve.analysis.indicators import IndicatorName, IndicatorSpec, IndicatorStatus, calculate
 from marketsieve.data.daily import DailyBar, DailyBarSeries
 
 PERIOD = 20
@@ -60,27 +60,10 @@ def state(close: Decimal, average: Decimal) -> SmaState:
 
 
 def average(bars: tuple[DailyBar, ...]) -> Decimal:
-    exact = sum((Fraction(bar.close) for bar in bars), start=Fraction()) / PERIOD
-    numerator, denominator = exact.as_integer_ratio()
-    twos = 0
-    fives = 0
-    while denominator % 2 == 0:
-        denominator //= 2
-        twos += 1
-    while denominator % 5 == 0:
-        denominator //= 5
-        fives += 1
-    if denominator != 1:
-        raise RuntimeError("finite decimal average must have a terminating expansion")
-    scale = max(twos, fives)
-    scaled = numerator * 2 ** (scale - twos) * 5 ** (scale - fives)
-    coefficient = Decimal(scaled)
-    precision = max(1, len(coefficient.as_tuple().digits))
-    with localcontext() as context:
-        context.prec = precision
-        context.Emax = max(context.Emax, precision + scale)
-        context.Emin = min(context.Emin, -(precision + scale))
-        return coefficient.scaleb(-scale)
+    result = calculate(IndicatorSpec.create(IndicatorName.SMA, period=PERIOD), bars)
+    if result.status is not IndicatorStatus.OK:
+        raise ValueError("SMA20 average requires 20 observations")
+    return Decimal(dict(result.values)["sma"])
 
 
 def evidence_payload(series: DailyBarSeries) -> dict[str, Any]:
