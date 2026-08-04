@@ -13,7 +13,7 @@ MarketSieveは、検証済みの市場情報から再現可能な分析、過去
 
 ## 現在の状態
 
-このリポジトリは基盤構築段階です。公開`marketsieve` packageが現在公開するのはpackage metadataだけです。リポジトリ内の運用アプリケーションは、オフラインのバージョン表示と診断コマンドを提供します。市場モデル、指標、実験、レポート、配信アダプターはRoadmap上の項目であり、現在の機能ではありません。
+リポジトリのFoundationは完成しています。公開`marketsieve` packageが現在公開するのはpackage metadataだけで、リポジトリ内の運用アプリケーションはオフラインのバージョン表示と診断コマンドを提供します。承認済みの次期マイルストーンは、日米の合成日足データを使用するOffline Analysis Previewです。市場モデルと分析はまだ現在の機能ではありません。
 
 ## インストール
 
@@ -40,7 +40,7 @@ uv run marketsieve doctor
 
 ## アーキテクチャ
 
-公開SDKは`packages/core`、運用アプリケーションは`apps/marketsieve`に配置します。運用アプリケーションはSDKへ依存しますが、SDKはアプリケーションやインフラストラクチャ用ライブラリをimportできません。依存規則は[Architecture](docs/architecture.md)を参照してください。
+公開SDKは`packages/core`、運用アプリケーションは`apps/marketsieve`に配置します。運用アプリケーションはSDKへ依存しますが、SDKはアプリケーションやインフラストラクチャ用ライブラリをimportできません。[文書索引](docs/README.md)と正式な[Architecture](docs/design/architecture.md)に依存規則を記載しています。
 
 ## 開発
 
@@ -55,7 +55,7 @@ uv run python scripts/quality_gate.py check all
 
 ## Roadmap
 
-次のマイルストーンでは、日米の合成データ、指標、実験、レポート、外部サービスを追加する前に、取引所を識別できる銘柄と市場時刻の意味を定義します。順序は[Roadmap](docs/roadmap.md)を参照してください。
+次のマイルストーンでは、日米の合成日足データから根拠付きのSMA20状態変化とオフラインdemoを生成する決定論的な縦切りを完成させます。後続の順序は[Roadmap](docs/roadmap.md)、承認済みの制約は[正式設計](docs/design/README.md)を参照してください。
 
 ## ライセンス
 
