@@ -105,12 +105,14 @@ knowledge-as-of view. Snapshot manifests separately retain retrieval time.
 ## Approved 0.2 financial facts
 
 A normalized financial fact retains its provider name, normalized concept, accounting standard,
-annual, quarterly, or trailing period, fiscal boundaries, publication instant, consolidation basis,
+annual, single-quarter, cumulative interim, or trailing period, the provider's period label, fiscal
+boundaries, publication instant, consolidation basis,
 reported or restated status, currency, scale, and provenance. Derived growth, margin, return,
 leverage, and valuation values are calculated only from compatible inputs. Provider-reported and
 MarketSieve-derived ratios remain distinguishable.
 
-The implemented J-Quants summary mapping covers revenue, operating income, net income, EPS,
+The implemented J-Quants summary mapping preserves `1Q` as a single quarter, `2Q` and `3Q` as
+cumulative interim periods, and `FY` as annual. It covers revenue, operating income, net income, EPS,
 operating cash flow, assets, and equity for consolidated and non-consolidated disclosures. A field
 that the summary endpoint does not provide, including accounting standard and interest-bearing
 debt, remains absent with an explicit reason. MarketSieve does not infer those values or construct

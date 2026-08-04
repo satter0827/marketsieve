@@ -17,6 +17,7 @@ from .daily import AvailabilityBasis, SourceDiagnostic
 class FinancialPeriod(StrEnum):
     ANNUAL = "annual"
     QUARTERLY = "quarterly"
+    INTERIM_YTD = "interim_ytd"
     TTM = "ttm"
 
 
@@ -82,6 +83,7 @@ class FinancialFact:
     provider_fact: str
     accounting_standard: str | None
     period: FinancialPeriod
+    provider_period: str
     fiscal_period_start: date
     fiscal_period_end: date
     published_at: datetime | None
@@ -106,7 +108,17 @@ class FinancialFact:
             self.availability_basis, AvailabilityBasis
         ):
             raise TypeError("financial fact revision and availability must use contract enums")
-        if not self.concept or not self.provider_fact or not self.currency:
+        if not all(
+            isinstance(value, str)
+            for value in (self.concept, self.provider_fact, self.provider_period, self.currency)
+        ):
+            raise TypeError("financial fact identity values must be strings")
+        if (
+            not self.concept
+            or not self.provider_fact
+            or not self.provider_period
+            or not self.currency
+        ):
             raise ValueError("financial fact identity must not be empty")
         if self.fiscal_period_start > self.fiscal_period_end:
             raise ValueError("financial fact period must be ascending")
@@ -199,6 +211,7 @@ class ImportedFinancials:
             (
                 fact.provider_fact,
                 fact.period,
+                fact.provider_period,
                 fact.fiscal_period_start,
                 fact.fiscal_period_end,
                 fact.published_at,

@@ -390,9 +390,12 @@ class JQuantsSource(DailyBarFetcher, FinancialFetcher, EventFetcher):
             provider_period = str(row.get("CurPerType", ""))
             if provider_period not in {"1Q", "2Q", "3Q", "FY"}:
                 raise ValueError("J-Quants financial period type is unsupported")
-            period = (
-                FinancialPeriod.ANNUAL if provider_period == "FY" else FinancialPeriod.QUARTERLY
-            )
+            period = {
+                "1Q": FinancialPeriod.QUARTERLY,
+                "2Q": FinancialPeriod.INTERIM_YTD,
+                "3Q": FinancialPeriod.INTERIM_YTD,
+                "FY": FinancialPeriod.ANNUAL,
+            }[provider_period]
             revision = (
                 Revision.RESTATED
                 if str(row.get("RetroRst", "")).lower() not in {"", "0", "false", "none"}
@@ -413,6 +416,7 @@ class JQuantsSource(DailyBarFetcher, FinancialFetcher, EventFetcher):
                             provider_fact=provider_fact,
                             accounting_standard=None,
                             period=period,
+                            provider_period=provider_period,
                             fiscal_period_start=period_start,
                             fiscal_period_end=period_end,
                             published_at=published_at,

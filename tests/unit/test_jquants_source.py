@@ -264,6 +264,37 @@ def test_financial_without_publication_time_uses_retrieval_availability() -> Non
     assert imported.facts[0].availability_basis.value == "retrieval"
 
 
+@pytest.mark.parametrize(
+    ("provider_period", "expected_period", "period_end"),
+    (
+        ("1Q", "quarterly", "2026-06-30"),
+        ("2Q", "interim_ytd", "2026-09-30"),
+        ("3Q", "interim_ytd", "2026-12-31"),
+        ("FY", "annual", "2027-03-31"),
+    ),
+)
+def test_financial_period_preserves_cumulative_interim_semantics(
+    provider_period: str, expected_period: str, period_end: str
+) -> None:
+    row = {
+        "DiscDate": "2026-07-31",
+        "DiscTime": "15:00:00",
+        "Code": "72030",
+        "CurPerType": provider_period,
+        "CurPerSt": "2026-04-01",
+        "CurPerEn": period_end,
+        "Sales": "1000",
+    }
+    imported = JQuantsSource(
+        transport=FakeTransport([response({"data": [row]})]),
+        environ={"JQUANTS_API_KEY": "example"},
+        clock=lambda: datetime(2027, 4, 1, tzinfo=UTC),
+    ).fetch_financials(fact_request())
+
+    assert imported.facts[0].period.value == expected_period
+    assert imported.facts[0].provider_period == provider_period
+
+
 def test_event_endpoints_are_selected_explicitly_by_plan_capability() -> None:
     earnings = {
         "data": [

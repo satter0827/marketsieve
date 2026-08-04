@@ -139,6 +139,7 @@ def test_financial_and_event_snapshots_have_independent_kind_references(tmp_path
                 "Sales",
                 None,
                 FinancialPeriod.ANNUAL,
+                "FY",
                 date(2025, 4, 1),
                 date(2026, 3, 31),
                 published_at,
@@ -186,7 +187,9 @@ def test_financial_and_event_snapshots_have_independent_kind_references(tmp_path
         == financial_stored.object_id
     )
     assert store.resolve("offline-jp", "XTKS:7203", "events").object_id == event_stored.object_id
-    assert store.normalized(financial_stored.object_id)["facts"][0]["concept"] == "revenue"
+    stored_fact = store.normalized(financial_stored.object_id)["facts"][0]
+    assert stored_fact["concept"] == "revenue"
+    assert stored_fact["provider_period"] == "FY"
     assert store.normalized(event_stored.object_id)["missing_reasons"] == ["split_not_available"]
 
 

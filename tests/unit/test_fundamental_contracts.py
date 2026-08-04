@@ -32,6 +32,7 @@ FACT = FinancialFact(
     "Sales",
     None,
     FinancialPeriod.ANNUAL,
+    "FY",
     date(2025, 4, 1),
     date(2026, 3, 31),
     PUBLISHED,
@@ -75,6 +76,7 @@ def test_source_and_fetch_request_require_complete_ascending_identity() -> None:
     "change",
     (
         {"concept": ""},
+        {"provider_period": ""},
         {"fiscal_period_start": date(2027, 1, 1)},
         {"published_at": datetime(2026, 7, 31)},
         {"scale": 0},
