@@ -22,10 +22,10 @@ def console(
 def test_auto_mode_selects_rich_for_a_terminal_landing() -> None:
     output, stdout, _ = console(OutputMode.AUTO, terminal=True)
 
-    output.emit_landing("0.1.0.dev0")
+    output.emit_landing("0.1.0")
 
     assert output.mode is OutputMode.RICH
-    assert "MarketSieve 0.1.0.dev0" in stdout.getvalue()
+    assert "MarketSieve 0.1.0" in stdout.getvalue()
     assert "Quick start" not in stdout.getvalue()
 
 

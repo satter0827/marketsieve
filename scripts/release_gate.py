@@ -11,13 +11,19 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import tomllib
 import zipfile
 from collections.abc import Sequence
 from pathlib import Path
 
 ROOT = Path(__file__).parents[1]
-VERSION = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+(?:\.dev[0-9]+)?$")
+VERSION = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+$")
 COMMIT = re.compile(r"^[0-9a-f]{40}$")
+CHANGELOG_HEADING = re.compile(r"^## \[([^]]+)] - (\d{4}-\d{2}-\d{2})$", re.MULTILINE)
+PACKAGE_PROJECTS = (
+    ROOT / "packages" / "core" / "pyproject.toml",
+    ROOT / "apps" / "marketsieve" / "pyproject.toml",
+)
 
 
 def run(command: Sequence[str], *, cwd: Path = ROOT) -> None:
@@ -32,9 +38,22 @@ def capture(command: Sequence[str], *, cwd: Path = ROOT) -> str:
 
 def validate_inputs(version: str, commit: str) -> None:
     if VERSION.fullmatch(version) is None:
-        raise ValueError("version must use PEP 440 X.Y.Z or X.Y.Z.devN form")
+        raise ValueError("release version must use stable X.Y.Z form")
     if COMMIT.fullmatch(commit) is None:
         raise ValueError("commit must be a complete lowercase Git SHA")
+
+
+def validate_source_release(version: str) -> None:
+    versions = {
+        path.parent.name: tomllib.loads(path.read_text(encoding="utf-8"))["project"]["version"]
+        for path in PACKAGE_PROJECTS
+    }
+    if set(versions.values()) != {version}:
+        raise RuntimeError(f"workspace package versions do not match {version}: {versions}")
+    changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    released = {match.group(1) for match in CHANGELOG_HEADING.finditer(changelog)}
+    if version not in released:
+        raise RuntimeError(f"CHANGELOG does not contain a dated {version} release")
 
 
 def sha256(path: Path) -> str:
@@ -79,6 +98,7 @@ def verify_contents(wheel: Path, sdist: Path) -> None:
 
 def build(version: str, commit: str, dist_dir: Path) -> None:
     validate_inputs(version, commit)
+    validate_source_release(version)
     if capture(("git", "rev-parse", "HEAD")) != commit:
         raise RuntimeError("commit does not match the checked-out HEAD")
     if dist_dir.exists() and any(dist_dir.iterdir()):
@@ -109,6 +129,7 @@ def python_in_venv(venv: Path) -> Path:
 
 def verify(version: str, commit: str, dist_dir: Path) -> None:
     validate_inputs(version, commit)
+    validate_source_release(version)
     wheel, sdist = distributions(dist_dir)
     manifest = json.loads((dist_dir / "release.json").read_text(encoding="utf-8"))
     if manifest["version"] != version or manifest["commit"] != commit:

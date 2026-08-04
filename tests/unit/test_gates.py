@@ -10,15 +10,18 @@ import pytest
 import scripts.review_gate as review_gate
 from scripts.github_repository import repository_name
 from scripts.governance_gate import normalized_ruleset
-from scripts.release_gate import validate_inputs
+from scripts.release_gate import validate_inputs, validate_source_release
 from scripts.review_gate import SCHEMA_VERSION, render_summary, validate
 
 
 def test_release_inputs_require_pep440_version_and_complete_commit() -> None:
-    validate_inputs("0.1.0.dev0", "a" * 40)
+    validate_inputs("0.1.0", "a" * 40)
+    validate_source_release("0.1.0")
 
     with pytest.raises(ValueError, match="version"):
         validate_inputs("v0.1", "a" * 40)
+    with pytest.raises(ValueError, match="stable"):
+        validate_inputs("0.1.0.dev0", "a" * 40)
     with pytest.raises(ValueError, match="commit"):
         validate_inputs("0.1.0", "abc")
 

@@ -32,7 +32,7 @@ report generation infrastructure, and delivery channels.
 - **OAP-07:** A repository-local offline command demonstrates the complete path from synthetic data
   through validated analysis to an evidence-backed result.
 
-## Current historical-report candidate
+## Current 0.1.0 historical report
 
 - **HRC-01:** Historical replay reloads the exact source request at each explicit as-of instant so
   later observations or revisions cannot determine an earlier result.
@@ -43,9 +43,9 @@ report generation infrastructure, and delivery channels.
 - **HRC-04:** AI clients can discover commands, options, schemas, exit codes, and side effects from
   a deterministic capabilities command.
 
-## Exclusions from the current candidate
+## Exclusions from 0.1.0
 
-The current candidate does not include investment recommendations, live data, CSV ingestion,
+The 0.1.0 release does not include investment recommendations, live data, CSV ingestion,
 persistence, scheduling, email or LINE delivery, LLM reporting, portfolio management, automatic provider
 discovery, or automatic merging of provider data. These capabilities require later roadmap
 decisions and implementation evidence.

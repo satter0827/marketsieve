@@ -1,6 +1,6 @@
 [project]
 name = "marketsieve-app"
-version = "0.1.0.dev0"
+version = "0.1.0"
 description = "Repository-local operational application for MarketSieve."
 requires-python = ">=3.12,<3.15"
 dependencies = [
