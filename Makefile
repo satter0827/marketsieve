@@ -17,7 +17,7 @@ RELEASE_DIR ?= $(STATE_DIR)/artifacts/release/$(COMMIT)
 export UV_CACHE_DIR := $(abspath $(STATE_DIR))/cache/uv
 export PYTHONPYCACHEPREFIX := $(abspath $(STATE_DIR))/cache/python
 
-.PHONY: help sync format format-check lint typecheck test secret-check check doctor report report-json capabilities-json build evidence evidence-bundle evidence-validate review-attest governance-check release-build release-verify release-check clean-generated
+.PHONY: help sync format format-check lint typecheck test secret-check check doctor capabilities-json build evidence evidence-bundle evidence-validate review-attest governance-check release-build release-verify release-check clean-generated
 
 help: ## Show the available project commands.
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z0-9_-]+:.*## / {printf "%-18s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -49,12 +49,6 @@ check: ## Run the complete development gate.
 
 doctor: ## Run offline installation diagnostics.
 	uv run marketsieve doctor
-
-report: ## Show the deterministic JP and US historical report.
-	uv run marketsieve report --market all --output auto
-
-report-json: ## Emit the historical report machine contract.
-	uv run marketsieve report --market all --output json
 
 capabilities-json: ## Describe the CLI machine contract.
 	uv run marketsieve capabilities --output json

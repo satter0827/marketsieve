@@ -49,20 +49,17 @@ environment and accesses the network.
 ```shell
 uv run marketsieve --version
 make doctor
-make report
-make report-json
 make capabilities-json
 ```
 
-`make report` uses a Rich terminal view when available and falls back to ANSI-free text when output
-is redirected. `make report-json` emits the versioned report contract. `make capabilities-json`
-describes commands, options, schemas, exit codes, streams, and side effects for AI clients.
+`make capabilities-json` describes commands, options, schemas, exit codes, streams, and side
+effects for AI clients. Inspection, analysis, comparison, and report commands read only verified
+local snapshots; acquisition is always explicit.
 
 The direct commands expose all output modes:
 
 ```shell
 uv run marketsieve doctor --output json
-uv run marketsieve report --market all --output rich
 uv run marketsieve capabilities --output json
 uv run marketsieve source list --output json
 uv run marketsieve source import ./example-bundle --output json
@@ -70,6 +67,8 @@ uv run marketsieve --config marketsieve.toml source fetch us XNAS:MSFT --start 2
 uv run marketsieve snapshot verify SNAPSHOT_ID --output json
 uv run marketsieve inspect XTKS:7203 --source-profile offline-jp --output json
 uv run marketsieve analyze rsi XTKS:7203 --period 14 --source-profile offline-jp --output json
+uv run marketsieve compare XTKS:7203 XTKS:6758 --source-profile offline-jp --output json
+uv run marketsieve report XTKS:7203 --source-profile offline-jp --format rich
 ```
 
 ## Architecture

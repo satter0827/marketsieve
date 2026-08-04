@@ -1,11 +1,31 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:marketsieve:schema:inspect-result:1.0.0",
-  "title": "MarketSieve equity inspection",
+  "$id": "urn:marketsieve:schema:inspect-result:2.0.0",
+  "title": "MarketSieve sectioned equity view",
   "type": "object",
   "required": ["schema_version", "instrument", "source_profile", "snapshot_id", "sections"],
   "properties": {
-    "schema_version": {"const": "1.0.0"},
+    "schema_version": {"const": "2.0.0"},
+    "instrument": {"$ref": "#/$defs/instrument"},
+    "source_profile": {"type": "string", "minLength": 1},
+    "snapshot_id": {"$ref": "#/$defs/digest"},
+    "sections": {
+      "type": "object",
+      "required": ["price", "technical", "financial", "valuation", "risk", "events", "data_quality"],
+      "properties": {
+        "price": {"$ref": "#/$defs/section"},
+        "technical": {"$ref": "#/$defs/section"},
+        "financial": {"$ref": "#/$defs/section"},
+        "valuation": {"$ref": "#/$defs/section"},
+        "risk": {"$ref": "#/$defs/section"},
+        "events": {"$ref": "#/$defs/section"},
+        "data_quality": {"$ref": "#/$defs/section"}
+      },
+      "additionalProperties": false
+    }
+  },
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
     "instrument": {
       "type": "object",
       "required": ["mic", "symbol", "currency", "timezone", "type"],
@@ -14,30 +34,11 @@
         "symbol": {"type": "string"},
         "currency": {"type": "string"},
         "timezone": {"type": "string"},
-        "type": {"type": "string"},
-        "profile": {
-          "type": "object",
-          "required": ["observation_date", "published_at", "names", "attributes"],
-          "properties": {
-            "observation_date": {"type": "string", "format": "date"},
-            "published_at": {"type": ["string", "null"], "format": "date-time"},
-            "names": {"type": "object", "additionalProperties": {"type": "string"}},
-            "attributes": {"type": "object", "additionalProperties": {"type": "string"}}
-          },
-          "additionalProperties": false
-        }
+        "type": {"const": "equity"},
+        "profile": {"type": "object"}
       },
-      "additionalProperties": {"type": "string"}
+      "additionalProperties": false
     },
-    "source_profile": {"type": "string", "minLength": 1},
-    "snapshot_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-    "sections": {
-      "type": "object",
-      "required": ["price", "technical", "financial", "valuation", "risk", "events", "data_quality"],
-      "additionalProperties": {"$ref": "#/$defs/section"}
-    }
-  },
-  "$defs": {
     "section": {
       "type": "object",
       "required": ["status", "completeness", "values", "warnings", "missing_reasons", "provenance", "evidence_id"],
@@ -49,7 +50,7 @@
         "warnings": {"type": "array", "items": {"type": "string"}},
         "missing_reasons": {"type": "array", "items": {"type": "string"}},
         "provenance": {"type": "array", "items": {"type": "object"}},
-        "evidence_id": {"type": ["string", "null"]}
+        "evidence_id": {"oneOf": [{"$ref": "#/$defs/digest"}, {"type": "null"}]}
       },
       "additionalProperties": false
     }

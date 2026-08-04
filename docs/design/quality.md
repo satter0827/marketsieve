@@ -11,20 +11,14 @@ The Offline Analysis Preview tests:
 - OHLC and volume invariants, date ordering, duplicates, and requested ranges;
 - raw versus adjusted semantics, completeness, and provenance;
 - deterministic Japanese and U.S. synthetic fixtures;
-- SMA20 arithmetic independent of ambient decimal precision, exact 20-observation boundaries,
-  equality, and state transitions;
+- all seven indicator definitions independent of ambient decimal precision with exact warm-up
+  boundaries;
 - explicit insufficient history and the absence of future-information leakage across UTC offsets
   and daylight-saving folds;
 - stable evidence and results for identical inputs;
-- the source contract against its first synthetic implementation.
-
-The 0.1.0 historical report additionally tests:
-
-- independent source retrieval at every replay instant and rejection of invalid schedules;
-- stable replay, report, and evidence identities for identical inputs;
-- latest-state and transition-only report projection across sparse, insufficient, and repeated
-  replay points;
-- Rich, text, and schema-valid JSON projections across TTY and non-TTY output;
+- the source contracts against synthetic transports;
+- stable snapshot, section, comparison, report, and evidence identities for identical inputs;
+- Japanese and English Rich, text, and schema-valid JSON projections;
 - capability metadata against the actual command and option definitions;
 - user output, errors, and opt-in structured logs on their defined streams.
 

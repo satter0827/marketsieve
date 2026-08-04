@@ -73,6 +73,14 @@ def _normalized_document(imported: ImportedDailyBars) -> dict[str, Any]:
         document["instrument_profile"] = {
             "observation_date": profile.observation_date.isoformat(),
             "published_at": profile.published_at.isoformat() if profile.published_at else None,
+            "available_at": (
+                profile.published_at.isoformat()
+                if profile.published_at is not None
+                else imported.retrieved_at.isoformat()
+            ),
+            "availability_basis": (
+                "published" if profile.published_at is not None else "retrieval"
+            ),
             "names": dict(profile.names),
             "attributes": dict(profile.attributes),
         }

@@ -1,0 +1,19 @@
+{
+  "schema": "marketsieve-csv-daily-bars/v1",
+  "source_profile": "example-jp",
+  "source": "csv",
+  "source_version": "example-1",
+  "retrieved_at": "2026-08-01T12:00:00+00:00",
+  "instrument": {
+    "symbol": "7203",
+    "mic": "XTKS",
+    "currency": "JPY",
+    "timezone": "Asia/Tokyo"
+  },
+  "dataset": {
+    "name": "documented-example-bars",
+    "file": "daily-bars.csv",
+    "adjustment": "raw",
+    "availability_basis": "published"
+  }
+}

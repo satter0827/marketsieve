@@ -429,6 +429,11 @@ class AlphaVantageSource(DailyBarFetcher, FinancialFetcher, EventFetcher):
                 ("country", "Country"),
                 ("sector", "Sector"),
                 ("industry", "Industry"),
+                ("trailing_per", "PERatio"),
+                ("price_to_book", "PriceToBookRatio"),
+                ("price_to_sales_ttm", "PriceToSalesRatioTTM"),
+                ("dividend_yield", "DividendYield"),
+                ("market_capitalization", "MarketCapitalization"),
             )
             if overview.get(field)
         )

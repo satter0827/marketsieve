@@ -126,7 +126,8 @@ def _capture(command: Sequence[str]) -> bytes:
 
 def _tracked_paths() -> tuple[Path, ...]:
     values = _capture(("git", "ls-files", "-z")).split(b"\0")
-    return tuple(ROOT / value.decode() for value in values if value)
+    paths = (ROOT / value.decode() for value in values if value)
+    return tuple(path for path in paths if path.is_file())
 
 
 def _artifact_paths(roots: Iterable[Path]) -> tuple[Path, ...]:

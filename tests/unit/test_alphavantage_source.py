@@ -76,6 +76,11 @@ def overview() -> dict[str, str]:
         "Sector": "TECHNOLOGY",
         "Industry": "SOFTWARE",
         "LatestQuarter": "2026-06-30",
+        "PERatio": "35.1",
+        "PriceToBookRatio": "11.2",
+        "PriceToSalesRatioTTM": "12.5",
+        "DividendYield": "0.0068",
+        "MarketCapitalization": "3800000000000",
     }
 
 
@@ -168,6 +173,7 @@ def test_fetches_raw_daily_bars_and_profile_without_exposing_query_credential() 
     assert imported.fetch_request == request()
     assert imported.instrument_profile is not None
     assert dict(imported.instrument_profile.names)["en"] == "Microsoft Corporation"
+    assert dict(imported.instrument_profile.attributes)["trailing_per"] == "35.1"
     assert [call[1]["function"] for call in transport.calls] == ["OVERVIEW", "TIME_SERIES_DAILY"]
     assert all(call[1]["apikey"] == "example" for call in transport.calls)
     assert "example" not in repr(imported)

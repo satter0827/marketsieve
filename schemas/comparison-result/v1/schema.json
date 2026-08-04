@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:marketsieve:schema:comparison-result:1.0.0",
+  "title": "MarketSieve equity comparison",
+  "type": "object",
+  "required": ["schema_version", "knowledge_as_of", "source_profile", "instruments", "metrics", "warnings", "comparison_id"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "knowledge_as_of": {"type": "string", "format": "date-time"},
+    "source_profile": {"type": "string", "minLength": 1},
+    "instruments": {"type": "array", "minItems": 2, "items": {"type": "object"}},
+    "metrics": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["section", "metric", "values", "comparable", "reason"],
+        "properties": {
+          "section": {"type": "string"},
+          "metric": {"type": "string"},
+          "values": {"type": "array", "items": {"type": "object"}},
+          "comparable": {"type": "boolean"},
+          "reason": {"type": ["string", "null"]}
+        },
+        "additionalProperties": false
+      }
+    },
+    "warnings": {"type": "array", "items": {"type": "string"}},
+    "comparison_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  },
+  "additionalProperties": false
+}

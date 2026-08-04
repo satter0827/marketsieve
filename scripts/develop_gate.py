@@ -109,10 +109,44 @@ def check_smoke(path: Path) -> None:
     )
     module = capture(("uv", "run", "python", "-m", "marketsieve_cli", "doctor", "--output", "json"))
     capabilities = capture(("uv", "run", "marketsieve", "capabilities", "--output", "json"))
-    report_first = capture(
-        ("uv", "run", "marketsieve", "--log-level", "INFO", "report", "--output", "json")
+    capture(
+        (
+            "uv",
+            "run",
+            "marketsieve",
+            "source",
+            "import",
+            "examples/csv-daily-bars",
+            "--output",
+            "json",
+        )
     )
-    report_second = capture(("uv", "run", "marketsieve", "report", "--output", "json"))
+    report_first = capture(
+        (
+            "uv",
+            "run",
+            "marketsieve",
+            "report",
+            "XTKS:7203",
+            "--source-profile",
+            "example-jp",
+            "--format",
+            "json",
+        )
+    )
+    report_second = capture(
+        (
+            "uv",
+            "run",
+            "marketsieve",
+            "report",
+            "XTKS:7203",
+            "--source-profile",
+            "example-jp",
+            "--format",
+            "json",
+        )
+    )
     if report_first.stdout != report_second.stdout:
         raise RuntimeError("historical report JSON is not reproducible")
     documents = {
@@ -121,7 +155,7 @@ def check_smoke(path: Path) -> None:
         "report-result": json.loads(report_first.stdout),
     }
     for name, document in documents.items():
-        major = "v2" if name == "capabilities-result" else "v1"
+        major = "v2" if name in {"capabilities-result", "report-result"} else "v1"
         schema = json.loads(
             (ROOT / f"schemas/{name}/{major}/schema.json").read_text(encoding="utf-8")
         )
@@ -138,7 +172,10 @@ def check_smoke(path: Path) -> None:
             "exit_code": report_first.returncode,
             "schema_valid": True,
             "reproducible": True,
-            "reports": documents["report-result"]["reports"],
+            "report_id": documents["report-result"]["report_id"],
+            "section_statuses": {
+                item["section"]: item["status"] for item in documents["report-result"]["summary"]
+            },
         },
     }
     (path / "smoke.json").write_text(
@@ -362,9 +399,8 @@ def check_package(path: Path) -> None:
                 "import marketsieve; import marketsieve_cli; import marketsieve_extension_api; "
                 "import marketsieve_source_csv; import marketsieve_source_jquants; "
                 "import marketsieve_source_alphavantage; "
-                "import marketsieve.analysis.sma20; "
-                "import marketsieve.analysis.replay; import marketsieve.data.daily; "
-                "import marketsieve.domain; import marketsieve.reporting.sma20; "
+                "import marketsieve.analysis.indicators; import marketsieve.data.daily; "
+                "import marketsieve.domain; "
                 "import marketsieve.synthetic.daily; print(marketsieve.__version__)",
             )
         ).stdout.strip()

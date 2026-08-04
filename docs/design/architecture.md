@@ -51,38 +51,28 @@ AST structure tests separately protect the SDK from I/O dependencies and protect
 distribution boundary. New layers or public ports are added only with a working use case and tests;
 empty adapter, repository, or base-class packages are prohibited.
 
-The core returns typed results, replay, reports, and evidence and does not depend on logging, clocks, handlers,
-files, or environment variables. Application services accept a standard-library `Logger` from the
-composition root and emit records only at an application boundary. The bootstrap owns logging
-configuration and output destinations; command interfaces keep results on stdout and logs on
-stderr.
+The core returns typed normalized values, indicator results, and evidence and does not depend on
+logging, clocks, handlers, files, or environment variables. The bootstrap owns logging
+configuration and output destinations; command interfaces keep results on stdout and diagnostics
+on stderr.
 
-## Historical report path
+## Equity workbench path
 
 The current application implements this vertical path in dependency order:
 
 ```text
-Historical report command
-    -> application orchestration
-    -> synthetic daily-bar source
-    -> independently loaded as-of snapshots
-    -> deterministic SMA20 replay
-    -> channel-neutral report
-    -> Rich, text, or JSON console output
+Explicit source fetch or import
+    -> immutable normalized snapshots
+    -> deterministic seven-indicator analysis
+    -> independent equity sections
+    -> inspect / analyze / compare / report
+    -> Japanese or English Rich, text, or JSON output
 ```
 
-The legacy historical projection now delegates SMA calculation to the generic indicator engine.
-Replay and report projection remain scheduled for removal when the section-based report replaces
-this transitional command.
-
-The daily-data boundary remains the small `DailyBarSource` structural protocol. Its capability model
-describes whether an exact request is supported before retrieval. The protocol is public together
-with the synthetic implementation and contract tests.
-
-A replay accepts its evaluation schedule explicitly and reloads the source at every instant. The
-application selects the synthetic schedule; the SDK validates and executes it. The console adapter
-implements a private application output port. No public delivery port is introduced from one
-console implementation.
+The application verifies stored objects before reconstructing SDK values. `inspect` is the shared
+sectioned equity view. `analyze` projects one generic indicator, `compare` applies explicit
+comparability checks, and `report` is a durable projection of the same sections. None performs
+network access, implicit refresh, provider fallback, scoring, or recommendation.
 
 A single source abstraction covering daily bars, intraday bars, quotes, fundamentals, corporate
 actions, and instrument search is prohibited. Each future data kind earns a separate boundary from

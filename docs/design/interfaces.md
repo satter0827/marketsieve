@@ -14,7 +14,8 @@ With no subcommand, an interactive terminal shows the project purpose and quick-
 non-interactive stream receives an ANSI-free text projection. `--version` reports the installed SDK
 version.
 
-The root accepts `--log-level {DEBUG,INFO,WARNING,ERROR}` and `--log-file`. Structured JSON Lines
+The root accepts `--locale {ja,en}`, `--log-level {DEBUG,INFO,WARNING,ERROR}`, and `--log-file`. Japanese
+is the default human locale. Structured JSON Lines
 logs are emitted to stderr only when a log level is requested and are additionally written below
 `.marketsieve/logs/` when requested. Normal user-facing output never contains structured logs.
 
@@ -27,19 +28,18 @@ uv run marketsieve doctor --output {auto,rich,text,json}
 Diagnostics check the supported Python version and installed SDK and application packages. A
 failure includes a recovery action. JSON output conforms to `schemas/doctor-result/v1/schema.json`.
 
-## Historical report
+## Equity workbench
 
 ```shell
-uv run marketsieve report --market {jp,us,all} --output {auto,rich,text,json}
+uv run marketsieve inspect MIC:SYMBOL --source-profile PROFILE
+uv run marketsieve compare MIC:SYMBOL MIC:SYMBOL --source-profile PROFILE
+uv run marketsieve report MIC:SYMBOL --source-profile PROFILE --format {rich,text,json}
 ```
 
-Both options default to `all` and `auto`. `all` always returns JP before US. The command uses only
-bundled synthetic data and evaluates SMA20 at each observation's availability instant. Its report
-contains the latest state, state changes, provenance, replay identity, report identity, and evidence
-references. It does not express an investment recommendation.
-
-JSON output conforms to `schemas/report-result/v1/schema.json`. Decimal values are strings and
-timestamps include an offset. Insufficient history and no state changes are successful results.
+These commands use only verified local snapshots. `inspect` exposes all independent sections,
+`compare` reports comparability without ranking, and `report` projects the same section facts. JSON
+output conforms to inspect v2, comparison v1, and report v2 schemas. Partial data is successful
+when completeness and missing reasons are explicit.
 
 ## Capability discovery
 
@@ -61,12 +61,11 @@ Exit code 0 means success, 1 means a runtime, data, or contract error, and 2 mea
 usage. Read commands perform no network requests. `source fetch` explicitly reads its selected
 provider credential and writes a snapshot; log-file output is the other opt-in state change.
 
-## Approved 0.2 CLI target
+## CLI contract
 
-The public `marketsieve-cli` distribution owns the executable application. The existing English
-0.1 projections remain available while Japanese-default, `--locale {ja,en}` projections are added
-with the 0.2 workbench commands. JSON keys, schema identifiers, error codes, and enum values remain
-English.
+The public `marketsieve-cli` distribution owns the executable application. Human output defaults
+to Japanese and supports `--locale {ja,en}`. JSON keys, schema identifiers, error codes, and enum
+values remain English.
 
 ```shell
 marketsieve source list
@@ -97,13 +96,12 @@ Capabilities version 2 describes actual network, secret, read, write, plugin, sc
 exit behavior. Partial results are successful only when their completeness and missing reasons are
 explicit.
 
-### Implemented CSV vertical slice
+### Implemented CSV and section composition
 
 `source list`, `source import`, `snapshot list`, `snapshot show`, `snapshot verify`, and `inspect`
 are implemented for daily-bar CSV snapshots. Import is the only CSV command that writes market-data
-state. Snapshot and inspection commands are offline. `inspect` composes price and technical data
-with independently stored financial and event snapshots when present. Valuation, risk, and
-data-quality remain unavailable and are never represented as zero values.
+state. `inspect` composes price, technical, financial, valuation, risk, event, and data-quality
+sections. Missing values remain unavailable and are never represented as zero values.
 
 ### Implemented indicator commands
 

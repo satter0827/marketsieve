@@ -11,8 +11,6 @@ from click.testing import CliRunner
 from jsonschema import Draft202012Validator, FormatChecker
 
 from marketsieve import __version__
-from marketsieve.data.daily import DailyBarRequest, DailyBarSeries
-from marketsieve.synthetic.daily import JP_BARS, SyntheticDailySource
 from marketsieve_cli.application.diagnostics import DiagnosticCheck, DiagnosticsService
 from marketsieve_cli.interfaces.cli import entrypoint, main
 from marketsieve_extension_api import (
@@ -82,14 +80,14 @@ def test_landing_and_version_are_immediately_useful() -> None:
     version = runner.invoke(main, ["--version"])
 
     assert landing.exit_code == 0
-    assert "Reproducible Japanese and U.S. equity analysis" in landing.stdout
-    assert "marketsieve report --market all" in landing.stdout
+    assert "再現可能な日本株・米国株分析" in landing.stdout
+    assert "marketsieve inspect MIC:SYMBOL" in landing.stdout
     assert version.output == f"marketsieve, version {__version__}\n"
 
 
 def test_doctor_supports_text_and_schema_valid_json() -> None:
     runner = CliRunner()
-    text_result = runner.invoke(main, ["doctor", "--output", "text"])
+    text_result = runner.invoke(main, ["--locale", "en", "doctor", "--output", "text"])
     json_result = runner.invoke(main, ["doctor", "--output", "json"])
 
     assert text_result.exit_code == 0
@@ -105,50 +103,11 @@ def test_doctor_reports_recovery_without_a_traceback(monkeypatch: pytest.MonkeyP
         return (DiagnosticCheck("Python", "unsupported", False, "Use Python 3.13."),)
 
     monkeypatch.setattr(DiagnosticsService, "collect", failed_collect)
-    result = CliRunner().invoke(main, ["doctor", "--output", "text"])
+    result = CliRunner().invoke(main, ["--locale", "en", "doctor", "--output", "text"])
 
     assert result.exit_code == 1
     assert "ACTION Use Python 3.13." in result.stdout
     assert "Traceback" not in result.output
-
-
-def test_report_json_is_schema_valid_reproducible_and_ordered() -> None:
-    runner = CliRunner()
-    first = runner.invoke(main, ["report", "--output", "json"])
-    second = runner.invoke(main, ["report", "--output", "json"])
-
-    assert first.exit_code == 0
-    assert first.stdout == second.stdout
-    document = json.loads(first.stdout)
-    validate("report-result", document)
-    assert [item["market"] for item in document["reports"]] == ["jp", "us"]
-    assert [item["transitions"][0]["current_state"] for item in document["reports"]] == [
-        "above",
-        "below",
-    ]
-
-
-def test_report_text_market_selection_and_notice() -> None:
-    result = CliRunner().invoke(main, ["report", "--market", "us", "--output", "text"])
-
-    assert result.exit_code == 0
-    assert result.stdout.startswith("US XNAS:MSFT")
-    assert "JP " not in result.stdout
-    assert result.stdout.endswith(
-        "NOTICE Observed market-data conditions; not investment advice.\n"
-    )
-
-
-def test_report_rich_is_readable_without_relying_on_color() -> None:
-    result = CliRunner(env={"NO_COLOR": "1"}).invoke(
-        main, ["report", "--market", "jp", "--output", "rich"], color=True
-    )
-
-    assert result.exit_code == 0
-    assert "MarketSieve Report" in result.stdout
-    assert "XTKS:7203" in result.stdout
-    assert "below → above" in result.stdout
-    assert "not investment advice" in result.stdout
 
 
 def test_capabilities_match_click_commands_and_validate_schema() -> None:
@@ -166,6 +125,7 @@ def test_capabilities_match_click_commands_and_validate_schema() -> None:
         "analyze rsi",
         "analyze sma",
         "capabilities",
+        "compare",
         "doctor",
         "inspect",
         "report",
@@ -178,11 +138,16 @@ def test_capabilities_match_click_commands_and_validate_schema() -> None:
         "source list",
     ]
     report = next(item for item in document["commands"] if item["name"] == "report")
-    assert {option["name"] for option in report["options"]} == {"market", "output_mode"}
+    assert {option["name"] for option in report["options"]} == {
+        "source_profile",
+        "report_format",
+        "output_mode",
+    }
     assert {option["name"] for option in document["global_options"]} == {
         "log_file",
         "log_level",
         "config_path",
+        "locale",
     }
     assert report["effects"] == {
         "network": False,
@@ -211,42 +176,13 @@ def test_configuration_errors_do_not_block_commands_that_do_not_read_configurati
     validate("source-result", json.loads(missing_sources.stdout))
 
 
-def test_structured_logs_are_opt_in_and_separate() -> None:
-    quiet = CliRunner().invoke(main, ["report", "--output", "json"])
-    logged = CliRunner().invoke(
-        main, ["--log-level", "INFO", "report", "--market", "jp", "--output", "json"]
-    )
-
-    assert quiet.stderr == ""
-    assert json.loads(logged.stdout)["schema_version"] == "1.0.0"
-    assert json.loads(logged.stderr)["event_name"] == "report.completed"
-
-
-def test_report_errors_are_machine_readable_and_usage_is_distinct(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    def fail_load(*_: object, **__: object) -> object:
-        raise ValueError("invalid fixture")
-
-    monkeypatch.setattr(SyntheticDailySource, "load", fail_load)
-    failed = CliRunner().invoke(main, ["report", "--output", "json"])
-    invalid = CliRunner().invoke(main, ["report", "--market", "invalid"])
-
-    assert failed.exit_code == 1
-    assert failed.stdout == ""
-    error = json.loads(failed.stderr)
-    validate("cli-error", error)
-    assert error["error"] == "report_failed"
-    assert invalid.exit_code == 2
-
-
 def test_entrypoint_renders_json_usage_errors(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     monkeypatch.setattr(
         sys,
         "argv",
-        ["marketsieve", "report", "--market", "invalid", "--output", "json"],
+        ["marketsieve", "report", "--output", "json"],
     )
 
     with pytest.raises(SystemExit, match="2"):
@@ -257,22 +193,6 @@ def test_entrypoint_renders_json_usage_errors(
     error = json.loads(captured.err)
     validate("cli-error", error)
     assert error["error"] == "invalid_cli_usage"
-
-
-def test_report_treats_insufficient_history_as_success(monkeypatch: pytest.MonkeyPatch) -> None:
-    def short_load(
-        _: SyntheticDailySource, request: DailyBarRequest, *, as_of: datetime
-    ) -> DailyBarSeries:
-        bars = tuple(bar for bar in JP_BARS[:19] if bar.available_at <= as_of)
-        return DailyBarSeries(request, bars, as_of, 21 - len(bars))
-
-    monkeypatch.setattr(SyntheticDailySource, "load", short_load)
-    result = CliRunner().invoke(main, ["report", "--market", "jp", "--output", "json"])
-
-    assert result.exit_code == 0
-    report = json.loads(result.stdout)["reports"][0]
-    assert report["latest"]["status"] == "insufficient_history"
-    assert report["transitions"] == []
 
 
 def test_csv_import_snapshot_and_price_inspect_are_one_offline_path(tmp_path: Path) -> None:
@@ -330,7 +250,7 @@ def test_csv_import_snapshot_and_price_inspect_are_one_offline_path(tmp_path: Pa
         validate("snapshot-result", json.loads(result.stdout))
     assert inspected.exit_code == 0
     inspection = json.loads(inspected.stdout)
-    validate("inspect-result", inspection)
+    validate("inspect-result", inspection, major=2)
     assert inspection["sections"]["price"]["values"]["close"] == "112"
     assert inspection["sections"]["technical"]["status"] == "partial"
     assert inspection["sections"]["financial"]["missing_reasons"] == ["not_present_in_snapshot"]
@@ -338,6 +258,31 @@ def test_csv_import_snapshot_and_price_inspect_are_one_offline_path(tmp_path: Pa
     analysis = json.loads(analyzed.stdout)
     validate("indicator-result", analysis)
     assert analysis["indicator"]["values"] == {"sma": "108.5"}
+
+
+def test_report_projects_the_same_offline_equity_view(tmp_path: Path) -> None:
+    runner = CliRunner()
+    bundle = write_csv_bundle(tmp_path / "report-bundle")
+    with runner.isolated_filesystem():
+        assert runner.invoke(main, ["source", "import", str(bundle)]).exit_code == 0
+        report = runner.invoke(
+            main,
+            [
+                "report",
+                "XTKS:7203",
+                "--source-profile",
+                "offline-jp",
+                "--format",
+                "json",
+            ],
+        )
+
+    assert report.exit_code == 0, report.output
+    document = json.loads(report.stdout)
+    validate("report-result", document, major=2)
+    assert document["sections"]["price"]["values"]["close"] == "112"
+    assert len(document["summary"]) == 7
+    assert "not investment advice" in document["disclaimer"]
 
 
 def test_jquants_doctor_and_fetch_use_only_explicit_profile(
@@ -416,8 +361,10 @@ def test_jquants_doctor_and_fetch_use_only_explicit_profile(
     validate("source-result", fetch_document)
     assert fetch_document["status"] == "fetched"
     inspection = json.loads(inspected.stdout)
-    validate("inspect-result", inspection)
+    validate("inspect-result", inspection, major=2)
     assert inspection["instrument"]["profile"]["names"]["ja"] == "テスト株式会社"
+    assert inspection["instrument"]["profile"]["availability_basis"] == "retrieval"
+    assert inspection["instrument"]["profile"]["available_at"] == "2026-08-01T12:00:00+00:00"
 
 
 def test_inspect_never_fetches_and_explains_missing_snapshot() -> None:
@@ -656,14 +603,20 @@ def test_jquants_financials_and_events_join_price_inspection_offline(
         assert result.exit_code == 0, result.output
         validate("source-result", json.loads(result.stdout))
     inspection = json.loads(inspected.stdout)
-    validate("inspect-result", inspection)
+    validate("inspect-result", inspection, major=2)
     assert inspection["sections"]["financial"]["values"]["facts"][0]["concept"] == "revenue"
-    assert inspection["sections"]["financial"]["completeness"] == "0.25"
+    assert inspection["sections"]["financial"]["completeness"] == (
+        "0.1111111111111111111111111111111111"
+    )
+    assert (
+        "compatible_annual_financial_period_not_available"
+        in inspection["sections"]["financial"]["missing_reasons"]
+    )
     assert inspection["sections"]["financial"]["as_of"] == "2026-07-31T07:00:00+00:00"
     assert inspection["sections"]["events"]["values"]["events"][0]["type"] == "earnings"
     assert inspection["sections"]["events"]["completeness"] == "0.333333"
     corrupt_inspection = json.loads(inspected_with_corrupt_financials.stdout)
-    validate("inspect-result", corrupt_inspection)
+    validate("inspect-result", corrupt_inspection, major=2)
     assert inspected_with_corrupt_financials.exit_code == 0
     assert corrupt_inspection["sections"]["price"]["status"] == "available"
     assert corrupt_inspection["sections"]["financial"]["status"] == "invalid"
