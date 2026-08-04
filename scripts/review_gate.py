@@ -147,10 +147,11 @@ def redact_patch(path: Path) -> None:
         end_line = next(
             (
                 index
-                for index in range(finding.line, len(lines))
+                for index in range(finding.line - 1, len(lines))
                 if (
                     lines[index][1:] if lines[index].startswith(("+", "-", " ")) else lines[index]
-                ).startswith("-----END ")
+                ).find("-----END ")
+                >= 0
                 and "PRIVATE KEY-----" in lines[index]
             ),
             None,

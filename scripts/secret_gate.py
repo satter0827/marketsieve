@@ -231,6 +231,23 @@ def _scan_python_assignments(label: str, text: str) -> list[Finding]:
                 and _is_literal_credential(f'"{keyword_literal}"')
             ):
                 findings.append(Finding(label, node.value.lineno, "credential_assignment"))
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+            owner = node.func.value
+            environment_call = (
+                node.func.attr == "setdefault"
+                and isinstance(owner, ast.Attribute)
+                and owner.attr == "environ"
+            ) or (node.func.attr == "putenv" and isinstance(owner, ast.Name) and owner.id == "os")
+            if environment_call and len(node.args) >= 2:
+                key_literal = _python_literal(node.args[0])
+                value_literal = _python_literal(node.args[1])
+                if (
+                    key_literal is not None
+                    and CREDENTIAL_NAME.search(key_literal) is not None
+                    and value_literal is not None
+                    and _is_literal_credential(f'"{value_literal}"')
+                ):
+                    findings.append(Finding(label, node.lineno, "credential_assignment"))
     return findings
 
 

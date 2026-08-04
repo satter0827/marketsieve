@@ -266,6 +266,18 @@ def test_secret_scan_rejects_python_subscript_and_bytes_credentials(tmp_path: Pa
     ]
 
 
+@pytest.mark.parametrize("method", ("setdefault", "putenv"))
+def test_secret_scan_rejects_python_environment_call_credentials(
+    tmp_path: Path, method: str
+) -> None:
+    key = "JQUANTS_" + "API_KEY"
+    target = "os.environ.setdefault" if method == "setdefault" else "os.putenv"
+    source = f'import os\n{target}("{key}", "opaque-production-credential")\n'
+    path = write(tmp_path / "provider.py", source)
+
+    assert [finding.kind for finding in scan_paths((path,))] == ["credential_assignment"]
+
+
 def test_secret_scan_rejects_sensitive_tracked_path(tmp_path: Path) -> None:
     path = write(tmp_path / ".env", "SAFE=placeholder\n")
 
