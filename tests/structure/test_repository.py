@@ -61,6 +61,14 @@ def test_generated_state_is_centralized() -> None:
     assert [name for name in forbidden if (ROOT / name).exists()] == []
 
 
+def test_ignore_files_exclude_private_key_suffixes() -> None:
+    required = {"*.key", "*.pem", "*.p12", "*.pfx", "*.private-key"}
+
+    for name in (".gitignore", ".dockerignore"):
+        patterns = set((ROOT / name).read_text(encoding="utf-8").splitlines())
+        assert required <= patterns
+
+
 def test_shared_vscode_tasks_use_make_targets() -> None:
     vscode = ROOT / ".vscode"
     assert {path.name for path in vscode.glob("*.json")} == {
