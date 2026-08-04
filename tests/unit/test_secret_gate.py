@@ -4,7 +4,7 @@ import zipfile
 from pathlib import Path
 
 import pytest
-from scripts.secret_gate import _scan_added_lines, scan_history, scan_paths
+from scripts.secret_gate import _scan_added_lines, scan_history, scan_patch_text, scan_paths
 
 
 def write(path: Path, value: str) -> Path:
@@ -282,6 +282,26 @@ def test_secret_scan_rejects_sensitive_tracked_path(tmp_path: Path) -> None:
     path = write(tmp_path / ".env", "SAFE=placeholder\n")
 
     assert [finding.kind for finding in scan_paths((path,))] == ["sensitive_path"]
+
+
+def test_secret_scan_hashes_credential_bearing_path(tmp_path: Path) -> None:
+    token = "sk-" + "A" * 24
+    path = write(tmp_path / f"backup-{token}.txt", "safe\n")
+
+    findings = scan_paths((path,))
+
+    assert [finding.kind for finding in findings] == ["credential_path"]
+    assert findings[0].path.startswith("path-sha256:")
+    assert token not in findings[0].path
+
+
+def test_patch_scan_strips_diff_prefix_for_assignments() -> None:
+    key = "JQUANTS_" + "API_KEY"
+    patch = f"+{key}=opaque-production-credential\n"
+
+    assert [finding.kind for finding in scan_patch_text("patch", patch)] == [
+        "credential_assignment"
+    ]
 
 
 def test_secret_scan_rejects_case_variant_sensitive_directory(tmp_path: Path) -> None:

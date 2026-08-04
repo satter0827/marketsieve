@@ -142,6 +142,16 @@ def test_review_patch_redacts_removed_credentials(tmp_path: Path) -> None:
     assert patch.read_text(encoding="utf-8") == "-[REDACTED CREDENTIAL]\n+safe\n"
 
 
+def test_review_patch_redacts_generic_added_assignment(tmp_path: Path) -> None:
+    key = "JQUANTS_" + "API_KEY"
+    patch = tmp_path / "changes.patch"
+    patch.write_text(f"+{key}=opaque-production-credential\n", encoding="utf-8")
+
+    review_gate.redact_patch(patch)
+
+    assert patch.read_text(encoding="utf-8") == "+[REDACTED CREDENTIAL]\n"
+
+
 def test_review_patch_redacts_complete_private_key_block(tmp_path: Path) -> None:
     patch = tmp_path / "changes.patch"
     header = "-----BEGIN " + "PRIVATE KEY-----"

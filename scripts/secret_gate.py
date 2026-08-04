@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import hashlib
 import io
 import re
 import subprocess
@@ -101,6 +102,17 @@ class Finding:
     path: str
     line: int
     kind: str
+
+
+def _hashed_label(label: str) -> str:
+    digest = hashlib.sha256(label.encode("utf-8", errors="replace")).hexdigest()
+    return f"path-sha256:{digest}"
+
+
+def _credential_path_finding(label: str) -> Finding | None:
+    if _scan_text("path-name", label, scan_assignments=True):
+        return Finding(_hashed_label(label), 0, "credential_path")
+    return None
 
 
 def _capture(command: Sequence[str]) -> bytes:
@@ -296,8 +308,10 @@ def _scan_archive_payload(payload: bytes, label: str, *, depth: int = 0) -> list
                         continue
                     member_label = f"{label}!{zip_member.filename}"
                     member_name = zip_member.filename.rsplit("/", maxsplit=1)[-1]
+                    if (path_finding := _credential_path_finding(member_label)) is not None:
+                        findings.append(path_finding)
                     if _is_sensitive_path(zip_member.filename, member_name):
-                        findings.append(Finding(member_label, 0, "sensitive_path"))
+                        findings.append(Finding(_hashed_label(member_label), 0, "sensitive_path"))
                     if zip_member.file_size > MAX_TEXT_BYTES:
                         findings.append(Finding(member_label, 0, "unscannable_content"))
                         continue
@@ -326,8 +340,10 @@ def _scan_archive_payload(payload: bytes, label: str, *, depth: int = 0) -> list
                         continue
                     member_label = f"{label}!{tar_member.name}"
                     member_name = tar_member.name.rsplit("/", maxsplit=1)[-1]
+                    if (path_finding := _credential_path_finding(member_label)) is not None:
+                        findings.append(path_finding)
                     if _is_sensitive_path(tar_member.name, member_name):
-                        findings.append(Finding(member_label, 0, "sensitive_path"))
+                        findings.append(Finding(_hashed_label(member_label), 0, "sensitive_path"))
                     if tar_member.size > MAX_TEXT_BYTES:
                         findings.append(Finding(member_label, 0, "unscannable_content"))
                         continue
@@ -372,6 +388,13 @@ def _scan_added_lines(label: str, patch: bytes) -> list[Finding]:
     return _scan_text(label, additions, scan_assignments=False)
 
 
+def scan_patch_text(label: str, text: str) -> list[Finding]:
+    logical = "\n".join(
+        line[1:] if line.startswith(("+", "-", " ")) else line for line in text.splitlines()
+    )
+    return _scan_text(label, logical)
+
+
 def scan_paths(paths: Iterable[Path]) -> list[Finding]:
     findings: list[Finding] = []
     for path in dict.fromkeys(paths):
@@ -381,8 +404,10 @@ def scan_paths(paths: Iterable[Path]) -> list[Finding]:
             label = str(path)
         sensitive_path = _is_sensitive_path(label, path.name)
         archive_path = _is_archive(label)
+        if (path_finding := _credential_path_finding(label)) is not None:
+            findings.append(path_finding)
         if sensitive_path:
-            findings.append(Finding(label, 0, "sensitive_path"))
+            findings.append(Finding(_hashed_label(label), 0, "sensitive_path"))
         findings.extend(_scan_archive(path, label))
         text = _read_text(path)
         if text is not None:
@@ -442,9 +467,12 @@ def scan_history(base: str) -> list[Finding]:
                 continue
             changed_path = encoded_path.decode("utf-8", errors="replace")
             name = changed_path.rsplit("/", maxsplit=1)[-1]
+            history_label = f"git-commit:{sha}:{changed_path}"
+            if (path_finding := _credential_path_finding(history_label)) is not None:
+                findings.append(path_finding)
             if _is_sensitive_path(changed_path, name):
-                findings.append(Finding(f"git-commit:{sha}:{changed_path}", 0, "sensitive_path"))
-            label = f"git-commit:{sha}:{changed_path}"
+                findings.append(Finding(_hashed_label(history_label), 0, "sensitive_path"))
+            label = history_label
             payload = _capture(("git", "show", f"{sha}:{changed_path}"))
             if _is_archive(changed_path):
                 findings.extend(_scan_archive_payload(payload, label))
@@ -466,7 +494,12 @@ def check(paths: tuple[Path, ...], base: str | None) -> None:
     unique = sorted(set(findings), key=lambda item: (item.path, item.line, item.kind))
     if unique:
         for finding in unique:
-            location = f"{finding.path}:{finding.line}" if finding.line else finding.path
+            safe_path = (
+                _hashed_label(finding.path)
+                if _scan_text("path-name", finding.path)
+                else finding.path
+            )
+            location = f"{safe_path}:{finding.line}" if finding.line else safe_path
             print(f"secret finding: {location} [{finding.kind}]")
         raise SystemExit(1)
     print("Secret scan passed without exposing file contents.")

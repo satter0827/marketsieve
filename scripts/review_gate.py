@@ -14,7 +14,7 @@ from typing import Any
 
 from jsonschema import Draft202012Validator
 
-from scripts.secret_gate import scan_paths
+from scripts.secret_gate import scan_patch_text, scan_paths
 
 ROOT = Path(__file__).parents[1]
 STATE_ROOT = ROOT / ".marketsieve"
@@ -136,7 +136,7 @@ def load_metrics(evidence: Path) -> tuple[int, float]:
 
 
 def redact_patch(path: Path) -> None:
-    findings = scan_paths((path,))
+    findings = scan_patch_text(str(path), path.read_text(encoding="utf-8"))
     if any(finding.line <= 0 for finding in findings):
         raise RuntimeError("review patch contains content that cannot be safely redacted")
     lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
