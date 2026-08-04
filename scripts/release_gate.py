@@ -102,8 +102,11 @@ def verify_contents(wheels: tuple[Path, ...], sdists: tuple[Path, ...]) -> None:
         raise RuntimeError(f"release contains private or generated files: {violations}")
 
 
-def verify_secrets(dist_dir: Path) -> None:
-    run((sys.executable, str(ROOT / "scripts" / "secret_gate.py"), "--path", str(dist_dir)))
+def verify_secrets(paths: Sequence[Path]) -> None:
+    command = [sys.executable, str(ROOT / "scripts" / "secret_gate.py")]
+    for path in paths:
+        command.extend(("--path", str(path)))
+    run(tuple(command))
 
 
 def prepare_dist_dir(dist_dir: Path) -> None:
@@ -139,7 +142,6 @@ def build(version: str, commit: str, dist_dir: Path) -> None:
     if any(metadata_version(wheel) != version for wheel in wheels):
         raise RuntimeError("built wheel versions do not match the requested version")
     verify_contents(wheels, sdists)
-    verify_secrets(dist_dir)
     manifest = {
         "version": version,
         "commit": commit,
@@ -152,6 +154,7 @@ def build(version: str, commit: str, dist_dir: Path) -> None:
     (dist_dir / "release.json").write_text(
         json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
+    verify_secrets((*wheels, *sdists, dist_dir / "release.json"))
 
 
 def python_in_venv(venv: Path) -> Path:
@@ -179,7 +182,7 @@ def verify(version: str, commit: str, dist_dir: Path) -> None:
     if any(metadata_version(wheel) != version for wheel in wheels):
         raise RuntimeError("wheel metadata versions do not match the request")
     verify_contents(wheels, sdists)
-    verify_secrets(dist_dir)
+    verify_secrets((*wheels, *sdists, dist_dir / "release.json"))
     with tempfile.TemporaryDirectory(prefix="marketsieve-release-") as temp_dir:
         venv = Path(temp_dir) / "venv"
         run((sys.executable, "-m", "venv", str(venv)))

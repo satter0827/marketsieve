@@ -40,7 +40,6 @@ def prepare(output: Path) -> None:
             "marketsieve-cli",
             "--no-dev",
             "--no-emit-workspace",
-            "--no-hashes",
             "--no-annotate",
             "--no-header",
         )
@@ -59,6 +58,7 @@ def prepare(output: Path) -> None:
                 "download",
                 "--disable-pip-version-check",
                 "--only-binary=:all:",
+                "--require-hashes",
                 "--dest",
                 str(resolved),
                 "--requirement",
