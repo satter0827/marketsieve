@@ -1,0 +1,14 @@
+.git
+.github
+.marketsieve
+.venv
+.env
+.env.*
+credentials
+secrets
+models
+__pycache__
+*.pem
+*.p12
+*.pfx
+*.private-key

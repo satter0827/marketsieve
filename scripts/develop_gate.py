@@ -228,6 +228,21 @@ def check_package(path: Path) -> None:
     )
 
 
+def check_secrets(path: Path) -> None:
+    run(
+        (
+            "uv",
+            "run",
+            "python",
+            "scripts/secret_gate.py",
+            "--base",
+            "origin/develop",
+            "--path",
+            str(path),
+        )
+    )
+
+
 def check_all() -> None:
     path = evidence_dir()
     reset_evidence(path)
@@ -236,6 +251,7 @@ def check_all() -> None:
     validate_schemas()
     check_smoke(path)
     check_package(path)
+    check_secrets(path)
 
 
 def parse_args() -> argparse.Namespace:

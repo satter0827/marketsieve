@@ -116,6 +116,7 @@ def test_makefile_exposes_stable_entry_points() -> None:
         "lint",
         "typecheck",
         "test",
+        "secret-check",
         "check",
         "doctor",
         "report",

@@ -2,3 +2,17 @@
 .marketsieve/
 __pycache__/
 .DS_Store
+
+# Credentials and local-only configuration.
+.env
+.env.*
+!.env.example
+*.pem
+*.p12
+*.pfx
+*.private-key
+
+# Provider and model state must remain outside version control.
+credentials/
+secrets/
+models/

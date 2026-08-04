@@ -82,3 +82,45 @@ transitions. It references the replay, provenance, and analysis evidence without
 calculated facts. The report is channel-neutral and contains no recommendation, forecast, or
 suitability decision. Its identity is derived from normalized report content rather than rendered
 text.
+
+## Approved 0.2 availability model
+
+The target model distinguishes four related values:
+
+- `observation_date` identifies the market or accounting period being described;
+- `published_at` identifies when the source or issuer made the fact available, when known;
+- `retrieved_at` identifies when MarketSieve acquired the response;
+- `availability_basis` is `published` or `retrieval` and identifies which instant bounds as-of use.
+
+A fact without a verified publication instant uses retrieval availability and cannot support a claim
+about knowledge before it was retrieved. Historical coverage is not evidence of historical
+availability. Restated facts retain their revision identity rather than replacing earlier snapshot
+evidence.
+
+## Approved 0.2 financial facts
+
+A normalized financial fact retains its provider name, normalized concept, accounting standard,
+annual, quarterly, or trailing period, fiscal boundaries, publication instant, consolidation basis,
+reported or restated status, currency, scale, and provenance. Derived growth, margin, return,
+leverage, and valuation values are calculated only from compatible inputs. Provider-reported and
+MarketSieve-derived ratios remain distinguishable.
+
+## Approved 0.2 indicator semantics
+
+The target indicator catalog contains SMA, EMA, RSI, MACD, ATR, period return, and maximum drawdown.
+Every result records its parameters, definition version, observation count, status, numeric policy,
+and evidence identity. The numeric policy uses a local decimal context with 34 digits and
+round-half-even. SMA aggregates exact fractions before one decimal conversion; recursive indicators
+perform each recurrence inside the fixed local context. Definition versions state the input field,
+warm-up, seed, recurrence, intermediate precision, and output normalization rules.
+
+Insufficient history is a non-signal result. NaN, infinity, invalid parameters, zero denominators,
+and incompatible currencies or accounting periods are never silently coerced into a value.
+
+## Approved 0.2 section semantics
+
+Instrument, price, technical, financial, valuation, risk, event, and data-quality sections are
+independent evidence-bearing results. A section may be complete, partial, unavailable, or invalid.
+Missing facts include machine-readable reasons. Comparison uses a common knowledge-as-of instant and
+does not rank incompatible periods, accounting bases, consolidation bases, or absolute values in
+different currencies.

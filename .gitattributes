@@ -1,0 +1,7 @@
+/.github export-ignore
+/.marketsieve export-ignore
+/.vscode export-ignore
+/docs/notes export-ignore
+/tests export-ignore
+/.dockerignore export-ignore
+/.gitignore export-ignore

@@ -17,7 +17,7 @@ RELEASE_DIR ?= $(STATE_DIR)/artifacts/release/$(COMMIT)
 export UV_CACHE_DIR := $(abspath $(STATE_DIR))/cache/uv
 export PYTHONPYCACHEPREFIX := $(abspath $(STATE_DIR))/cache/python
 
-.PHONY: help sync format format-check lint typecheck test check doctor report report-json capabilities-json build evidence evidence-bundle evidence-validate review-attest governance-check release-build release-verify release-check clean-generated
+.PHONY: help sync format format-check lint typecheck test secret-check check doctor report report-json capabilities-json build evidence evidence-bundle evidence-validate review-attest governance-check release-build release-verify release-check clean-generated
 
 help: ## Show the available project commands.
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z0-9_-]+:.*## / {printf "%-18s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -39,6 +39,9 @@ typecheck: ## Run strict static type checks.
 
 test: ## Run all tests, or TEST=<path> for a focused test.
 	uv run pytest $(TEST)
+
+secret-check: ## Scan tracked files and the current diff without printing secret values.
+	uv run python scripts/secret_gate.py --base "$(BASE_SHA)"
 
 check: ## Run the complete development gate.
 	EVIDENCE_DIR="$(EVIDENCE_DIR)" uv run python scripts/develop_gate.py check all
