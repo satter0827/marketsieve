@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -56,6 +57,13 @@ def test_retrieval_basis_does_not_backdate_values(tmp_path: Path) -> None:
     )
 
     assert {bar.available_at for bar in imported.bars} == {imported.retrieved_at}
+
+
+def test_import_contract_rejects_non_digest_bundle_identity(tmp_path: Path) -> None:
+    imported = CsvDailyBarImporter().import_bundle(write_bundle(tmp_path / "bundle"))
+
+    with pytest.raises(ValueError, match="SHA-256"):
+        replace(imported, bundle_hash="not-a-digest")
 
 
 def test_csv_bundle_rejects_implicit_or_unsafe_metadata(tmp_path: Path) -> None:

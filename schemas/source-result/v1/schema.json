@@ -6,13 +6,32 @@
   "required": ["schema_version"],
   "properties": {
     "schema_version": {"const": "1.0.0"},
-    "sources": {"type": "array", "items": {"type": "object"}},
+    "sources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "distribution", "version", "entry_point", "data_kinds", "loaded"],
+        "properties": {
+          "name": {"type": "string", "minLength": 1},
+          "distribution": {"type": "string", "minLength": 1},
+          "version": {"type": "string", "minLength": 1},
+          "entry_point": {"type": "string", "minLength": 1},
+          "data_kinds": {
+            "type": "array",
+            "items": {"enum": ["daily_bars", "financials", "events"]},
+            "uniqueItems": true
+          },
+          "loaded": {"const": false}
+        },
+        "additionalProperties": false
+      }
+    },
     "status": {"enum": ["imported", "fetched"]},
     "object_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
     "source_profile": {"type": "string", "minLength": 1},
     "instrument": {"type": "string", "pattern": "^[A-Z0-9]{4}:[A-Z0-9]+$"},
-    "kind": {"const": "daily_bars"},
-    "observations": {"type": "integer", "minimum": 1},
+    "kind": {"enum": ["daily_bars", "financials", "events"]},
+    "observations": {"type": "integer", "minimum": 0},
     "instrument_profile": {"type": "boolean"},
     "plugin": {"type": "string", "minLength": 1},
     "ready": {"type": "boolean"},

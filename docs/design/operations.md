@@ -3,8 +3,8 @@
 ## Supported current operation
 
 MarketSieve currently supports local development, public distribution builds, offline analysis,
-immutable CSV snapshots, and explicit J-Quants price acquisition on Python 3.12 through 3.14.
-Python 3.13 is the primary development version.
+immutable CSV snapshots, and explicit J-Quants price, financial-summary, dividend, and earnings
+acquisition on Python 3.12 through 3.14. Python 3.13 is the primary development version.
 
 ```shell
 make sync
@@ -93,19 +93,32 @@ plugin = "jquants"
 
 [source_profiles.japan.daily_bars.settings]
 timeout_seconds = 30
+
+[source_profiles.japan.financials]
+plugin = "jquants"
+
+[source_profiles.japan.events]
+plugin = "jquants"
+
+[source_profiles.japan.events.settings]
+event_types = "earnings"
 ```
 
 The API origin is fixed by the adapter to prevent credential forwarding to another host.
 `JQUANTS_API_KEY` is read from the invoking process only. MarketSieve does not obtain or refresh
 provider tokens, print response bodies on failure, or copy the credential into logs and snapshots.
 
-The individual J-Quants API V2 product page, daily-bars specification, instrument-master
-specification, plan presentation, and terms were reviewed on 2026-08-04. Provider plan entitlements,
-rate limits, retention rights, and terms remain external policy rather than a frozen MarketSieve
-contract. The adapter therefore does not claim that a configured plan supports a range, does not
-retain raw responses, and preserves HTTP authorization and limit failures for the operator. Before
-a release, maintainers recheck the official [J-Quants site](https://jpx-jquants.com/) and the
-referenced endpoint pages instead of relying on fixtures as legal or commercial authority.
+The individual J-Quants API V2 product page,
+[official Python client](https://github.com/J-Quants/jquants-api-client-python), daily-bars, instrument-master,
+financial-summary, dividend, and earnings-calendar contracts, plan presentation, and terms were
+reviewed on 2026-08-04. Financial summary and earnings calendar are available from Free; dividend
+requires Premium according to the reviewed plan. `event_types` therefore defaults to `earnings` and
+must include `dividend` explicitly before that endpoint is called. Provider plan entitlements, rate
+limits, retention rights, and terms remain external policy rather than a frozen MarketSieve
+contract. The adapter does not claim that a configured plan supports a range, does not retain raw
+responses, and preserves HTTP authorization and limit failures for the operator. Before a release,
+maintainers recheck the official [J-Quants site](https://jpx-jquants.com/) and endpoint contracts
+instead of relying on fixtures as legal or commercial authority.
 
 Content-addressed objects are written to a temporary sibling directory, verified, and atomically
 renamed. Raw responses are retained only when the adapter's approved terms policy permits local

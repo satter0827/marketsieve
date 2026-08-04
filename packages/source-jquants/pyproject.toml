@@ -18,6 +18,12 @@ jquants = "marketsieve_source_jquants:JQuantsSource"
 [project.entry-points."marketsieve.sources.daily_bars.fetchers"]
 jquants = "marketsieve_source_jquants:JQuantsSource"
 
+[project.entry-points."marketsieve.sources.financials.fetchers"]
+jquants = "marketsieve_source_jquants:JQuantsSource"
+
+[project.entry-points."marketsieve.sources.events.fetchers"]
+jquants = "marketsieve_source_jquants:JQuantsSource"
+
 [build-system]
 requires = ["hatchling>=1.27,<2"]
 build-backend = "hatchling.build"

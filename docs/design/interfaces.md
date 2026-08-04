@@ -100,10 +100,10 @@ explicit.
 ### Implemented CSV vertical slice
 
 `source list`, `source import`, `snapshot list`, `snapshot show`, `snapshot verify`, and `inspect`
-are implemented for daily-bar CSV snapshots. Import is the only command in this slice that writes
-market-data state. Snapshot and inspection commands are offline. `inspect` currently returns an
-available price section and explicitly unavailable technical, financial, valuation, risk, event,
-and data-quality sections. It never treats those omissions as zero values.
+are implemented for daily-bar CSV snapshots. Import is the only CSV command that writes market-data
+state. Snapshot and inspection commands are offline. `inspect` composes price and technical data
+with independently stored financial and event snapshots when present. Valuation, risk, and
+data-quality remain unavailable and are never represented as zero values.
 
 ### Implemented indicator commands
 
@@ -126,15 +126,22 @@ period ordering are errors.
 
 ```shell
 marketsieve --config marketsieve.toml source doctor japan
+marketsieve --config marketsieve.toml source doctor japan --kind financials
 marketsieve --config marketsieve.toml source fetch japan XTKS:7203 \
   --start 2026-01-01 --end 2026-07-31 --adjustment adjusted
+marketsieve --config marketsieve.toml source fetch japan XTKS:7203 \
+  --start 2026-01-01 --end 2026-07-31 --kind financials
+marketsieve --config marketsieve.toml source fetch japan XTKS:7203 \
+  --start 2026-01-01 --end 2026-07-31 --kind events
 ```
 
 `source doctor` validates only the selected profile, plugin settings, and credential presence; it
 does not contact J-Quants. `source fetch` is the only J-Quants command that uses the network and it
-stores one immutable normalized snapshot. Configuration does not supply or override credentials.
-An unavailable provider plan, excessive exact request, or rate limit is an explicit failure rather
-than a partial success.
+stores one immutable normalized snapshot per selected data kind. Configuration does not supply or
+override credentials. Financials use `/fins/summary`. Event settings explicitly select `earnings`
+and optionally `dividend`; unselected or unavailable endpoints are not called automatically. An
+unavailable provider plan, excessive exact request, or rate limit is an explicit failure rather
+than a shortened or substituted success.
 
 ## Approved 0.3 agent target
 

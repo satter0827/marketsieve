@@ -97,9 +97,10 @@ about knowledge before it was retrieved. Historical coverage is not evidence of 
 availability. Restated facts retain their revision identity rather than replacing earlier snapshot
 evidence.
 
-The current normalized daily-bar document retains the trading date as its observation date and the
-selected availability instant on each bar. Its snapshot manifest separately retains retrieval time
-and the declared publication-or-retrieval basis. Broader fact types will use the same distinction.
+Normalized daily bars retain the trading date and selected availability instant. Financial facts
+retain the provider publication instant and fiscal period. Events with a provider publication time
+use it; an earnings schedule without one uses retrieval availability and cannot enter an earlier
+knowledge-as-of view. Snapshot manifests separately retain retrieval time.
 
 ## Approved 0.2 financial facts
 
@@ -108,6 +109,18 @@ annual, quarterly, or trailing period, fiscal boundaries, publication instant, c
 reported or restated status, currency, scale, and provenance. Derived growth, margin, return,
 leverage, and valuation values are calculated only from compatible inputs. Provider-reported and
 MarketSieve-derived ratios remain distinguishable.
+
+The implemented J-Quants summary mapping covers revenue, operating income, net income, EPS,
+operating cash flow, assets, and equity for consolidated and non-consolidated disclosures. A field
+that the summary endpoint does not provide, including accounting standard and interest-bearing
+debt, remains absent with an explicit reason. MarketSieve does not infer those values or construct
+free cash flow inside a source adapter.
+
+Financial completeness is the fraction of those eight target concepts present in the snapshot.
+Event completeness is endpoint coverage across dividend, earnings, and split facts, not the number
+of events that happened in a period. Missing accounting standard or other required dimensions keep
+the section partial even when every mapped concept is present. Each normalized fact retains the
+source, dataset, and source-version provenance of its immutable acquisition.
 
 ## Indicator semantics
 

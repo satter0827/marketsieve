@@ -9,7 +9,12 @@ import pytest
 
 from marketsieve.data.daily import Adjustment
 from marketsieve.domain import Instrument
-from marketsieve_extension_api import DailyBarFetchRequest, DailyBarSourceConfiguration
+from marketsieve_extension_api import (
+    DailyBarFetchRequest,
+    DailyBarSourceConfiguration,
+    FactFetchRequest,
+    SourceConfiguration,
+)
 from marketsieve_source_jquants.source import HttpResponse, JQuantsSource, _NoRedirect
 
 
@@ -39,6 +44,17 @@ def request(adjustment: Adjustment = Adjustment.RAW) -> DailyBarFetchRequest:
         end=date(2026, 7, 31),
         adjustment=adjustment,
         settings={},
+    )
+
+
+def fact_request(settings: dict[str, str] | None = None) -> FactFetchRequest:
+    daily = request()
+    return FactFetchRequest(
+        daily.source_profile,
+        daily.instrument,
+        date(2026, 7, 1),
+        date(2026, 7, 31),
+        settings or {},
     )
 
 
@@ -178,6 +194,143 @@ def test_doctor_is_offline_and_requires_only_environment_credential() -> None:
     assert missing.code == "missing_credential"
     assert ready.ready is True
     assert transport.calls == []
+
+
+def test_financial_summary_is_normalized_without_flattening_period_metadata() -> None:
+    transport = FakeTransport(
+        [
+            response(
+                {
+                    "data": [
+                        {
+                            "DiscDate": "2026-07-31",
+                            "DiscTime": "15:00:00",
+                            "Code": "72030",
+                            "CurPerType": "FY",
+                            "CurPerSt": "2025-04-01",
+                            "CurPerEn": "2026-03-31",
+                            "Sales": "48000000000000",
+                            "OP": "5000000000000",
+                            "NP": "4000000000000",
+                            "EPS": "300.25",
+                            "TA": "90000000000000",
+                            "Eq": "35000000000000",
+                            "CFO": "6000000000000",
+                            "RetroRst": "false",
+                        }
+                    ]
+                }
+            )
+        ]
+    )
+    source = JQuantsSource(
+        transport=transport,
+        environ={"JQUANTS_API_KEY": "example"},
+        clock=lambda: datetime(2026, 8, 1, tzinfo=UTC),
+    )
+
+    imported = source.fetch_financials(fact_request())
+
+    revenue = next(fact for fact in imported.facts if fact.concept == "revenue")
+    assert revenue.provider_fact == "Sales"
+    assert revenue.period.value == "annual"
+    assert revenue.fiscal_period_start == date(2025, 4, 1)
+    assert revenue.published_at is not None
+    assert revenue.published_at.isoformat() == "2026-07-31T15:00:00+09:00"
+    assert revenue.accounting_standard is None
+    assert "interest_bearing_debt_not_present_in_summary" in imported.missing_reasons
+    assert "example" not in repr(imported)
+
+
+def test_financial_without_publication_time_uses_retrieval_availability() -> None:
+    row = {
+        "DiscDate": "2026-07-31",
+        "DiscTime": "",
+        "Code": "72030",
+        "CurPerType": "1Q",
+        "CurPerSt": "2026-04-01",
+        "CurPerEn": "2026-06-30",
+        "Sales": "1000",
+    }
+    retrieved_at = datetime(2026, 8, 1, tzinfo=UTC)
+    imported = JQuantsSource(
+        transport=FakeTransport([response({"data": [row]})]),
+        environ={"JQUANTS_API_KEY": "example"},
+        clock=lambda: retrieved_at,
+    ).fetch_financials(fact_request())
+
+    assert imported.facts[0].published_at is None
+    assert imported.facts[0].available_at == retrieved_at
+    assert imported.facts[0].availability_basis.value == "retrieval"
+
+
+def test_event_endpoints_are_selected_explicitly_by_plan_capability() -> None:
+    earnings = {
+        "data": [
+            {
+                "Date": "2026-07-30",
+                "Code": "72030",
+                "CoName": "トヨタ自動車",
+                "FY": "2027-03",
+                "FQ": "1Q",
+            },
+            {"Date": "2026-07-30", "Code": "67580", "FY": "2027-03", "FQ": "1Q"},
+        ]
+    }
+    free_transport = FakeTransport([response(earnings)])
+    free = JQuantsSource(
+        transport=free_transport,
+        environ={"JQUANTS_API_KEY": "example"},
+        clock=lambda: datetime(2026, 7, 20, tzinfo=UTC),
+    ).fetch_events(fact_request())
+
+    assert [event.event_type.value for event in free.events] == ["earnings"]
+    assert [call[0].rsplit("/", 1)[-1] for call in free_transport.calls] == ["earnings-calendar"]
+    assert "dividend_endpoint_not_selected" in free.missing_reasons
+
+    premium_transport = FakeTransport(
+        [
+            response(
+                {
+                    "data": [
+                        {
+                            "PubDate": "2026-07-10",
+                            "PubTime": "15:00:00",
+                            "Code": "72030",
+                            "DivRate": "45",
+                            "StatCode": "1",
+                            "ExDate": "2026-09-29",
+                        }
+                    ]
+                }
+            ),
+            response(earnings),
+        ]
+    )
+    premium = JQuantsSource(
+        transport=premium_transport,
+        environ={"JQUANTS_API_KEY": "example"},
+        clock=lambda: datetime(2026, 7, 20, tzinfo=UTC),
+    ).fetch_events(fact_request({"event_types": "earnings,dividend"}))
+
+    assert {event.event_type.value for event in premium.events} == {"earnings", "dividend"}
+    assert premium.missing_reasons == ("split_events_not_provided_by_selected_jquants_endpoints",)
+
+
+def test_fact_doctors_are_offline_and_validate_event_selection() -> None:
+    source = JQuantsSource(transport=FakeTransport([]), environ={"JQUANTS_API_KEY": "example"})
+
+    ready = source.doctor_financials(SourceConfiguration("JPY", "Asia/Tokyo", {}))
+    invalid = source.doctor_events(
+        SourceConfiguration("JPY", "Asia/Tokyo", {"event_types": "split"})
+    )
+    wrong_kind_setting = source.doctor_financials(
+        SourceConfiguration("JPY", "Asia/Tokyo", {"event_types": "earnings"})
+    )
+
+    assert ready.ready is True
+    assert invalid.code == "invalid_configuration"
+    assert wrong_kind_setting.code == "invalid_configuration"
 
 
 def test_malformed_credential_is_rejected_without_disclosure() -> None:

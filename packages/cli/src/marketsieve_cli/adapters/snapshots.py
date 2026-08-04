@@ -15,11 +15,12 @@ from pathlib import Path
 from typing import Any
 
 from marketsieve.data.daily import Adjustment, DailyBar, Provenance
-from marketsieve_extension_api import ImportedDailyBars
+from marketsieve_extension_api import ImportedDailyBars, ImportedEvents, ImportedFinancials
 
 SNAPSHOT_SCHEMA = "marketsieve-snapshot/v1"
 NORMALIZED_SCHEMA = "marketsieve-normalized-daily-bars/v1"
 INSTRUMENT_KEY = re.compile(r"^[A-Z0-9]{4}:[A-Z0-9]+$")
+SNAPSHOT_KINDS = frozenset({"daily_bars", "financials", "events"})
 
 
 def _json_bytes(value: object) -> bytes:
@@ -108,6 +109,108 @@ def _identity_document(imported: ImportedDailyBars, normalized: dict[str, Any]) 
     }
 
 
+def _financial_document(imported: ImportedFinancials) -> dict[str, Any]:
+    provenance = {
+        "source": imported.source_name,
+        "dataset": imported.dataset,
+        "version": imported.source_version,
+    }
+    return {
+        "schema": "marketsieve-normalized-financials/v1",
+        "instrument": _instrument_document_from_request(imported),
+        "facts": [
+            {
+                "concept": fact.concept,
+                "provider_fact": fact.provider_fact,
+                "accounting_standard": fact.accounting_standard,
+                "period": fact.period.value,
+                "fiscal_period_start": fact.fiscal_period_start.isoformat(),
+                "fiscal_period_end": fact.fiscal_period_end.isoformat(),
+                "published_at": fact.published_at.isoformat() if fact.published_at else None,
+                "available_at": fact.available_at.isoformat(),
+                "availability_basis": fact.availability_basis.value,
+                "consolidation": fact.consolidation.value,
+                "revision": fact.revision.value,
+                "currency": fact.currency,
+                "scale": fact.scale,
+                "value": str(fact.value),
+                "provenance": provenance,
+            }
+            for fact in imported.facts
+        ],
+        "missing_reasons": list(imported.missing_reasons),
+    }
+
+
+def _event_document(imported: ImportedEvents) -> dict[str, Any]:
+    provenance = {
+        "source": imported.source_name,
+        "dataset": imported.dataset,
+        "version": imported.source_version,
+    }
+    return {
+        "schema": "marketsieve-normalized-events/v1",
+        "instrument": _instrument_document_from_request(imported),
+        "events": [
+            {
+                "type": event.event_type.value,
+                "observation_date": event.observation_date.isoformat(),
+                "effective_date": event.effective_date.isoformat(),
+                "published_at": event.published_at.isoformat() if event.published_at else None,
+                "available_at": event.available_at.isoformat(),
+                "availability_basis": event.availability_basis.value,
+                "values": dict(event.values),
+                "provenance": provenance,
+            }
+            for event in imported.events
+        ],
+        "missing_reasons": list(imported.missing_reasons),
+    }
+
+
+def _instrument_document_from_request(
+    imported: ImportedFinancials | ImportedEvents,
+) -> dict[str, str]:
+    instrument = imported.request.instrument
+    return {
+        "currency": instrument.currency,
+        "mic": instrument.mic,
+        "symbol": instrument.symbol,
+        "timezone": instrument.exchange_timezone.key,
+        "type": instrument.instrument_type.value,
+    }
+
+
+def _fact_identity(
+    imported: ImportedFinancials | ImportedEvents,
+    kind: str,
+    normalized: dict[str, Any],
+) -> dict[str, Any]:
+    request = imported.request
+    return {
+        "schema": SNAPSHOT_SCHEMA,
+        "kind": kind,
+        "source": {
+            "profile": request.source_profile,
+            "name": imported.source_name,
+            "version": imported.source_version,
+            "dataset": imported.dataset,
+        },
+        "instrument": _instrument_document_from_request(imported),
+        "acquisition": {
+            "retrieved_at": imported.retrieved_at.isoformat(),
+            "availability_basis": "retrieval",
+        },
+        "request": {
+            "mode": "fetch",
+            "start": request.start.isoformat(),
+            "end": request.end.isoformat(),
+            "response_sha256": imported.response_hash,
+        },
+        "normalized": normalized,
+    }
+
+
 @dataclass(frozen=True, slots=True)
 class StoredSnapshot:
     """Identity and manifest of one verified immutable object."""
@@ -148,7 +251,13 @@ class SnapshotStore:
             if destination.is_symlink() or not destination.is_dir():
                 raise ValueError("snapshot object path must be a real directory")
             stored = self.verify(object_id)
-            self._write_ref(imported, object_id)
+            self._write_ref(
+                imported.source_profile,
+                imported.instrument.mic,
+                imported.instrument.symbol,
+                "daily_bars",
+                object_id,
+            )
             return stored
         temporary = Path(tempfile.mkdtemp(prefix=".pending-", dir=self._objects))
         try:
@@ -160,17 +269,78 @@ class SnapshotStore:
         except BaseException:
             shutil.rmtree(temporary, ignore_errors=True)
             raise
-        self._write_ref(imported, object_id)
+        self._write_ref(
+            imported.source_profile,
+            imported.instrument.mic,
+            imported.instrument.symbol,
+            "daily_bars",
+            object_id,
+        )
         return StoredSnapshot(object_id, manifest)
 
-    def _write_ref(self, imported: ImportedDailyBars, object_id: str) -> None:
-        profile = imported.source_profile
+    def put_financials(self, imported: ImportedFinancials) -> StoredSnapshot:
+        return self._put_facts(imported, "financials", _financial_document(imported))
+
+    def put_events(self, imported: ImportedEvents) -> StoredSnapshot:
+        return self._put_facts(imported, "events", _event_document(imported))
+
+    def _put_facts(
+        self,
+        imported: ImportedFinancials | ImportedEvents,
+        kind: str,
+        normalized: dict[str, Any],
+    ) -> StoredSnapshot:
+        request = imported.request
+        self._validate_profile(request.source_profile)
+        self._ensure_directory(self._objects)
+        normalized_bytes = _json_bytes(normalized)
+        identity = _fact_identity(imported, kind, normalized)
+        object_id = _sha256(_json_bytes(identity))
+        manifest = {key: value for key, value in identity.items() if key != "normalized"}
+        manifest.update(
+            {
+                "object_id": object_id,
+                "normalized": {
+                    "path": f"normalized/{kind}.json",
+                    "sha256": _sha256(normalized_bytes),
+                    "observations": len(imported.facts)
+                    if isinstance(imported, ImportedFinancials)
+                    else len(imported.events),
+                },
+                "raw": {"stored": False, "sha256": imported.response_hash},
+            }
+        )
+        destination = self._objects / object_id
+        if not destination.exists():
+            temporary = Path(tempfile.mkdtemp(prefix=".pending-", dir=self._objects))
+            try:
+                normalized_dir = temporary / "normalized"
+                normalized_dir.mkdir()
+                (normalized_dir / f"{kind}.json").write_bytes(normalized_bytes)
+                (temporary / "manifest.json").write_bytes(_json_bytes(manifest))
+                os.rename(temporary, destination)
+            except BaseException:
+                shutil.rmtree(temporary, ignore_errors=True)
+                raise
+        stored = self.verify(object_id)
+        self._write_ref(
+            request.source_profile,
+            request.instrument.mic,
+            request.instrument.symbol,
+            kind,
+            object_id,
+        )
+        return stored
+
+    def _write_ref(self, profile: str, mic: str, symbol: str, kind: str, object_id: str) -> None:
+        self._validate_kind(kind)
         directory = self._refs / profile
         self._ensure_directory(directory)
-        destination = directory / f"{imported.instrument.mic}-{imported.instrument.symbol}.json"
+        suffix = "" if kind == "daily_bars" else f"-{kind}"
+        destination = directory / f"{mic}-{symbol}{suffix}.json"
         if destination.is_symlink():
             raise ValueError("snapshot reference must not be a symbolic link")
-        payload = _json_bytes({"kind": "daily_bars", "object_id": object_id})
+        payload = _json_bytes({"kind": kind, "object_id": object_id})
         with tempfile.NamedTemporaryFile(dir=directory, delete=False) as handle:
             temporary = Path(handle.name)
             handle.write(payload)
@@ -194,7 +364,7 @@ class SnapshotStore:
         stored = self.show(object_id)
         manifest = stored.manifest
         normalized_directory = self._objects / object_id / "normalized"
-        normalized_path = normalized_directory / "daily-bars.json"
+        normalized_path = self._objects / object_id / self._normalized_path(manifest)
         self._require_real_directories(normalized_directory)
         if normalized_path.is_symlink() or not normalized_path.is_file():
             raise ValueError("normalized snapshot must be a regular file")
@@ -212,12 +382,14 @@ class SnapshotStore:
             raise ValueError("snapshot object ID does not match its canonical content")
         return stored
 
-    def resolve(self, profile: str, instrument: str) -> StoredSnapshot:
+    def resolve(self, profile: str, instrument: str, kind: str = "daily_bars") -> StoredSnapshot:
         self._validate_profile(profile)
+        self._validate_kind(kind)
         if INSTRUMENT_KEY.fullmatch(instrument) is None:
             raise ValueError("instrument must use uppercase MIC:SYMBOL form")
         profile_directory = self._refs / profile
-        ref = profile_directory / f"{instrument.replace(':', '-')}.json"
+        suffix = "" if kind == "daily_bars" else f"-{kind}"
+        ref = profile_directory / f"{instrument.replace(':', '-')}{suffix}.json"
         if profile_directory.exists():
             self._require_real_directories(
                 self._root.parent, self._root, self._refs, profile_directory
@@ -226,12 +398,15 @@ class SnapshotStore:
             command = "marketsieve source import PATH"
             raise LookupError(f"snapshot not found; run '{command}' for {profile} {instrument}")
         document = json.loads(ref.read_bytes())
+        if document.get("kind") != kind:
+            raise ValueError("snapshot reference kind is invalid")
         return self.verify(document["object_id"])
 
     def normalized(self, object_id: str) -> dict[str, Any]:
         self.verify(object_id)
         normalized_directory = self._objects / object_id / "normalized"
-        path = normalized_directory / "daily-bars.json"
+        manifest = self.show(object_id).manifest
+        path = self._objects / object_id / self._normalized_path(manifest)
         self._require_real_directories(normalized_directory)
         if path.is_symlink() or not path.is_file():
             raise ValueError("normalized snapshot must not be a symbolic link")
@@ -289,6 +464,27 @@ class SnapshotStore:
             raise ValueError(
                 "source profile must contain only letters, numbers, dash, or underscore"
             )
+
+    @staticmethod
+    def _validate_kind(kind: str) -> None:
+        if kind not in SNAPSHOT_KINDS:
+            raise ValueError("snapshot kind is not supported")
+
+    @staticmethod
+    def _normalized_path(manifest: dict[str, Any]) -> str:
+        expected = {
+            "daily_bars": "normalized/daily-bars.json",
+            "financials": "normalized/financials.json",
+            "events": "normalized/events.json",
+        }
+        kind = manifest.get("kind")
+        normalized = manifest.get("normalized")
+        if not isinstance(kind, str) or not isinstance(normalized, dict):
+            raise ValueError("normalized snapshot path is invalid for its kind")
+        path = normalized.get("path")
+        if kind not in expected or path != expected[kind]:
+            raise ValueError("normalized snapshot path is invalid for its kind")
+        return path
 
     def _ensure_directory(self, path: Path) -> None:
         current = self._root
