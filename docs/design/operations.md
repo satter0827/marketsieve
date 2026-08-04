@@ -65,7 +65,7 @@ the operation to stop. They do not expose environment secrets or silently switch
 
 ## Unsupported operation
 
-Scheduled execution, non-console delivery, provider fallback, and LLM-assisted reporting are not
+Scheduled execution, non-console delivery, provider fallback, and LLM-generated calculations are not
 supported operations. When later milestones introduce them,
 their configuration, recovery, observability, and secret-handling procedures must be added here in
 the same change.
@@ -145,3 +145,18 @@ provider requires explicit provider configuration and `--allow-cloud` on every i
 shows the credential-free fact payload without contacting a model. Provider, model, prompt version,
 fact-catalog hash, selected fact identifiers, output status, and fallback reason are recorded; API
 keys and unrestricted prompts or responses are not written to logs.
+
+The implemented configuration contains only model destinations:
+
+```toml
+[agent.providers.lmstudio]
+model = "locally-installed-model"
+endpoint = "http://127.0.0.1:1234/v1"
+
+[agent.providers.openai]
+model = "explicit-cloud-model"
+```
+
+Cloud credentials are read from `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, or `GOOGLE_API_KEY` only
+after a non-dry-run invocation selects that provider. `LMSTUDIO_API_TOKEN` is optional. Dry-run and
+doctor perform no model request and do not read a cloud credential.

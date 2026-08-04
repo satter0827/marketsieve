@@ -12,6 +12,7 @@ from typing import Any
 import click
 
 from marketsieve_cli.bootstrap import (
+    build_agent_service,
     build_console_output,
     build_diagnostics_service,
     build_snapshot_service,
@@ -21,6 +22,14 @@ from marketsieve_cli.bootstrap import (
 OUTPUT_CHOICES = ("auto", "rich", "text", "json")
 CAPABILITIES_SCHEMA_VERSION = "2.0.0"
 COMMAND_METADATA = {
+    "agent doctor": {
+        "output_schema": "urn:marketsieve:schema:agent-result:1.0.0",
+        "effects": {"network": False, "secrets": False, "optional_writes": []},
+    },
+    "agent explain": {
+        "output_schema": "urn:marketsieve:schema:agent-result:1.0.0",
+        "effects": {"network": True, "secrets": True, "optional_writes": []},
+    },
     "capabilities": {
         "output_schema": "urn:marketsieve:schema:capabilities-result:2.0.0",
         "effects": {"network": False, "secrets": False, "optional_writes": []},
@@ -201,6 +210,87 @@ def report(
         console.emit_error("report_failed", str(error))
         raise click.exceptions.Exit(1) from None
     console.emit_document(document, title="Equity report")
+
+
+@main.group()
+def agent() -> None:
+    """Explain verified equity facts without adding market values."""
+
+
+@agent.command("doctor")
+@click.argument(
+    "provider", type=click.Choice(("fake", "lmstudio", "openai", "anthropic", "google"))
+)
+@click.option("--allow-remote", is_flag=True, help="Allow a non-loopback LM Studio endpoint.")
+@output_option
+@click.pass_context
+def agent_doctor(
+    context: click.Context, provider: str, allow_remote: bool, output_mode: str
+) -> None:
+    """Validate one model configuration without contacting a model."""
+
+    console = _console(context, output_mode)
+    try:
+        service = build_agent_service(context.obj["config_path"])
+        document = service.doctor(provider, allow_remote=allow_remote)  # type: ignore[attr-defined]
+    except ImportError:
+        console.emit_error("agent_not_installed", "install the marketsieve-cli agent extra")
+        raise click.exceptions.Exit(1) from None
+    console.emit_document(document, title="Agent diagnostics")
+    if document["status"] != "ready":
+        raise click.exceptions.Exit(1)
+
+
+@agent.command("explain")
+@click.argument("instrument")
+@click.option("--source-profile", required=True, help="Select the exact stored source profile.")
+@click.option(
+    "--provider",
+    type=click.Choice(("fake", "lmstudio", "openai", "anthropic", "google")),
+    default="fake",
+    show_default=True,
+)
+@click.option("--allow-cloud", is_flag=True, help="Allow this invocation to contact a cloud model.")
+@click.option("--allow-remote", is_flag=True, help="Allow a non-loopback LM Studio endpoint.")
+@click.option("--dry-run", is_flag=True, help="Show the credential-free payload without a request.")
+@output_option
+@click.pass_context
+def agent_explain(
+    context: click.Context,
+    instrument: str,
+    source_profile: str,
+    provider: str,
+    allow_cloud: bool,
+    allow_remote: bool,
+    dry_run: bool,
+    output_mode: str,
+) -> None:
+    """Explain one verified view through exactly one selected provider."""
+
+    console = _console(context, output_mode)
+    try:
+        service = build_agent_service(context.obj["config_path"])
+        document = service.explain(  # type: ignore[attr-defined]
+            instrument,
+            source_profile,
+            provider,
+            context.obj["locale"],
+            allow_cloud=allow_cloud,
+            allow_remote=allow_remote,
+            dry_run=dry_run,
+        )
+    except ImportError:
+        console.emit_error("agent_not_installed", "install the marketsieve-cli agent extra")
+        raise click.exceptions.Exit(1) from None
+    except (LookupError, RuntimeError, TypeError, ValueError, OSError) as error:
+        console.emit_error("agent_failed", str(error))
+        raise click.exceptions.Exit(1) from None
+    if document.get("status") == "template":
+        console.emit_warning(
+            "agent_template_fallback",
+            f"model output was not used ({document.get('fallback_reason')})",
+        )
+    console.emit_document(document, title="Agent explanation")
 
 
 @main.command()

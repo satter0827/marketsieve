@@ -247,3 +247,7 @@ class ConsoleOutput:
             return
         prefix = "エラー" if self._locale == "ja" else "ERROR"
         self._stderr.write(f"{prefix} {code}: {message}\n")
+
+    def emit_warning(self, code: str, message: str) -> None:
+        prefix = "警告" if self._locale == "ja" else "WARNING"
+        self._stderr.write(f"{prefix} {code}: {message}\n")

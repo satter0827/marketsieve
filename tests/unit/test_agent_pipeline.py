@@ -84,6 +84,13 @@ def test_numeric_connection_uses_template() -> None:
     assert "価格は" not in result.text
 
 
+@pytest.mark.parametrize("connection", ["価格は二千五百円です。", "Return is five percent."])
+def test_spelled_out_numeric_connection_uses_template(connection: str) -> None:
+    result = explain(view(), model=FakeModel([response(connection=connection)]))
+
+    assert result.status == "template"
+
+
 def test_recommendation_connection_uses_template() -> None:
     result = explain(view(), model=FakeModel([response(connection="買いを推奨します。")]))
 

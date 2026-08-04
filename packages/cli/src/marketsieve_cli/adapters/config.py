@@ -36,6 +36,13 @@ class SourceBinding:
     settings: dict[str, str]
 
 
+@dataclass(frozen=True, slots=True)
+class AgentProvider:
+    name: str
+    model: str
+    endpoint: str | None = None
+
+
 class Configuration:
     """Load source profiles without environment-driven setting overrides."""
 
@@ -105,3 +112,23 @@ class Configuration:
             timezone=timezone,
             sources=sources,
         )
+
+    def agent_provider(self, name: str) -> AgentProvider:
+        agent = self._document().get("agent", {})
+        if not isinstance(agent, dict):
+            raise ValueError("agent configuration must be a TOML table")
+        providers = agent.get("providers", {})
+        if not isinstance(providers, dict) or name not in providers:
+            raise LookupError(
+                f"agent provider {name!r} is not configured; add it to marketsieve.toml"
+            )
+        value = providers[name]
+        if not isinstance(value, dict) or not isinstance(value.get("model"), str):
+            raise ValueError(f"agent provider {name!r} must declare model")
+        endpoint = value.get("endpoint")
+        if endpoint is not None and not isinstance(endpoint, str):
+            raise ValueError(f"agent provider {name!r} endpoint must be a string")
+        unknown = set(value) - {"model", "endpoint"}
+        if unknown:
+            raise ValueError(f"agent provider {name!r} contains unsupported settings")
+        return AgentProvider(name=name, model=value["model"], endpoint=endpoint)

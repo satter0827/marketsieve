@@ -112,6 +112,9 @@ It covers invalid schemas, unknown facts, numeric additions, recommendation lang
 cloud consent, loopback restrictions, and deterministic fallback. Fake tests prove orchestration
 and safety behavior, not provider model behavior.
 
+CLI acceptance additionally verifies Fake as the default, a credential-free cloud dry-run over the
+same catalog hash, configuration-only local doctor, and refusal of cloud execution without consent.
+
 Secret acceptance scans tracked files, the reviewed diff, generated evidence, distributions, and
 release assets without printing matched values. CI also scans repository history. Tests ensure
 credentials are removed from URLs, headers, exceptions, logs, subprocess environments, and stored

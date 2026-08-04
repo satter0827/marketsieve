@@ -22,7 +22,9 @@ cloud consent, disables storage and tools, and has an independent mocked-transpo
 Anthropic adapter separately implements the fixed Messages API, API-version, authentication, and
 text-block contract with the same consent and request bounds. Google uses the fixed Gemini
 Interactions endpoint, header-based authentication, JSON response format, and a completed
-single-text contract. CLI exposure remains a later 0.3 milestone.
+single-text contract. The CLI loads this optional distribution only for `agent` commands, derives
+its fact catalog from the same verified offline inspection view, and never gives a model tools,
+source access, or calculation ownership.
 
 The `marketsieve_cli` package owns the command-line interface, offline diagnostics, use-case
 orchestration, and console presentation. It is independently installable and is never included in

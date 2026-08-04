@@ -117,6 +117,8 @@ def test_capabilities_match_click_commands_and_validate_schema() -> None:
     document = json.loads(result.stdout)
     validate("capabilities-result", document, major=2)
     assert [item["name"] for item in document["commands"]] == [
+        "agent doctor",
+        "agent explain",
         "analyze atr",
         "analyze ema",
         "analyze macd",
@@ -258,6 +260,80 @@ def test_csv_import_snapshot_and_price_inspect_are_one_offline_path(tmp_path: Pa
     analysis = json.loads(analyzed.stdout)
     validate("indicator-result", analysis)
     assert analysis["indicator"]["values"] == {"sma": "108.5"}
+
+
+def test_agent_fake_and_cloud_dry_run_share_the_offline_fact_catalog(tmp_path: Path) -> None:
+    runner = CliRunner()
+    bundle = write_csv_bundle(tmp_path / "agent-bundle")
+    with runner.isolated_filesystem():
+        Path("marketsieve.toml").write_text(
+            "[agent.providers.openai]\n"
+            'model = "configured-cloud-model"\n'
+            "[agent.providers.lmstudio]\n"
+            'model = "configured-local-model"\n',
+            encoding="utf-8",
+        )
+        assert runner.invoke(main, ["source", "import", str(bundle)]).exit_code == 0
+        fake = runner.invoke(
+            main,
+            [
+                "agent",
+                "explain",
+                "XTKS:7203",
+                "--source-profile",
+                "offline-jp",
+                "--output",
+                "json",
+            ],
+        )
+        preview = runner.invoke(
+            main,
+            [
+                "agent",
+                "explain",
+                "XTKS:7203",
+                "--source-profile",
+                "offline-jp",
+                "--provider",
+                "openai",
+                "--dry-run",
+                "--output",
+                "json",
+            ],
+        )
+        local_doctor = runner.invoke(main, ["agent", "doctor", "lmstudio", "--output", "json"])
+        refused_cloud = runner.invoke(
+            main,
+            [
+                "agent",
+                "explain",
+                "XTKS:7203",
+                "--source-profile",
+                "offline-jp",
+                "--provider",
+                "openai",
+                "--output",
+                "json",
+            ],
+        )
+
+    assert fake.exit_code == 0, fake.output
+    fake_document = json.loads(fake.stdout)
+    validate("agent-result", fake_document)
+    assert fake_document["provider"] == "fake"
+    assert fake_document["status"] == "model"
+    assert "not investment advice" in fake_document["text"]
+    assert preview.exit_code == 0, preview.output
+    preview_document = json.loads(preview.stdout)
+    validate("agent-result", preview_document)
+    assert preview_document["operation"] == "dry_run"
+    assert preview_document["catalog_hash"] == fake_document["catalog_hash"]
+    assert preview_document["model"] == "configured-cloud-model"
+    assert "credential" not in preview_document["payload"].casefold()
+    assert local_doctor.exit_code == 0
+    validate("agent-result", json.loads(local_doctor.stdout))
+    assert refused_cloud.exit_code == 1
+    assert "cloud consent" in refused_cloud.stderr
 
 
 def test_report_projects_the_same_offline_equity_view(tmp_path: Path) -> None:

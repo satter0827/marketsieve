@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import TextIO
 
@@ -44,6 +45,15 @@ def build_snapshot_service(config_path: Path | None = None) -> SnapshotService:
         SnapshotStore(Path(".marketsieve/data")),
         Configuration.resolve(config_path),
     )
+
+
+def build_agent_service(config_path: Path | None = None) -> object:
+    """Build the optional explanation service only when its command is invoked."""
+
+    from marketsieve_cli.application.agent import AgentService
+
+    configuration = Configuration.resolve(config_path)
+    return AgentService(build_snapshot_service(config_path), configuration, os.environ)
 
 
 def sdk_version() -> str:

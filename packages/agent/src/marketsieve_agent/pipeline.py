@@ -31,11 +31,35 @@ UNSAFE_TERMS = (
     "recommend",
     "should invest",
     "strong pick",
+    "bullish",
+    "bearish",
+    "outperform",
+    "underperform",
+    "undervalued",
+    "overvalued",
+    "target price",
+    "entry point",
+    "exit point",
     "買い",
     "売り",
     "保有すべき",
     "推奨",
     "投資すべき",
+    "強気",
+    "弱気",
+    "割安",
+    "割高",
+    "目標株価",
+    "エントリー",
+    "利確",
+    "損切り",
+)
+NUMBER_WORDS = re.compile(
+    r"\b(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|hundred|thousand|million|billion|trillion)\b",
+    re.IGNORECASE,
+)
+NON_DIGIT_NUMERIC = re.compile(
+    "[〇零一二三四五六七八九十百千万億兆%\N{FULLWIDTH PERCENT SIGN}$¥￥€£]"
 )
 DISCLAIMER = "Market data and derived indicators only; not investment advice."
 DEFAULT_CONNECTIONS = {
@@ -414,6 +438,8 @@ def _validate_connection(text: str) -> None:
     if (
         len(text) > 160
         or re.search(r"\d", text)
+        or NUMBER_WORDS.search(text)
+        or NON_DIGIT_NUMERIC.search(text)
         or any(term in normalized for term in UNSAFE_TERMS)
     ):
         raise ValueError("model connection contains numeric or unsafe content")
