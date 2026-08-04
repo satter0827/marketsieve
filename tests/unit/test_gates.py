@@ -132,6 +132,16 @@ def test_review_changes_normalize_renames_as_delete_and_add(
     ]
 
 
+def test_review_patch_redacts_removed_credentials(tmp_path: Path) -> None:
+    value = "sk-" + "A" * 24
+    patch = tmp_path / "changes.patch"
+    patch.write_text(f"-OPENAI_API_KEY={value}\n+safe\n", encoding="utf-8")
+
+    review_gate.redact_patch(patch)
+
+    assert patch.read_text(encoding="utf-8") == "-[REDACTED CREDENTIAL]\n+safe\n"
+
+
 def create_review_bundle(tmp_path: Path) -> Path:
     head = subprocess.run(
         ("git", "rev-parse", "HEAD"), check=True, capture_output=True, text=True

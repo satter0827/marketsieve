@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import io
 import re
 import subprocess
@@ -26,7 +27,7 @@ PLACEHOLDERS = {"", "example", "placeholder", "replace-me", "set-me"}
 TEMPLATE_PLACEHOLDER = re.compile(r"^(?:\{[^{}]+}|<[^<>]+>)$")
 REFERENCE_VALUE = re.compile(
     r"^(?:"
-    r"\$\{[A-Z0-9_]+}|%[A-Z0-9_]+%|"
+    r"\$\{?[A-Z0-9_]+}?|%[A-Z0-9_]+%|"
     r"(?:os\.)?(?:environ(?:\[[^]]+]|\.get\([^)]*\))|getenv\([^)]*\))|"
     r"(?:config|settings|secret|secrets)\.[A-Z_][A-Z0-9_.]*|"
     r"[A-Z_][A-Z0-9_]*\[[^]]+])$",
@@ -82,11 +83,16 @@ HEADER_CREDENTIALS = (
     ),
 )
 ASSIGNMENT = re.compile(
-    r"(?i)^\s*(?:export\s+)?(?:[{,]\s*)?[\"']?"
+    r"(?i)(?:^|[{,]\s*)\s*(?:export\s+)?[\"']?"
     r"([A-Z0-9_.-]*(?:API[-_]?KEY|ACCESS[-_]?KEY|SECRET[-_]?KEY|PRIVATE[-_]?KEY|"
     r"ACCESS[-_]?TOKEN|AUTH[-_]?TOKEN|REFRESH[-_]?TOKEN|TOKEN|CLIENT[-_]?SECRET|"
     r"SECRET|PASSWORD))[\"']?"
-    r"\s*(?:=|:)\s*(.+?)\s*,?\s*$"
+    r"\s*(?:=|:)\s*(\"[^\"\n]*\"|'[^'\n]*'|[^,}\s]+)"
+)
+CREDENTIAL_NAME = re.compile(
+    r"(?i)(?:^|[_.-])(?:API[-_]?KEY|ACCESS[-_]?KEY|SECRET[-_]?KEY|PRIVATE[-_]?KEY|"
+    r"ACCESS[-_]?TOKEN|AUTH[-_]?TOKEN|REFRESH[-_]?TOKEN|TOKEN|CLIENT[-_]?SECRET|"
+    r"SECRET|PASSWORD)$"
 )
 
 
@@ -140,24 +146,99 @@ def _read_text(path: Path) -> str | None:
 
 
 def _is_literal_credential(value: str) -> bool:
-    normalized = value.strip().strip("\"'")
+    raw = value.strip()
+    quoted = len(raw) >= 2 and raw[0] in "\"'" and raw[-1] == raw[0]
+    normalized = raw[1:-1] if quoted else raw
+    dynamic = not quoted and (
+        normalized in {"None", "True", "False"}
+        or ("(" in normalized and ")" in normalized)
+        or ("[" in normalized and "]" in normalized)
+        or re.match(r"(?i)^[fbru]+[\"']", normalized) is not None
+    )
     return (
-        normalized.lower() not in PLACEHOLDERS
+        not dynamic
+        and normalized.lower() not in PLACEHOLDERS
         and TEMPLATE_PLACEHOLDER.fullmatch(normalized) is None
         and REFERENCE_VALUE.fullmatch(normalized) is None
     )
 
 
-def _scan_text(label: str, text: str) -> list[Finding]:
+def _python_label(label: str) -> bool:
+    return label.rsplit("!", maxsplit=1)[-1].rsplit(":", maxsplit=1)[-1].endswith(".py")
+
+
+def _python_target_name(node: ast.expr) -> str | None:
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        return node.attr
+    return None
+
+
+def _python_literal(node: ast.expr | None) -> str | None:
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    return None
+
+
+def _scan_python_assignments(label: str, text: str) -> list[Finding]:
+    try:
+        tree = ast.parse(text)
+    except SyntaxError:
+        return [Finding(label, 0, "unscannable_content")]
     findings: list[Finding] = []
+    for node in ast.walk(tree):
+        targets: tuple[ast.expr, ...] = ()
+        value: ast.expr | None = None
+        if isinstance(node, ast.Assign):
+            targets = tuple(node.targets)
+            value = node.value
+        elif isinstance(node, (ast.AnnAssign, ast.NamedExpr)):
+            targets = (node.target,)
+            value = node.value
+        literal = _python_literal(value)
+        if (
+            literal is not None
+            and any(
+                (name := _python_target_name(target)) is not None
+                and CREDENTIAL_NAME.search(name) is not None
+                for target in targets
+            )
+            and _is_literal_credential(f'"{literal}"')
+        ):
+            findings.append(Finding(label, getattr(node, "lineno", 0), "credential_assignment"))
+        if isinstance(node, ast.Dict):
+            for key, item in zip(node.keys, node.values, strict=True):
+                key_literal = _python_literal(key)
+                item_literal = _python_literal(item)
+                if (
+                    key_literal is not None
+                    and CREDENTIAL_NAME.search(key_literal) is not None
+                    and item_literal is not None
+                    and _is_literal_credential(f'"{item_literal}"')
+                ):
+                    findings.append(Finding(label, node.lineno, "credential_assignment"))
+        if isinstance(node, ast.keyword) and node.arg is not None:
+            keyword_literal = _python_literal(node.value)
+            if (
+                CREDENTIAL_NAME.search(node.arg) is not None
+                and keyword_literal is not None
+                and _is_literal_credential(f'"{keyword_literal}"')
+            ):
+                findings.append(Finding(label, node.value.lineno, "credential_assignment"))
+    return findings
+
+
+def _scan_text(label: str, text: str, *, scan_assignments: bool = True) -> list[Finding]:
+    findings: list[Finding] = []
+    python_source = scan_assignments and _python_label(label)
+    if python_source:
+        findings.extend(_scan_python_assignments(label, text))
     for line_number, line in enumerate(text.splitlines(), start=1):
-        assignment = ASSIGNMENT.match(line)
-        value = assignment.group(2).strip().removesuffix(",") if assignment else ""
-        if assignment and line.lstrip().startswith("{"):
-            value = value.removesuffix("}").rstrip()
-        value = value.strip("\"'")
-        if assignment and _is_literal_credential(value):
-            findings.append(Finding(label, line_number, "credential_assignment"))
+        if scan_assignments and not python_source:
+            for assignment in ASSIGNMENT.finditer(line):
+                if _is_literal_credential(assignment.group(2)):
+                    findings.append(Finding(label, line_number, "credential_assignment"))
         for match in (*URL_CREDENTIAL.finditer(line), *URL_USERINFO_CREDENTIAL.finditer(line)):
             if _is_literal_credential(match.group(1)):
                 findings.append(Finding(label, line_number, "url_credential"))
@@ -266,7 +347,7 @@ def _scan_added_lines(label: str, patch: bytes) -> list[Finding]:
         for line in patch.decode("utf-8", errors="replace").splitlines()
         if line.startswith("+") and not line.startswith("+++")
     )
-    return _scan_text(label, additions)
+    return _scan_text(label, additions, scan_assignments=False)
 
 
 def scan_paths(paths: Iterable[Path]) -> list[Finding]:

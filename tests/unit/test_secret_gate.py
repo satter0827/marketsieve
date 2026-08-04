@@ -188,6 +188,70 @@ def test_secret_scan_rejects_dotted_configuration_keys(tmp_path: Path, separator
     assert [finding.kind for finding in scan_paths((path,))] == ["credential_assignment"]
 
 
+@pytest.mark.parametrize(
+    "case",
+    ("mapping", "compact_json", "inline_yaml"),
+)
+def test_secret_scan_rejects_embedded_credential_fields(tmp_path: Path, case: str) -> None:
+    documents = {
+        "mapping": 'payload = {"' + "api_key" + '": "opaque-production-credential"}\n',
+        "compact_json": '{"ok":true,"' + "JQUANTS_API_KEY" + '":"opaque-production-credential"}\n',
+        "inline_yaml": "provider: {" + "api_key" + ": opaque-production-credential}\n",
+    }
+    document = documents[case]
+    path = write(tmp_path / "request.txt", document)
+
+    assert "credential_assignment" in {finding.kind for finding in scan_paths((path,))}
+
+
+@pytest.mark.parametrize(
+    "expression",
+    (
+        'response.json()["access_token"]',
+        "getpass()",
+        "credential_provider.load()",
+        "None",
+    ),
+)
+def test_secret_scan_accepts_dynamic_credential_expressions(
+    tmp_path: Path, expression: str
+) -> None:
+    key = "provider_" + "token"
+    path = write(tmp_path / "provider.py", f"{key} = {expression}\n")
+
+    assert scan_paths((path,)) == []
+
+
+def test_secret_scan_accepts_shell_environment_reference(tmp_path: Path) -> None:
+    key = "provider_" + "token"
+    path = write(tmp_path / "settings.txt", f"{key} = $OPENAI_API_KEY\n")
+
+    assert scan_paths((path,)) == []
+
+
+def test_secret_scan_rejects_python_literal_credentials(tmp_path: Path) -> None:
+    key = "provider_" + "token"
+    path = write(tmp_path / "provider.py", f'{key} = "opaque-production-credential"\n')
+
+    assert [finding.kind for finding in scan_paths((path,))] == ["credential_assignment"]
+
+
+def test_secret_scan_rejects_python_dict_and_keyword_credentials(tmp_path: Path) -> None:
+    key = "api_" + "key"
+    source = (
+        f'headers = {{"{key}": "opaque-production-credential"}}\ncall({key}="another-credential")\n'
+    )
+    path = write(
+        tmp_path / "provider.py",
+        source,
+    )
+
+    assert [finding.kind for finding in scan_paths((path,))] == [
+        "credential_assignment",
+        "credential_assignment",
+    ]
+
+
 def test_secret_scan_rejects_sensitive_tracked_path(tmp_path: Path) -> None:
     path = write(tmp_path / ".env", "SAFE=placeholder\n")
 
@@ -248,8 +312,7 @@ def test_history_scan_checks_each_commit(monkeypatch: pytest.MonkeyPatch) -> Non
     findings = scan_history("base")
 
     assert [(finding.path, finding.kind) for finding in findings] == [
-        ("git-commit:first", "credential_assignment"),
-        ("git-commit:first", "openai_key"),
+        ("git-commit:first", "openai_key")
     ]
 
 
