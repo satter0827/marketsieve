@@ -138,6 +138,87 @@ class LmStudioModel:
         return content
 
 
+class OpenAIModel:
+    """One-attempt OpenAI Responses API adapter with mandatory cloud consent."""
+
+    provider = "openai"
+    endpoint = "https://api.openai.com/v1/responses"
+
+    def __init__(
+        self,
+        *,
+        model: str,
+        api_key: str,
+        allow_cloud: bool,
+        transport: HttpTransport | None = None,
+        timeout: float = DEFAULT_TIMEOUT_SECONDS,
+        max_output_tokens: int = DEFAULT_MAX_OUTPUT_TOKENS,
+    ) -> None:
+        if not allow_cloud:
+            raise ValueError("OpenAI requires explicit cloud consent")
+        if not model.strip():
+            raise ValueError("OpenAI model must be configured")
+        if not api_key:
+            raise ValueError("OpenAI credential is required")
+        if timeout <= 0 or max_output_tokens <= 0:
+            raise ValueError("OpenAI request limits must be positive")
+        self.model = model
+        self._api_key = api_key
+        self._transport = transport or UrlLibTransport()
+        self._timeout = timeout
+        self._max_output_tokens = max_output_tokens
+
+    def invoke(self, prompt: str) -> str:
+        payload = {
+            "model": self.model,
+            "instructions": "Return one JSON object only. Do not call tools or add facts.",
+            "input": prompt,
+            "temperature": 0,
+            "max_output_tokens": self._max_output_tokens,
+            "tools": [],
+            "tool_choice": "none",
+            "store": False,
+        }
+        response = self._transport.post(
+            self.endpoint,
+            headers={
+                "Content-Type": "application/json",
+                AUTHORIZATION_HEADER: f"{BEARER_SCHEME} {self._api_key}",
+            },
+            body=json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode(),
+            timeout=self._timeout,
+        )
+        if response.status < 200 or response.status >= 300:
+            raise RuntimeError(f"OpenAI request failed with HTTP {response.status}")
+        try:
+            document = json.loads(response.body)
+            output = document["output"]
+        except (KeyError, TypeError, json.JSONDecodeError) as error:
+            raise RuntimeError("OpenAI returned an invalid response") from error
+        if not isinstance(output, list):
+            raise RuntimeError("OpenAI returned an invalid response")
+        texts: list[str] = []
+        for item in output:
+            if (
+                not isinstance(item, dict)
+                or item.get("type") != "message"
+                or item.get("role") != "assistant"
+            ):
+                continue
+            content = item.get("content")
+            if not isinstance(content, list):
+                continue
+            for part in content:
+                if not isinstance(part, dict) or part.get("type") != "output_text":
+                    continue
+                text = part.get("text")
+                if isinstance(text, str):
+                    texts.append(text)
+        if len(texts) != 1 or not texts[0]:
+            raise RuntimeError("OpenAI returned no single text response")
+        return texts[0]
+
+
 def _validated_endpoint(endpoint: str, *, allow_remote: bool) -> str:
     parsed = urlsplit(endpoint)
     if parsed.scheme not in {"http", "https"} or parsed.hostname is None:
