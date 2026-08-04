@@ -1,5 +1,6 @@
 import json
 import sys
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 
@@ -12,6 +13,9 @@ from marketsieve.data.daily import DailyBarRequest, DailyBarSeries
 from marketsieve.synthetic.daily import JP_BARS, SyntheticDailySource
 from marketsieve_cli.application.diagnostics import DiagnosticCheck, DiagnosticsService
 from marketsieve_cli.interfaces.cli import entrypoint, main
+from marketsieve_extension_api import DailyBarFetchRequest, ImportedDailyBars, InstrumentProfile
+from marketsieve_source_csv import CsvDailyBarImporter
+from marketsieve_source_jquants import JQuantsSource
 
 SCHEMAS = Path("schemas")
 
@@ -136,7 +140,7 @@ def test_capabilities_match_click_commands_and_validate_schema() -> None:
 
     assert result.exit_code == 0
     document = json.loads(result.stdout)
-    validate("capabilities-result", document)
+    validate("capabilities-result", document, major=2)
     assert [item["name"] for item in document["commands"]] == [
         "analyze atr",
         "analyze ema",
@@ -152,6 +156,8 @@ def test_capabilities_match_click_commands_and_validate_schema() -> None:
         "snapshot list",
         "snapshot show",
         "snapshot verify",
+        "source doctor",
+        "source fetch",
         "source import",
         "source list",
     ]
@@ -160,12 +166,33 @@ def test_capabilities_match_click_commands_and_validate_schema() -> None:
     assert {option["name"] for option in document["global_options"]} == {
         "log_file",
         "log_level",
+        "config_path",
     }
     assert report["effects"] == {
         "network": False,
         "optional_writes": ["log_file"],
         "secrets": False,
     }
+
+
+def test_configuration_errors_do_not_block_commands_that_do_not_read_configuration() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        Path("marketsieve.toml").write_text("[broken", encoding="utf-8")
+
+        sources = runner.invoke(main, ["source", "list", "--output", "json"])
+        snapshots = runner.invoke(main, ["snapshot", "list", "--output", "json"])
+        missing_sources = runner.invoke(
+            main,
+            ["--config", "missing.toml", "source", "list", "--output", "json"],
+        )
+
+    assert sources.exit_code == 0
+    validate("source-result", json.loads(sources.stdout))
+    assert snapshots.exit_code == 0
+    validate("snapshot-result", json.loads(snapshots.stdout))
+    assert missing_sources.exit_code == 0
+    validate("source-result", json.loads(missing_sources.stdout))
 
 
 def test_structured_logs_are_opt_in_and_separate() -> None:
@@ -291,6 +318,85 @@ def test_csv_import_snapshot_and_price_inspect_are_one_offline_path(tmp_path: Pa
     assert analysis["indicator"]["values"] == {"sma": "108.5"}
 
 
+def test_jquants_doctor_and_fetch_use_only_explicit_profile(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    bundle = write_csv_bundle(tmp_path / "provider-fixture")
+    imported = CsvDailyBarImporter().import_bundle(bundle)
+
+    def fake_fetch(_: JQuantsSource, request: DailyBarFetchRequest) -> ImportedDailyBars:
+        assert request.source_profile == "japan"
+        return replace(
+            imported,
+            source_profile="japan",
+            source_name="jquants",
+            source_version="jquants-api-v2",
+            dataset="equities/master+equities/bars/daily",
+            fetch_request=request,
+            instrument_profile=InstrumentProfile(
+                imported.bars[-1].trading_date,
+                None,
+                (("ja", "テスト株式会社"),),
+                (("market_code", "0111"),),
+            ),
+        )
+
+    monkeypatch.setattr(JQuantsSource, "fetch", fake_fetch)
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        Path("marketsieve.toml").write_text(
+            "[source_profiles.japan]\n"
+            'currency = "JPY"\n'
+            'timezone = "Asia/Tokyo"\n'
+            "[source_profiles.japan.daily_bars]\n"
+            'plugin = "jquants"\n',
+            encoding="utf-8",
+        )
+        missing = runner.invoke(
+            main,
+            ["source", "doctor", "japan", "--output", "json"],
+            env={"JQUANTS_API_KEY": ""},
+        )
+        missing_snapshot = runner.invoke(
+            main,
+            ["inspect", "XTKS:7203", "--source-profile", "japan", "--output", "json"],
+        )
+        fetched = runner.invoke(
+            main,
+            [
+                "source",
+                "fetch",
+                "japan",
+                "XTKS:7203",
+                "--start",
+                "2026-07-30",
+                "--end",
+                "2026-07-31",
+                "--output",
+                "json",
+            ],
+            env={"JQUANTS_API_KEY": "example"},
+        )
+        inspected = runner.invoke(
+            main,
+            ["inspect", "XTKS:7203", "--source-profile", "japan", "--output", "json"],
+        )
+
+    assert missing.exit_code == 1
+    validate("source-result", json.loads(missing.stdout))
+    assert missing_snapshot.exit_code == 1
+    assert (
+        "marketsieve source fetch japan XTKS:7203" in json.loads(missing_snapshot.stderr)["message"]
+    )
+    assert fetched.exit_code == 0
+    fetch_document = json.loads(fetched.stdout)
+    validate("source-result", fetch_document)
+    assert fetch_document["status"] == "fetched"
+    inspection = json.loads(inspected.stdout)
+    validate("inspect-result", inspection)
+    assert inspection["instrument"]["profile"]["names"]["ja"] == "テスト株式会社"
+
+
 def test_inspect_never_fetches_and_explains_missing_snapshot() -> None:
     runner = CliRunner()
     with runner.isolated_filesystem():
@@ -310,3 +416,30 @@ def test_inspect_never_fetches_and_explains_missing_snapshot() -> None:
     error = json.loads(result.stderr)
     assert error["error"] == "inspect_failed"
     assert "marketsieve source import PATH" in error["message"]
+
+
+def test_configured_import_only_source_explains_import_recovery() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        Path("marketsieve.toml").write_text(
+            "[source_profiles.offline-jp]\n"
+            'currency = "JPY"\n'
+            'timezone = "Asia/Tokyo"\n'
+            "[source_profiles.offline-jp.daily_bars]\n"
+            'plugin = "csv"\n',
+            encoding="utf-8",
+        )
+        result = runner.invoke(
+            main,
+            [
+                "inspect",
+                "XTKS:7203",
+                "--source-profile",
+                "offline-jp",
+                "--output",
+                "json",
+            ],
+        )
+
+    assert result.exit_code == 1
+    assert "marketsieve source import PATH" in json.loads(result.stderr)["message"]

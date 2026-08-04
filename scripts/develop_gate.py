@@ -121,7 +121,10 @@ def check_smoke(path: Path) -> None:
         "report-result": json.loads(report_first.stdout),
     }
     for name, document in documents.items():
-        schema = json.loads((ROOT / f"schemas/{name}/v1/schema.json").read_text(encoding="utf-8"))
+        major = "v2" if name == "capabilities-result" else "v1"
+        schema = json.loads(
+            (ROOT / f"schemas/{name}/{major}/schema.json").read_text(encoding="utf-8")
+        )
         Draft202012Validator(schema, format_checker=FormatChecker()).validate(document)
     smoke = {
         "version": {"exit_code": version.returncode, "stdout": version.stdout},
@@ -244,12 +247,13 @@ def check_package(path: Path) -> None:
         "marketsieve-extension-api",
         "marketsieve-cli",
         "marketsieve-source-csv",
+        "marketsieve-source-jquants",
     ):
         run(("uv", "build", "--package", package_name, "--out-dir", str(dist)))
     wheels = tuple(dist.glob("*.whl"))
     sdists = tuple(dist.glob("*.tar.gz"))
-    if len(wheels) != 4 or len(sdists) != 4:
-        raise RuntimeError("the public build must produce four wheels and four sdists")
+    if len(wheels) != 5 or len(sdists) != 5:
+        raise RuntimeError("the public build must produce five wheels and five sdists")
     run(("uv", "run", "twine", "check", *(str(path) for path in (*wheels, *sdists))))
     core_wheel = next(item for item in wheels if item.name.startswith("marketsieve-"))
     cli_wheel = next(item for item in wheels if item.name.startswith("marketsieve_cli-"))
@@ -257,12 +261,18 @@ def check_package(path: Path) -> None:
         item for item in wheels if item.name.startswith("marketsieve_extension_api-")
     )
     csv_wheel = next(item for item in wheels if item.name.startswith("marketsieve_source_csv-"))
+    jquants_wheel = next(
+        item for item in wheels if item.name.startswith("marketsieve_source_jquants-")
+    )
     core_sdist = next(item for item in sdists if item.name.startswith("marketsieve-"))
     cli_sdist = next(item for item in sdists if item.name.startswith("marketsieve_cli-"))
     extension_sdist = next(
         item for item in sdists if item.name.startswith("marketsieve_extension_api-")
     )
     csv_sdist = next(item for item in sdists if item.name.startswith("marketsieve_source_csv-"))
+    jquants_sdist = next(
+        item for item in sdists if item.name.startswith("marketsieve_source_jquants-")
+    )
     wheel_files = {
         "marketsieve": verify_core_wheel(core_wheel),
         "marketsieve-cli": verify_cli_wheel(cli_wheel),
@@ -276,6 +286,11 @@ def check_package(path: Path) -> None:
             "marketsieve_source_csv",
             forbidden=("marketsieve_cli/", "marketsieve_extension_api/", "marketsieve/"),
         ),
+        "marketsieve-source-jquants": verify_module_wheel(
+            jquants_wheel,
+            "marketsieve_source_jquants",
+            forbidden=("marketsieve_cli/", "marketsieve_extension_api/", "marketsieve/"),
+        ),
     }
     sdist_files = {
         "marketsieve": verify_sdist(core_sdist, forbidden_package="marketsieve_cli"),
@@ -284,6 +299,7 @@ def check_package(path: Path) -> None:
             extension_sdist, forbidden_package="marketsieve_source_csv"
         ),
         "marketsieve-source-csv": verify_sdist(csv_sdist, forbidden_package="packages/cli"),
+        "marketsieve-source-jquants": verify_sdist(jquants_sdist, forbidden_package="packages/cli"),
     }
 
     with tempfile.TemporaryDirectory(prefix="marketsieve-install-") as temp_dir:
@@ -293,6 +309,7 @@ def check_package(path: Path) -> None:
             (extension_wheel, "import marketsieve_extension_api"),
             (cli_wheel, "import marketsieve_cli"),
             (csv_wheel, "import marketsieve_source_csv"),
+            (jquants_wheel, "import marketsieve_source_jquants"),
         )
         for target, statement in isolated_targets:
             verify_isolated_target(
@@ -318,6 +335,7 @@ def check_package(path: Path) -> None:
                 str(extension_wheel),
                 str(cli_wheel),
                 str(csv_wheel),
+                str(jquants_wheel),
             )
         )
         installed = capture(
@@ -325,7 +343,8 @@ def check_package(path: Path) -> None:
                 str(isolated),
                 "-c",
                 "import marketsieve; import marketsieve_cli; import marketsieve_extension_api; "
-                "import marketsieve_source_csv; import marketsieve.analysis.sma20; "
+                "import marketsieve_source_csv; import marketsieve_source_jquants; "
+                "import marketsieve.analysis.sma20; "
                 "import marketsieve.analysis.replay; import marketsieve.data.daily; "
                 "import marketsieve.domain; import marketsieve.reporting.sma20; "
                 "import marketsieve.synthetic.daily; print(marketsieve.__version__)",

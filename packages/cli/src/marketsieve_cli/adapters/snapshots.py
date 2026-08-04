@@ -45,7 +45,7 @@ def _instrument_document(imported: ImportedDailyBars) -> dict[str, str]:
 
 
 def _normalized_document(imported: ImportedDailyBars) -> dict[str, Any]:
-    return {
+    document = {
         "schema": NORMALIZED_SCHEMA,
         "instrument": _instrument_document(imported),
         "adjustment": imported.adjustment.value,
@@ -67,9 +67,28 @@ def _normalized_document(imported: ImportedDailyBars) -> dict[str, Any]:
             for bar in imported.bars
         ],
     }
+    if imported.instrument_profile is not None:
+        profile = imported.instrument_profile
+        document["instrument_profile"] = {
+            "observation_date": profile.observation_date.isoformat(),
+            "published_at": profile.published_at.isoformat() if profile.published_at else None,
+            "names": dict(profile.names),
+            "attributes": dict(profile.attributes),
+        }
+    return document
 
 
 def _identity_document(imported: ImportedDailyBars, normalized: dict[str, Any]) -> dict[str, Any]:
+    request = {"mode": "import", "bundle_sha256": imported.bundle_hash}
+    if imported.fetch_request is not None:
+        fetch = imported.fetch_request
+        request = {
+            "mode": "fetch",
+            "start": fetch.start.isoformat(),
+            "end": fetch.end.isoformat(),
+            "adjustment": fetch.adjustment.value,
+            "response_sha256": imported.bundle_hash,
+        }
     return {
         "schema": SNAPSHOT_SCHEMA,
         "kind": "daily_bars",
@@ -84,7 +103,7 @@ def _identity_document(imported: ImportedDailyBars, normalized: dict[str, Any]) 
             "retrieved_at": imported.retrieved_at.isoformat(),
             "availability_basis": imported.availability_basis.value,
         },
-        "request": {"bundle_sha256": imported.bundle_hash},
+        "request": request,
         "normalized": normalized,
     }
 

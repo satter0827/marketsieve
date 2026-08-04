@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from datetime import date
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -14,8 +15,15 @@ from marketsieve.analysis.indicators import (
     IndicatorStatus,
     calculate,
 )
-from marketsieve.data.daily import DailyBar
-from marketsieve_extension_api import DailyBarBundleImporter, ImportedDailyBars
+from marketsieve.data.daily import Adjustment, DailyBar
+from marketsieve.domain import Instrument
+from marketsieve_extension_api import (
+    DailyBarBundleImporter,
+    DailyBarFetcher,
+    DailyBarFetchRequest,
+    DailyBarSourceConfiguration,
+    ImportedDailyBars,
+)
 
 
 class InstalledSourceInfo(Protocol):
@@ -44,6 +52,31 @@ class PluginRegistry(Protocol):
     def installed(self) -> tuple[InstalledSourceInfo, ...]: ...
 
     def load_daily_bars(self, name: str) -> DailyBarBundleImporter: ...
+
+    def load_fetcher(self, name: str) -> DailyBarFetcher: ...
+
+    def can_fetch(self, name: str) -> bool: ...
+
+
+class SourceProfileInfo(Protocol):
+    @property
+    def name(self) -> str: ...
+
+    @property
+    def daily_bars_plugin(self) -> str: ...
+
+    @property
+    def currency(self) -> str: ...
+
+    @property
+    def timezone(self) -> str: ...
+
+    @property
+    def settings(self) -> dict[str, str]: ...
+
+
+class SourceConfiguration(Protocol):
+    def source_profile(self, name: str) -> SourceProfileInfo: ...
 
 
 class SnapshotRepository(Protocol):
@@ -90,9 +123,15 @@ def indicator_document(result: IndicatorResult) -> dict[str, Any]:
 class SnapshotService:
     """Coordinate explicit plugin import and offline snapshot reads."""
 
-    def __init__(self, registry: PluginRegistry, repository: SnapshotRepository) -> None:
+    def __init__(
+        self,
+        registry: PluginRegistry,
+        repository: SnapshotRepository,
+        configuration: SourceConfiguration,
+    ) -> None:
         self._registry = registry
         self._repository = repository
+        self._configuration = configuration
 
     def sources(self) -> dict[str, Any]:
         return {
@@ -123,11 +162,83 @@ class SnapshotService:
             "observations": len(imported.bars),
         }
 
+    def doctor_source(self, profile_name: str) -> dict[str, Any]:
+        profile = self._configuration.source_profile(profile_name)
+        source = self._registry.load_fetcher(profile.daily_bars_plugin)
+        result = source.doctor(
+            DailyBarSourceConfiguration(profile.currency, profile.timezone, profile.settings)
+        )
+        return {
+            "schema_version": "1.0.0",
+            "source_profile": profile.name,
+            "plugin": profile.daily_bars_plugin,
+            "ready": result.ready,
+            "code": result.code,
+            "message": result.message,
+            "recovery": result.recovery,
+        }
+
+    def fetch(
+        self,
+        profile_name: str,
+        instrument_key: str,
+        start: date,
+        end: date,
+        adjustment: str,
+    ) -> dict[str, Any]:
+        profile = self._configuration.source_profile(profile_name)
+        source = self._registry.load_fetcher(profile.daily_bars_plugin)
+        mic, separator, symbol = instrument_key.partition(":")
+        if not separator:
+            raise ValueError("instrument must use MIC:SYMBOL form")
+        instrument = Instrument.create(
+            symbol=symbol,
+            mic=mic,
+            currency=profile.currency,
+            exchange_timezone=profile.timezone,
+        )
+        request = DailyBarFetchRequest(
+            source_profile=profile.name,
+            instrument=instrument,
+            start=start,
+            end=end,
+            adjustment=Adjustment(adjustment),
+            settings=profile.settings,
+        )
+        imported = source.fetch(request)
+        if imported.fetch_request != request:
+            raise ValueError("source fetch result must preserve the exact request")
+        stored = self._repository.put_daily_bars(imported)
+        return {
+            "schema_version": "1.0.0",
+            "status": "fetched",
+            "object_id": stored.object_id,
+            "source_profile": profile.name,
+            "instrument": instrument_key,
+            "kind": "daily_bars",
+            "observations": len(imported.bars),
+            "instrument_profile": imported.instrument_profile is not None,
+        }
+
     def snapshots(self) -> dict[str, Any]:
         return {
             "schema_version": "1.0.0",
             "snapshots": [item.manifest for item in self._repository.list()],
         }
+
+    def _resolve(self, profile: str, instrument: str) -> StoredSnapshotInfo:
+        try:
+            return self._repository.resolve(profile, instrument)
+        except LookupError as original:
+            try:
+                source_profile = self._configuration.source_profile(profile)
+            except LookupError:
+                raise original from None
+            if self._registry.can_fetch(source_profile.daily_bars_plugin):
+                command = f"marketsieve source fetch {profile} {instrument} --start DATE --end DATE"
+            else:
+                command = "marketsieve source import PATH"
+            raise LookupError(f"snapshot not found; run '{command}'") from None
 
     def show(self, object_id: str) -> dict[str, Any]:
         return {"schema_version": "1.0.0", "snapshot": self._repository.show(object_id).manifest}
@@ -137,7 +248,7 @@ class SnapshotService:
         return {"schema_version": "1.0.0", "status": "verified", "object_id": stored.object_id}
 
     def inspect(self, instrument: str, profile: str) -> dict[str, Any]:
-        stored = self._repository.resolve(profile, instrument)
+        stored = self._resolve(profile, instrument)
         normalized = self._repository.normalized(stored.object_id)
         daily_bars = self._repository.daily_bars(stored.object_id)
         bars = normalized["bars"]
@@ -185,9 +296,12 @@ class SnapshotService:
             "provenance": [latest["provenance"]],
             "evidence_id": technical_evidence,
         }
+        instrument_document = dict(normalized["instrument"])
+        if "instrument_profile" in normalized:
+            instrument_document["profile"] = normalized["instrument_profile"]
         return {
             "schema_version": "1.0.0",
-            "instrument": normalized["instrument"],
+            "instrument": instrument_document,
             "source_profile": profile,
             "snapshot_id": stored.object_id,
             "sections": {
@@ -230,7 +344,7 @@ class SnapshotService:
         name: IndicatorName | str,
         **parameters: int,
     ) -> dict[str, Any]:
-        stored = self._repository.resolve(profile, instrument)
+        stored = self._resolve(profile, instrument)
         result = calculate(
             IndicatorSpec.create(name, **parameters),
             self._repository.daily_bars(stored.object_id),

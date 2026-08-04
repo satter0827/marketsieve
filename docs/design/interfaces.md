@@ -47,7 +47,7 @@ timestamps include an offset. Insufficient history and no state changes are succ
 uv run marketsieve capabilities --output {auto,rich,text,json}
 ```
 
-The JSON projection conforms to `schemas/capabilities-result/v1/schema.json` and describes actual
+The JSON projection conforms to `schemas/capabilities-result/v2/schema.json` and describes actual
 commands, options, defaults, output schemas, exit codes, streams, and operational side effects.
 
 ## Output and failure contract
@@ -58,8 +58,8 @@ use stdout. User-facing failures use stderr and conform to `schemas/cli-error/v1
 JSON mode.
 
 Exit code 0 means success, 1 means a runtime, data, or contract error, and 2 means invalid command
-usage. The commands perform no network requests, read no secrets, and create no operational state
-unless log-file output is explicitly requested.
+usage. Read commands perform no network requests. `source fetch` explicitly reads its selected
+provider credential and writes a snapshot; log-file output is the other opt-in state change.
 
 ## Approved 0.2 CLI target
 
@@ -121,6 +121,20 @@ These commands read one verified snapshot and never fetch. JSON output conforms 
 `schemas/indicator-result/v1/schema.json`. Insufficient history is a successful result with an
 empty `values` object and explicit status. Invalid periods, extra parameters, and invalid MACD
 period ordering are errors.
+
+### Implemented J-Quants commands
+
+```shell
+marketsieve --config marketsieve.toml source doctor japan
+marketsieve --config marketsieve.toml source fetch japan XTKS:7203 \
+  --start 2026-01-01 --end 2026-07-31 --adjustment adjusted
+```
+
+`source doctor` validates only the selected profile, plugin settings, and credential presence; it
+does not contact J-Quants. `source fetch` is the only J-Quants command that uses the network and it
+stores one immutable normalized snapshot. Configuration does not supply or override credentials.
+An unavailable provider plan, excessive exact request, or rate limit is an explicit failure rather
+than a partial success.
 
 ## Approved 0.3 agent target
 

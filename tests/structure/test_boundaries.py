@@ -12,6 +12,7 @@ FORBIDDEN_SDK_IMPORTS = {
     "marketsieve_cli",
     "marketsieve_extension_api",
     "marketsieve_source_csv",
+    "marketsieve_source_jquants",
     "os",
     "smtplib",
     "sqlite3",
@@ -47,16 +48,19 @@ def test_application_depends_on_public_sdk() -> None:
     assert "marketsieve" in imports
 
 
-def test_extension_and_csv_packages_follow_inward_dependencies() -> None:
+def test_extension_and_source_packages_follow_inward_dependencies() -> None:
     extension = ROOT / "packages/extension-api/src/marketsieve_extension_api"
     csv_source = ROOT / "packages/source-csv/src/marketsieve_source_csv"
+    jquants_source = ROOT / "packages/source-jquants/src/marketsieve_source_jquants"
     extension_imports = set().union(*(imported_roots(path) for path in extension.rglob("*.py")))
     csv_imports = set().union(*(imported_roots(path) for path in csv_source.rglob("*.py")))
+    jquants_imports = set().union(*(imported_roots(path) for path in jquants_source.rglob("*.py")))
 
     assert "marketsieve" in extension_imports
-    assert "marketsieve_cli" not in extension_imports | csv_imports
+    assert "marketsieve_cli" not in extension_imports | csv_imports | jquants_imports
     assert "marketsieve_source_csv" not in extension_imports
     assert "marketsieve_extension_api" in csv_imports
+    assert "marketsieve_extension_api" in jquants_imports
 
 
 def test_analysis_and_synthetic_sources_do_not_reference_each_other() -> None:

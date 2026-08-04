@@ -7,16 +7,23 @@
   "properties": {
     "schema_version": {"const": "1.0.0"},
     "sources": {"type": "array", "items": {"type": "object"}},
-    "status": {"enum": ["imported"]},
+    "status": {"enum": ["imported", "fetched"]},
     "object_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
     "source_profile": {"type": "string", "minLength": 1},
     "instrument": {"type": "string", "pattern": "^[A-Z0-9]{4}:[A-Z0-9]+$"},
     "kind": {"const": "daily_bars"},
-    "observations": {"type": "integer", "minimum": 1}
+    "observations": {"type": "integer", "minimum": 1},
+    "instrument_profile": {"type": "boolean"},
+    "plugin": {"type": "string", "minLength": 1},
+    "ready": {"type": "boolean"},
+    "code": {"type": "string", "minLength": 1},
+    "message": {"type": "string", "minLength": 1},
+    "recovery": {"type": ["string", "null"]}
   },
   "oneOf": [
     {"required": ["sources"]},
-    {"required": ["status", "object_id", "source_profile", "instrument", "kind", "observations"]}
+    {"required": ["status", "object_id", "source_profile", "instrument", "kind", "observations"]},
+    {"required": ["source_profile", "plugin", "ready", "code", "message", "recovery"]}
   ],
   "additionalProperties": false
 }

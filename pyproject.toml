@@ -5,6 +5,7 @@ requires-python = ">=3.12,<3.15"
 dependencies = [
     "marketsieve-cli",
     "marketsieve-source-csv",
+    "marketsieve-source-jquants",
 ]
 
 [dependency-groups]
@@ -31,11 +32,13 @@ members = [
     "packages/core",
     "packages/extension-api",
     "packages/source-csv",
+    "packages/source-jquants",
 ]
 
 [tool.uv.sources]
 marketsieve-cli = { workspace = true }
 marketsieve-source-csv = { workspace = true }
+marketsieve-source-jquants = { workspace = true }
 
 [tool.pytest.ini_options]
 addopts = "-q --strict-config --strict-markers"
@@ -51,6 +54,7 @@ src = [
     "packages/core/src",
     "packages/extension-api/src",
     "packages/source-csv/src",
+    "packages/source-jquants/src",
     "scripts",
     "tests",
 ]
@@ -69,6 +73,7 @@ files = [
     "packages/core/src",
     "packages/extension-api/src",
     "packages/source-csv/src",
+    "packages/source-jquants/src",
     "scripts",
     "tests",
 ]
@@ -79,7 +84,7 @@ warn_unused_ignores = true
 [tool.coverage.run]
 branch = true
 data_file = ".marketsieve/coverage/data"
-source = ["marketsieve", "marketsieve_cli", "marketsieve_extension_api", "marketsieve_source_csv"]
+source = ["marketsieve", "marketsieve_cli", "marketsieve_extension_api", "marketsieve_source_csv", "marketsieve_source_jquants"]
 omit = ["*/marketsieve_cli/__main__.py"]
 
 [tool.coverage.report]
@@ -91,7 +96,7 @@ skip_covered = true
 output = ".marketsieve/coverage/coverage.json"
 
 [tool.importlinter]
-root_packages = ["marketsieve", "marketsieve_cli", "marketsieve_extension_api", "marketsieve_source_csv"]
+root_packages = ["marketsieve", "marketsieve_cli", "marketsieve_extension_api", "marketsieve_source_csv", "marketsieve_source_jquants"]
 
 [[tool.importlinter.contracts]]
 name = "Application dependencies point inward"
@@ -102,6 +107,7 @@ layers = [
     "marketsieve_cli.adapters",
     "marketsieve_cli.application",
     "marketsieve_source_csv",
+    "marketsieve_source_jquants",
     "marketsieve_extension_api",
     "marketsieve",
 ]
@@ -123,10 +129,16 @@ forbidden_modules = ["marketsieve_cli"]
 name = "Extension API is independent from implementations"
 type = "forbidden"
 source_modules = ["marketsieve_extension_api"]
-forbidden_modules = ["marketsieve_cli", "marketsieve_source_csv"]
+forbidden_modules = ["marketsieve_cli", "marketsieve_source_csv", "marketsieve_source_jquants"]
 
 [[tool.importlinter.contracts]]
 name = "CSV source does not depend on the CLI"
 type = "forbidden"
 source_modules = ["marketsieve_source_csv"]
+forbidden_modules = ["marketsieve_cli"]
+
+[[tool.importlinter.contracts]]
+name = "J-Quants source does not depend on the CLI"
+type = "forbidden"
+source_modules = ["marketsieve_source_jquants"]
 forbidden_modules = ["marketsieve_cli"]
