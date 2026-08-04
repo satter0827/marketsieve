@@ -5,6 +5,7 @@ STATE_DIR ?= .marketsieve
 TEST ?=
 BASE_SHA ?= origin/develop
 HEAD_SHA ?= HEAD
+REVIEWED_SHA ?=
 HEAD_COMMIT = $(shell git rev-parse $(HEAD_SHA))
 EVIDENCE_DIR ?= $(STATE_DIR)/artifacts/checks/$(HEAD_COMMIT)
 REVIEW_DIR ?= $(STATE_DIR)/artifacts/review/$(HEAD_COMMIT)
@@ -16,7 +17,7 @@ RELEASE_DIR ?= $(STATE_DIR)/artifacts/release/$(COMMIT)
 export UV_CACHE_DIR := $(abspath $(STATE_DIR))/cache/uv
 export PYTHONPYCACHEPREFIX := $(abspath $(STATE_DIR))/cache/python
 
-.PHONY: help sync format format-check lint typecheck test check doctor report report-json capabilities-json build review review-bundle review-validate release-build release-verify release-check clean-generated
+.PHONY: help sync format format-check lint typecheck test check doctor report report-json capabilities-json build evidence evidence-bundle evidence-validate review-attest governance-check release-build release-verify release-check clean-generated
 
 help: ## Show the available project commands.
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z0-9_-]+:.*## / {printf "%-18s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -58,14 +59,21 @@ build: ## Build the public SDK into the generated-artifact directory.
 	@mkdir -p "$(STATE_DIR)/artifacts/build"
 	uv build --package marketsieve --out-dir "$(STATE_DIR)/artifacts/build"
 
-review: check review-bundle ## Run the development gate and create a review bundle.
+evidence: check evidence-bundle ## Run the development gate and create a review bundle.
 
-review-bundle: ## Create a review bundle from existing development evidence.
+evidence-bundle: ## Create a review bundle from existing development evidence.
 	uv run python scripts/review_gate.py create --base-sha "$(BASE_SHA)" --head-sha "$(HEAD_SHA)" --evidence-dir "$(EVIDENCE_DIR)" --output-dir "$(REVIEW_DIR)"
 
-review-validate: ## Validate BUNDLE=<review-bundle-directory>.
+evidence-validate: ## Validate BUNDLE=<review-bundle-directory>.
 	@test -n "$(BUNDLE)" || { echo "BUNDLE is required" >&2; exit 2; }
 	uv run python scripts/review_gate.py validate "$(BUNDLE)"
+
+review-attest: ## Publish the reviewed HEAD status for REVIEWED_SHA=<full-commit-sha>.
+	@test -n "$(REVIEWED_SHA)" || { echo "REVIEWED_SHA is required" >&2; exit 2; }
+	uv run python -m scripts.review_attestation attest --reviewed-sha "$(REVIEWED_SHA)"
+
+governance-check: ## Compare checked-in rulesets with active GitHub settings.
+	uv run python -m scripts.governance_gate verify
 
 release-build: ## Build VERSION at COMMIT once into the release directory.
 	@test -n "$(VERSION)" && test -n "$(COMMIT)" || { echo "VERSION and COMMIT are required" >&2; exit 2; }

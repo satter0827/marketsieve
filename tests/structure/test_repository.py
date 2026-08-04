@@ -75,8 +75,8 @@ def test_shared_vscode_tasks_use_make_targets() -> None:
         "make format",
         "make sync",
         "make test TEST=${relativeFile}",
-        "make review",
-        "make review-validate",
+        "make evidence",
+        "make evidence-validate",
         "make report",
         "make report-json",
         "make capabilities-json",
@@ -100,9 +100,11 @@ def test_makefile_exposes_stable_entry_points() -> None:
         "capabilities-json",
         "build",
         "clean-generated",
-        "review",
-        "review-bundle",
-        "review-validate",
+        "evidence",
+        "evidence-bundle",
+        "evidence-validate",
+        "review-attest",
+        "governance-check",
         "release-build",
         "release-verify",
         "release-check",
@@ -115,14 +117,22 @@ def test_makefile_exposes_stable_entry_points() -> None:
 def test_ci_and_rulesets_use_stable_gate_names() -> None:
     workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
     assert "name: Develop Gate" in workflow
+    assert "name: Evidence Gate" in workflow
     assert "name: Review Gate" in workflow
+    assert "if: always() && github.event_name == 'pull_request'" in workflow
     assert "name: Release Gate" in workflow
     assert "fetch-depth: 0" in workflow
+    assert "ref: ${{ github.event.pull_request.head.sha || github.sha }}" in workflow
+    assert workflow.count(".marketsieve/artifacts/checks/${{ github.sha }}") == 0
     assert workflow.count("uv build") == 0
 
     develop = json.loads((ROOT / ".github/rulesets/develop.json").read_text(encoding="utf-8"))
     main = json.loads((ROOT / ".github/rulesets/main.json").read_text(encoding="utf-8"))
     develop_checks = develop["rules"][-1]["parameters"]["required_status_checks"]
     main_checks = main["rules"][-1]["parameters"]["required_status_checks"]
-    assert {check["context"] for check in develop_checks} == {"Develop Gate", "Review Gate"}
+    assert {check["context"] for check in develop_checks} == {
+        "Pre-PR Review",
+        "Develop Gate",
+        "Evidence Gate",
+    }
     assert {check["context"] for check in main_checks} == {"Release Gate"}

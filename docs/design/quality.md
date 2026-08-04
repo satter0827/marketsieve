@@ -45,10 +45,17 @@ tests, branch coverage, schema validation, CLI smoke tests, package checks, publ
 inspection, isolated installation, and whitespace validation once. Its machine-readable evidence
 is retained under `.marketsieve/artifacts/checks/<commit>/`.
 
-The Review Gate reuses that evidence. It creates `review.json` as the authoritative report,
+The Evidence Gate reuses that evidence. It creates `review.json` as the authoritative report,
 `summary.md` as its deterministic human projection, a text-only patch, supporting evidence, JSON
 Lines logs, and checksums under `.marketsieve/artifacts/review/<commit>/`. Schema, commit identity,
-references, summary projection, and checksums must validate before merge.
+references, summary projection, and checksums must validate before merge. This bundle is review
+input; it does not claim that semantic code review occurred. During the required-check migration,
+CI emits a temporary `Review Gate` compatibility verdict until the active ruleset requires
+`Evidence Gate`.
+
+After semantic review succeeds, `make review-attest REVIEWED_SHA=<full-commit-sha>` validates the
+matching local evidence and clean HEAD before publishing the `Pre-PR Review` commit status. The
+develop ruleset requires that status for the current head; a later commit cannot inherit it.
 
 The Release Gate builds the SDK distribution once and verifies the same artifact on every supported
 Python version. It admits only a same-repository `develop -> main` pull request. Tags, GitHub
@@ -70,7 +77,7 @@ make lint
 make typecheck
 make test
 make check
-make review
+make evidence
 ```
 
 A failure is corrected and the affected checks are rerun. Environment or tool failures are reported

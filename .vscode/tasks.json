@@ -29,14 +29,14 @@
     {
       "label": "Gate: Review",
       "type": "shell",
-      "command": "make review",
+      "command": "make evidence",
       "group": "test",
       "problemMatcher": []
     },
     {
       "label": "Review: Validate",
       "type": "shell",
-      "command": "make review-validate",
+      "command": "make evidence-validate",
       "problemMatcher": []
     },
     {
