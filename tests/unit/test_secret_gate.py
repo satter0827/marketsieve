@@ -243,6 +243,23 @@ def test_secret_scan_rejects_credentials_in_python_string_literals(
     assert [finding.kind for finding in scan_paths((path,))] == ["credential_assignment"]
 
 
+@pytest.mark.parametrize(
+    "source",
+    (
+        "logger.info(api_key)\n",
+        "logger.warning(config.access_token)\n",
+        "RuntimeError(provider_password)\n",
+        'logger.info("credential=%s", client_secret)\n',
+    ),
+)
+def test_secret_scan_rejects_credential_expressions_in_output_sinks(
+    tmp_path: Path, source: str
+) -> None:
+    path = write(tmp_path / "provider.py", source)
+
+    assert [finding.kind for finding in scan_paths((path,))] == ["credential_output"]
+
+
 @pytest.mark.parametrize("separator", ("_", "-"))
 def test_secret_scan_rejects_dotted_configuration_keys(tmp_path: Path, separator: str) -> None:
     key = "providers.openai.api" + separator + "key"
@@ -372,6 +389,27 @@ def test_secret_scan_hashes_credential_bearing_path(tmp_path: Path) -> None:
     assert [finding.kind for finding in findings] == ["credential_path"]
     assert findings[0].path.startswith("path-sha256:")
     assert token not in findings[0].path
+
+
+def test_secret_scan_rejects_assignment_in_nested_path(tmp_path: Path) -> None:
+    key = "OPENAI_" + "API_KEY"
+    directory = tmp_path / "backup"
+    directory.mkdir()
+    path = write(directory / f"{key}=opaque-production-credential", "safe\n")
+
+    findings = scan_paths((path,))
+
+    assert [finding.kind for finding in findings] == ["credential_path"]
+    assert findings[0].path.startswith("path-sha256:")
+
+
+def test_patch_scan_rejects_assignment_in_diff_path() -> None:
+    key = "OPENAI_" + "API_KEY"
+    patch = f"diff --git a/backup/{key}=opaque-production-credential b/safe\n"
+
+    assert [finding.kind for finding in scan_patch_text("change", patch)] == [
+        "credential_assignment"
+    ]
 
 
 def test_patch_scan_strips_diff_prefix_for_assignments() -> None:

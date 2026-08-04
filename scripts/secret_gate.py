@@ -84,7 +84,7 @@ HEADER_CREDENTIALS = (
     ),
 )
 ASSIGNMENT = re.compile(
-    r"(?i)(?:^|[{,]\s*)\s*(?:export\s+)?[\"']?"
+    r"(?i)(?:^|/|[{,]\s*)\s*(?:export\s+)?[\"']?"
     r"([A-Z0-9_.-]*(?:API[-_]?KEY|ACCESS[-_]?KEY|SECRET[-_]?KEY|PRIVATE[-_]?KEY|"
     r"ACCESS[-_]?TOKEN|AUTH[-_]?TOKEN|REFRESH[-_]?TOKEN|TOKEN|CLIENT[-_]?SECRET|"
     r"SECRET|PASSWORD))[\"']?"
@@ -110,7 +110,8 @@ def _hashed_label(label: str) -> str:
 
 
 def _credential_path_finding(label: str) -> Finding | None:
-    if _scan_text("path-name", label, scan_assignments=True):
+    fragments = re.split(r"[!/:]", label)
+    if any(_scan_text("path-name", fragment, scan_assignments=True) for fragment in fragments):
         return Finding(_hashed_label(label), 0, "credential_path")
     return None
 
@@ -285,14 +286,16 @@ def _scan_python_assignments(label: str, text: str) -> list[Finding]:
             output_values = (*node.args, *(keyword.value for keyword in node.keywords))
             for output_value in output_values:
                 output_literal = _python_literal(output_value)
-                if output_literal is None:
-                    continue
-                findings.extend(
-                    Finding(label, output_value.lineno, finding.kind)
-                    for finding in _scan_text(
-                        "output-literal.txt", output_literal, scan_assignments=True
+                if output_literal is not None:
+                    findings.extend(
+                        Finding(label, output_value.lineno, finding.kind)
+                        for finding in _scan_text(
+                            "output-literal.txt", output_literal, scan_assignments=True
+                        )
                     )
-                )
+                output_name = _python_target_name(output_value)
+                if output_name is not None and CREDENTIAL_NAME.search(output_name) is not None:
+                    findings.append(Finding(label, output_value.lineno, "credential_output"))
         if isinstance(node, (ast.Assign, ast.AnnAssign, ast.NamedExpr)):
             for target in targets:
                 header_name = (
