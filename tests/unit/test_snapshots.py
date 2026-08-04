@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
+from datetime import date
 from pathlib import Path
 
 import pytest
 
 from marketsieve_cli.adapters.snapshots import SnapshotStore
+from marketsieve_extension_api import DailyBarFetchRequest
 from marketsieve_source_csv import CsvDailyBarImporter
 
 
@@ -65,6 +68,27 @@ def test_snapshot_verification_detects_normalized_mutation(tmp_path: Path) -> No
 
     with pytest.raises(ValueError, match="checksum"):
         store.verify(stored.object_id)
+
+
+def test_fetch_request_boundaries_are_part_of_snapshot_identity(tmp_path: Path) -> None:
+    imported = CsvDailyBarImporter().import_bundle(write_bundle(tmp_path / "bundle"))
+    first_request = DailyBarFetchRequest(
+        imported.source_profile,
+        imported.instrument,
+        date(2026, 7, 29),
+        date(2026, 7, 31),
+        imported.adjustment,
+        {},
+    )
+    second_request = replace(first_request, start=date(2026, 7, 30))
+    store = SnapshotStore(tmp_path / "state")
+
+    first = store.put_daily_bars(replace(imported, fetch_request=first_request))
+    second = store.put_daily_bars(replace(imported, fetch_request=second_request))
+
+    assert first.object_id != second.object_id
+    assert first.manifest["request"]["start"] == "2026-07-29"
+    assert second.manifest["request"]["start"] == "2026-07-30"
 
 
 def test_pending_directory_is_not_a_snapshot(tmp_path: Path) -> None:

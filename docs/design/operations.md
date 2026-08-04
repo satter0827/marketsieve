@@ -2,9 +2,9 @@
 
 ## Supported current operation
 
-MarketSieve currently supports local development, public SDK builds, version reporting, offline
-diagnostics, and historical synthetic-data reports on Python 3.12 through 3.14. Python 3.13 is the
-primary development version.
+MarketSieve currently supports local development, public distribution builds, offline analysis,
+immutable CSV snapshots, and explicit J-Quants price acquisition on Python 3.12 through 3.14.
+Python 3.13 is the primary development version.
 
 ```shell
 make sync
@@ -16,8 +16,9 @@ make capabilities-json
 make build
 ```
 
-These operations require no secrets, provider accounts, network data, database, scheduler, or
-delivery configuration. The application does not persist operational state.
+The listed development and synthetic-report operations require no secrets or provider accounts.
+J-Quants fetch is a separate explicit operation that requires its environment credential and writes
+an immutable snapshot below `.marketsieve/data`.
 
 Project-local caches and generated artifacts are rooted at `.marketsieve`. The `.venv` directory is
 the only repository-root development environment. Human, agent, editor, and CI workflows use the
@@ -63,8 +64,8 @@ the operation to stop. They do not expose environment secrets or silently switch
 
 ## Unsupported operation
 
-Live-data acquisition, scheduled execution, persistent state, non-console delivery, provider
-fallback, and LLM-assisted reporting are not supported operations. When later milestones introduce them,
+Scheduled execution, non-console delivery, provider fallback, and LLM-assisted reporting are not
+supported operations. When later milestones introduce them,
 their configuration, recovery, observability, and secret-handling procedures must be added here in
 the same change.
 
@@ -79,6 +80,32 @@ Acquisition is explicit and may use network access and provider credentials. Ins
 comparison, report rendering, and snapshot verification are offline. Credentials enter through
 provider-specific environment variables only. MarketSieve does not load `.env` files, persist
 credential values, or pass the complete parent environment to child processes.
+
+The implemented J-Quants profile shape is:
+
+```toml
+[source_profiles.japan]
+currency = "JPY"
+timezone = "Asia/Tokyo"
+
+[source_profiles.japan.daily_bars]
+plugin = "jquants"
+
+[source_profiles.japan.daily_bars.settings]
+timeout_seconds = 30
+```
+
+The API origin is fixed by the adapter to prevent credential forwarding to another host.
+`JQUANTS_API_KEY` is read from the invoking process only. MarketSieve does not obtain or refresh
+provider tokens, print response bodies on failure, or copy the credential into logs and snapshots.
+
+The individual J-Quants API V2 product page, daily-bars specification, instrument-master
+specification, plan presentation, and terms were reviewed on 2026-08-04. Provider plan entitlements,
+rate limits, retention rights, and terms remain external policy rather than a frozen MarketSieve
+contract. The adapter therefore does not claim that a configured plan supports a range, does not
+retain raw responses, and preserves HTTP authorization and limit failures for the operator. Before
+a release, maintainers recheck the official [J-Quants site](https://jpx-jquants.com/) and the
+referenced endpoint pages instead of relying on fixtures as legal or commercial authority.
 
 Content-addressed objects are written to a temporary sibling directory, verified, and atomically
 renamed. Raw responses are retained only when the adapter's approved terms policy permits local

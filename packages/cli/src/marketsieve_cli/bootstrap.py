@@ -15,6 +15,7 @@ from marketsieve.synthetic.daily import (
     jp_source,
     us_source,
 )
+from marketsieve_cli.adapters.config import Configuration
 from marketsieve_cli.adapters.console import ConsoleOutput, OutputMode
 from marketsieve_cli.adapters.plugins import SourcePluginRegistry
 from marketsieve_cli.adapters.snapshots import SnapshotStore
@@ -80,12 +81,13 @@ def build_report_service(
     return ReportService(markets, output, logger)
 
 
-def build_snapshot_service() -> SnapshotService:
+def build_snapshot_service(config_path: Path | None = None) -> SnapshotService:
     """Build explicit source-import and offline snapshot use cases."""
 
     return SnapshotService(
         SourcePluginRegistry(),
         SnapshotStore(Path(".marketsieve/data")),
+        Configuration.resolve(config_path),
     )
 
 

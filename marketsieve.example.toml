@@ -1,0 +1,10 @@
+# Copy to marketsieve.toml and keep credentials in the invoking environment only.
+[source_profiles.japan]
+currency = "JPY"
+timezone = "Asia/Tokyo"
+
+[source_profiles.japan.daily_bars]
+plugin = "jquants"
+
+[source_profiles.japan.daily_bars.settings]
+timeout_seconds = 30

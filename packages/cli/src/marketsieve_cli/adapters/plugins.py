@@ -5,15 +5,22 @@ from __future__ import annotations
 from dataclasses import dataclass
 from importlib import metadata
 
-from marketsieve_extension_api import DailyBarBundleImporter
+from marketsieve_extension_api import DailyBarBundleImporter, DailyBarFetcher
 
 ENTRY_POINT_GROUP = "marketsieve.sources"
+FETCHER_ENTRY_POINT_GROUP = "marketsieve.sources.daily_bars.fetchers"
 
 
 def source_entry_points() -> metadata.EntryPoints:
     """Return source entry points without loading their referenced objects."""
 
     return metadata.entry_points(group=ENTRY_POINT_GROUP)
+
+
+def fetcher_entry_points() -> metadata.EntryPoints:
+    """Return fetch-capability markers without loading plugin code."""
+
+    return metadata.entry_points(group=FETCHER_ENTRY_POINT_GROUP)
 
 
 @dataclass(frozen=True, slots=True)
@@ -55,4 +62,22 @@ class SourcePluginRegistry:
         candidate = matches[0].load()()
         if not isinstance(candidate, DailyBarBundleImporter):
             raise TypeError(f"source plugin {name!r} does not implement daily-bar import")
+        return candidate
+
+    def can_fetch(self, name: str) -> bool:
+        """Report a plugin's declared fetch capability without loading it."""
+
+        return any(entry.name == name for entry in fetcher_entry_points())
+
+    def load_fetcher(self, name: str) -> DailyBarFetcher:
+        """Load only the explicitly selected network source."""
+
+        matches = tuple(entry for entry in source_entry_points() if entry.name == name)
+        if len(matches) != 1:
+            raise ValueError(
+                f"source plugin {name!r} must resolve to exactly one installed entry point"
+            )
+        candidate = matches[0].load()()
+        if not isinstance(candidate, DailyBarFetcher):
+            raise TypeError(f"source plugin {name!r} does not implement daily-bar fetch")
         return candidate

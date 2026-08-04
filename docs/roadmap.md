@@ -18,7 +18,7 @@ Each milestone must remain usable without later milestones.
 2. Publish an independently installable CLI and build a checksummed multi-package wheelhouse.
 3. Prove the extension contract with CSV import, immutable daily-bar snapshots, and price inspection.
 4. Replace SMA20-specific analysis with SMA, EMA, RSI, MACD, ATR, return, and drawdown results.
-5. Add J-Quants price and instrument profile acquisition after terms and plan review.
+5. ~~Add J-Quants API V2 price and instrument profile acquisition with explicit profile selection.~~
 6. Add J-Quants financial facts, dividends, splits, and earnings events with explicit availability.
 7. Add Alpha Vantage capabilities without weakening raw, adjusted, range, or plan requests.
 8. Complete financial, valuation, risk, comparison, and deterministic report projections.

@@ -8,6 +8,7 @@ members = [
     "marketsieve-cli",
     "marketsieve-extension-api",
     "marketsieve-source-csv",
+    "marketsieve-source-jquants",
     "marketsieve-workspace",
 ]
 
@@ -579,6 +580,7 @@ dependencies = [
 [package.optional-dependencies]
 all-sources = [
     { name = "marketsieve-source-csv" },
+    { name = "marketsieve-source-jquants" },
 ]
 
 [package.metadata]
@@ -587,6 +589,7 @@ requires-dist = [
     { name = "marketsieve", editable = "packages/core" },
     { name = "marketsieve-extension-api", editable = "packages/extension-api" },
     { name = "marketsieve-source-csv", marker = "extra == 'all-sources'", editable = "packages/source-csv" },
+    { name = "marketsieve-source-jquants", marker = "extra == 'all-sources'", editable = "packages/source-jquants" },
     { name = "rich", specifier = ">=14,<15" },
 ]
 provides-extras = ["all-sources"]
@@ -618,12 +621,28 @@ requires-dist = [
 ]
 
 [[package]]
+name = "marketsieve-source-jquants"
+version = "0.1.0"
+source = { editable = "packages/source-jquants" }
+dependencies = [
+    { name = "marketsieve" },
+    { name = "marketsieve-extension-api" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "marketsieve", editable = "packages/core" },
+    { name = "marketsieve-extension-api", editable = "packages/extension-api" },
+]
+
+[[package]]
 name = "marketsieve-workspace"
 version = "0.0.0"
 source = { virtual = "." }
 dependencies = [
     { name = "marketsieve-cli" },
     { name = "marketsieve-source-csv" },
+    { name = "marketsieve-source-jquants" },
 ]
 
 [package.dev-dependencies]
@@ -644,6 +663,7 @@ dev = [
 requires-dist = [
     { name = "marketsieve-cli", editable = "packages/cli" },
     { name = "marketsieve-source-csv", editable = "packages/source-csv" },
+    { name = "marketsieve-source-jquants", editable = "packages/source-jquants" },
 ]
 
 [package.metadata.requires-dev]

@@ -9,6 +9,24 @@
     "instrument": {
       "type": "object",
       "required": ["mic", "symbol", "currency", "timezone", "type"],
+      "properties": {
+        "mic": {"type": "string"},
+        "symbol": {"type": "string"},
+        "currency": {"type": "string"},
+        "timezone": {"type": "string"},
+        "type": {"type": "string"},
+        "profile": {
+          "type": "object",
+          "required": ["observation_date", "published_at", "names", "attributes"],
+          "properties": {
+            "observation_date": {"type": "string", "format": "date"},
+            "published_at": {"type": ["string", "null"], "format": "date-time"},
+            "names": {"type": "object", "additionalProperties": {"type": "string"}},
+            "attributes": {"type": "object", "additionalProperties": {"type": "string"}}
+          },
+          "additionalProperties": false
+        }
+      },
       "additionalProperties": {"type": "string"}
     },
     "source_profile": {"type": "string", "minLength": 1},

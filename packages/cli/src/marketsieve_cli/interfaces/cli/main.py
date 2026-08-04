@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import sys
 from collections.abc import Callable
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -19,10 +20,10 @@ from marketsieve_cli.bootstrap import (
 )
 
 OUTPUT_CHOICES = ("auto", "rich", "text", "json")
-CAPABILITIES_SCHEMA_VERSION = "1.0.0"
+CAPABILITIES_SCHEMA_VERSION = "2.0.0"
 COMMAND_METADATA = {
     "capabilities": {
-        "output_schema": "urn:marketsieve:schema:capabilities-result:1.0.0",
+        "output_schema": "urn:marketsieve:schema:capabilities-result:2.0.0",
         "effects": {"network": False, "secrets": False, "optional_writes": []},
     },
     "doctor": {
@@ -40,6 +41,14 @@ COMMAND_METADATA = {
     "source import": {
         "output_schema": "urn:marketsieve:schema:source-result:1.0.0",
         "effects": {"network": False, "secrets": False, "optional_writes": ["snapshot"]},
+    },
+    "source doctor": {
+        "output_schema": "urn:marketsieve:schema:source-result:1.0.0",
+        "effects": {"network": False, "secrets": True, "optional_writes": []},
+    },
+    "source fetch": {
+        "output_schema": "urn:marketsieve:schema:source-result:1.0.0",
+        "effects": {"network": True, "secrets": True, "optional_writes": ["snapshot"]},
     },
     "snapshot list": {
         "output_schema": "urn:marketsieve:schema:snapshot-result:1.0.0",
@@ -108,13 +117,23 @@ def _console(context: click.Context, output_mode: str) -> Any:
     help="Emit structured JSON Lines logs to stderr at this level.",
 )
 @click.option("--log-file", is_flag=True, help="Also write logs below .marketsieve/logs.")
+@click.option(
+    "--config",
+    "config_path",
+    type=click.Path(path_type=Path, dir_okay=False),
+    default=None,
+    help="Use this non-secret TOML configuration file.",
+)
 @click.pass_context
-def main(context: click.Context, log_level: str | None, log_file: bool) -> None:
+def main(
+    context: click.Context, log_level: str | None, log_file: bool, config_path: Path | None
+) -> None:
     """Analyze Japanese and U.S. equities with reproducible evidence."""
 
     context.ensure_object(dict)
     context.obj["log_level"] = log_level.upper() if log_level else None
     context.obj["log_file"] = log_file
+    context.obj["config_path"] = config_path
     if context.invoked_subcommand is None:
         _console(context, "auto").emit_landing(sdk_version())
 
@@ -167,7 +186,7 @@ def source_list(context: click.Context, output_mode: str) -> None:
     """List source package metadata without loading plugin code."""
 
     _console(context, output_mode).emit_document(
-        build_snapshot_service().sources(), title="Installed sources"
+        build_snapshot_service(context.obj["config_path"]).sources(), title="Installed sources"
     )
 
 
@@ -181,11 +200,64 @@ def source_import(context: click.Context, path: Path, plugin: str, output_mode: 
 
     console = _console(context, output_mode)
     try:
-        document = build_snapshot_service().import_bundle(path, plugin)
+        document = build_snapshot_service(context.obj["config_path"]).import_bundle(path, plugin)
     except (LookupError, RuntimeError, TypeError, ValueError, OSError) as error:
         console.emit_error("source_import_failed", str(error))
         raise click.exceptions.Exit(1) from None
     console.emit_document(document, title="Imported snapshot")
+
+
+@source.command("doctor")
+@click.argument("source_profile")
+@output_option
+@click.pass_context
+def source_doctor(context: click.Context, source_profile: str, output_mode: str) -> None:
+    """Check one configured source without making a network request."""
+
+    console = _console(context, output_mode)
+    try:
+        document = build_snapshot_service(context.obj["config_path"]).doctor_source(source_profile)
+    except (LookupError, RuntimeError, TypeError, ValueError, OSError) as error:
+        console.emit_error("source_doctor_failed", str(error))
+        raise click.exceptions.Exit(1) from None
+    console.emit_document(document, title="Source diagnostics")
+    if not document["ready"]:
+        raise click.exceptions.Exit(1)
+
+
+@source.command("fetch")
+@click.argument("source_profile")
+@click.argument("instrument")
+@click.option("--start", type=click.DateTime(formats=["%Y-%m-%d"]), required=True)
+@click.option("--end", type=click.DateTime(formats=["%Y-%m-%d"]), required=True)
+@click.option(
+    "--adjustment",
+    type=click.Choice(("raw", "adjusted")),
+    default="raw",
+    show_default=True,
+)
+@output_option
+@click.pass_context
+def source_fetch(
+    context: click.Context,
+    source_profile: str,
+    instrument: str,
+    start: datetime,
+    end: datetime,
+    adjustment: str,
+    output_mode: str,
+) -> None:
+    """Fetch one exact range and persist an immutable normalized snapshot."""
+
+    console = _console(context, output_mode)
+    try:
+        document = build_snapshot_service(context.obj["config_path"]).fetch(
+            source_profile, instrument, start.date(), end.date(), adjustment
+        )
+    except (LookupError, RuntimeError, TypeError, ValueError, OSError) as error:
+        console.emit_error("source_fetch_failed", str(error))
+        raise click.exceptions.Exit(1) from None
+    console.emit_document(document, title="Fetched snapshot")
 
 
 @main.group()
@@ -200,7 +272,7 @@ def snapshot_list(context: click.Context, output_mode: str) -> None:
     """List locally stored snapshots."""
 
     _console(context, output_mode).emit_document(
-        build_snapshot_service().snapshots(), title="Snapshots"
+        build_snapshot_service(context.obj["config_path"]).snapshots(), title="Snapshots"
     )
 
 
@@ -212,7 +284,10 @@ def snapshot_show(context: click.Context, object_id: str, output_mode: str) -> N
     """Show one snapshot manifest."""
 
     _snapshot_read(
-        context, output_mode, "Snapshot", lambda: build_snapshot_service().show(object_id)
+        context,
+        output_mode,
+        "Snapshot",
+        lambda: build_snapshot_service(context.obj["config_path"]).show(object_id),
     )
 
 
@@ -227,7 +302,7 @@ def snapshot_verify(context: click.Context, object_id: str, output_mode: str) ->
         context,
         output_mode,
         "Snapshot verification",
-        lambda: build_snapshot_service().verify(object_id),
+        lambda: build_snapshot_service(context.obj["config_path"]).verify(object_id),
     )
 
 
@@ -258,7 +333,9 @@ def inspect(context: click.Context, instrument: str, source_profile: str, output
         raise click.UsageError("instrument must use MIC:SYMBOL form")
     console = _console(context, output_mode)
     try:
-        document = build_snapshot_service().inspect(instrument, source_profile)
+        document = build_snapshot_service(context.obj["config_path"]).inspect(
+            instrument, source_profile
+        )
     except (LookupError, TypeError, ValueError, OSError) as error:
         console.emit_error("inspect_failed", str(error))
         raise click.exceptions.Exit(1) from None
@@ -280,7 +357,7 @@ def _run_analysis(
 ) -> None:
     console = _console(context, output_mode)
     try:
-        document = build_snapshot_service().analyze(
+        document = build_snapshot_service(context.obj["config_path"]).analyze(
             instrument, source_profile, indicator, **parameters
         )
     except (LookupError, RuntimeError, TypeError, ValueError, OSError) as error:
