@@ -17,7 +17,16 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+agent = [
+    "marketsieve-agent==0.2.0",
+]
 all-sources = [
+    "marketsieve-source-csv==0.2.0",
+    "marketsieve-source-jquants==0.2.0",
+    "marketsieve-source-alphavantage==0.2.0",
+]
+all = [
+    "marketsieve-agent==0.2.0",
     "marketsieve-source-csv==0.2.0",
     "marketsieve-source-jquants==0.2.0",
     "marketsieve-source-alphavantage==0.2.0",
@@ -42,6 +51,7 @@ only-include = [
 ]
 
 [tool.uv.sources]
+marketsieve-agent = { workspace = true }
 marketsieve = { workspace = true }
 marketsieve-extension-api = { workspace = true }
 marketsieve-source-csv = { workspace = true }

@@ -24,6 +24,7 @@ COMMIT = re.compile(r"^[0-9a-f]{40}$")
 CHANGELOG_HEADING = re.compile(r"^## \[([^]]+)] - (\d{4}-\d{2}-\d{2})$", re.MULTILINE)
 PACKAGE_PROJECTS = (
     ROOT / "packages" / "core" / "pyproject.toml",
+    ROOT / "packages" / "agent" / "pyproject.toml",
     ROOT / "packages" / "extension-api" / "pyproject.toml",
     ROOT / "packages" / "cli" / "pyproject.toml",
     ROOT / "packages" / "source-csv" / "pyproject.toml",
@@ -32,6 +33,7 @@ PACKAGE_PROJECTS = (
 )
 PUBLIC_PACKAGES = (
     "marketsieve",
+    "marketsieve-agent",
     "marketsieve-extension-api",
     "marketsieve-cli",
     "marketsieve-source-csv",
@@ -78,8 +80,8 @@ def sha256(path: Path) -> str:
 def distributions(dist_dir: Path) -> tuple[tuple[Path, ...], tuple[Path, ...]]:
     wheels = tuple(sorted(dist_dir.glob("marketsieve*.whl")))
     sdists = tuple(sorted(dist_dir.glob("marketsieve*.tar.gz")))
-    if len(wheels) != 6 or len(sdists) != 6:
-        raise RuntimeError("release directory must contain six project wheels and six sdists")
+    if len(wheels) != 7 or len(sdists) != 7:
+        raise RuntimeError("release directory must contain seven project wheels and seven sdists")
     return wheels, sdists
 
 
@@ -210,6 +212,7 @@ def verify_contents(wheels: tuple[Path, ...], sdists: tuple[Path, ...]) -> None:
             forbidden.extend(
                 (
                     "marketsieve_cli/",
+                    "marketsieve_agent/",
                     "marketsieve_extension_api/",
                     "marketsieve_source_csv/",
                     "marketsieve_source_jquants/",
@@ -327,7 +330,8 @@ def verify(version: str, commit: str, dist_dir: Path) -> None:
             (
                 str(isolated),
                 "-c",
-                "import marketsieve; import marketsieve_cli; import marketsieve_extension_api; "
+                "import marketsieve; import marketsieve_agent; import marketsieve_cli; "
+                "import marketsieve_extension_api; "
                 "import marketsieve_source_csv; import marketsieve_source_jquants; "
                 "import marketsieve_source_alphavantage; "
                 "import marketsieve.analysis.indicators; "

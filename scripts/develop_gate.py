@@ -281,6 +281,7 @@ def check_package(path: Path) -> None:
     dist.mkdir()
     for package_name in (
         "marketsieve",
+        "marketsieve-agent",
         "marketsieve-extension-api",
         "marketsieve-cli",
         "marketsieve-source-csv",
@@ -290,10 +291,11 @@ def check_package(path: Path) -> None:
         run(("uv", "build", "--package", package_name, "--out-dir", str(dist)))
     wheels = tuple(dist.glob("*.whl"))
     sdists = tuple(dist.glob("*.tar.gz"))
-    if len(wheels) != 6 or len(sdists) != 6:
-        raise RuntimeError("the public build must produce six wheels and six sdists")
+    if len(wheels) != 7 or len(sdists) != 7:
+        raise RuntimeError("the public build must produce seven wheels and seven sdists")
     run(("uv", "run", "twine", "check", *(str(path) for path in (*wheels, *sdists))))
     core_wheel = next(item for item in wheels if item.name.startswith("marketsieve-"))
+    agent_wheel = next(item for item in wheels if item.name.startswith("marketsieve_agent-"))
     cli_wheel = next(item for item in wheels if item.name.startswith("marketsieve_cli-"))
     extension_wheel = next(
         item for item in wheels if item.name.startswith("marketsieve_extension_api-")
@@ -306,6 +308,7 @@ def check_package(path: Path) -> None:
         item for item in wheels if item.name.startswith("marketsieve_source_alphavantage-")
     )
     core_sdist = next(item for item in sdists if item.name.startswith("marketsieve-"))
+    agent_sdist = next(item for item in sdists if item.name.startswith("marketsieve_agent-"))
     cli_sdist = next(item for item in sdists if item.name.startswith("marketsieve_cli-"))
     extension_sdist = next(
         item for item in sdists if item.name.startswith("marketsieve_extension_api-")
@@ -319,6 +322,11 @@ def check_package(path: Path) -> None:
     )
     wheel_files = {
         "marketsieve": verify_core_wheel(core_wheel),
+        "marketsieve-agent": verify_module_wheel(
+            agent_wheel,
+            "marketsieve_agent",
+            forbidden=("marketsieve_cli/", "marketsieve_source_csv/", "marketsieve/"),
+        ),
         "marketsieve-cli": verify_cli_wheel(cli_wheel),
         "marketsieve-extension-api": verify_module_wheel(
             extension_wheel,
@@ -343,6 +351,7 @@ def check_package(path: Path) -> None:
     }
     sdist_files = {
         "marketsieve": verify_sdist(core_sdist, forbidden_package="marketsieve_cli"),
+        "marketsieve-agent": verify_sdist(agent_sdist, forbidden_package="packages/cli"),
         "marketsieve-cli": verify_sdist(cli_sdist, forbidden_package="packages/core"),
         "marketsieve-extension-api": verify_sdist(
             extension_sdist, forbidden_package="marketsieve_source_csv"
@@ -358,6 +367,7 @@ def check_package(path: Path) -> None:
         temporary_root = Path(temp_dir)
         isolated_targets = (
             (core_wheel, "import marketsieve"),
+            (agent_wheel, "import marketsieve_agent"),
             (extension_wheel, "import marketsieve_extension_api"),
             (cli_wheel, "import marketsieve_cli"),
             (csv_wheel, "import marketsieve_source_csv"),
@@ -385,6 +395,7 @@ def check_package(path: Path) -> None:
                 "--find-links",
                 str(RUNTIME_WHEELHOUSE),
                 str(core_wheel),
+                str(agent_wheel),
                 str(extension_wheel),
                 str(cli_wheel),
                 str(csv_wheel),
@@ -396,7 +407,8 @@ def check_package(path: Path) -> None:
             (
                 str(isolated),
                 "-c",
-                "import marketsieve; import marketsieve_cli; import marketsieve_extension_api; "
+                "import marketsieve; import marketsieve_agent; import marketsieve_cli; "
+                "import marketsieve_extension_api; "
                 "import marketsieve_source_csv; import marketsieve_source_jquants; "
                 "import marketsieve_source_alphavantage; "
                 "import marketsieve.analysis.indicators; import marketsieve.data.daily; "
