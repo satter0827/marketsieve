@@ -34,6 +34,22 @@ def test_secret_scan_reports_location_without_value(tmp_path: Path) -> None:
     assert all(value not in repr(finding) for finding in findings)
 
 
+@pytest.mark.parametrize("prefix", ("ghp_", "gho_", "ghu_", "ghs_", "ghr_"))
+def test_secret_scan_recognizes_github_token_prefixes(tmp_path: Path, prefix: str) -> None:
+    value = prefix + "A" * 36
+    path = write(tmp_path / "artifact.txt", value + "\n")
+
+    assert [finding.kind for finding in scan_paths((path,))] == ["github_token"]
+
+
+@pytest.mark.parametrize("prefix", ("AKIA", "ASIA"))
+def test_secret_scan_recognizes_aws_access_key_prefixes(tmp_path: Path, prefix: str) -> None:
+    value = prefix + "A" * 16
+    path = write(tmp_path / "artifact.txt", value + "\n")
+
+    assert [finding.kind for finding in scan_paths((path,))] == ["aws_access_key"]
+
+
 def test_secret_scan_reads_utf16_configuration(tmp_path: Path) -> None:
     key = "JQUANTS" + "_API_KEY"
     path = tmp_path / "settings.txt"

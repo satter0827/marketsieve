@@ -55,8 +55,11 @@ PATTERNS = (
     ),
     ("openai_key", re.compile(_joined(r"\bsk-", r"[A-Za-z0-9_-]{20,}\b"))),
     ("google_key", re.compile(_joined(r"\bAIza", r"[A-Za-z0-9_-]{30,}\b"))),
-    ("github_token", re.compile(_joined(r"\b(?:ghp_|github_pat_)", r"[A-Za-z0-9_]{20,}\b"))),
-    ("aws_access_key", re.compile(_joined(r"\bAKIA", r"[A-Z0-9]{16}\b"))),
+    (
+        "github_token",
+        re.compile(_joined(r"\b(?:gh[pousr]_|github_pat_)", r"[A-Za-z0-9_]{20,}\b")),
+    ),
+    ("aws_access_key", re.compile(_joined(r"\b(?:AKIA|ASIA)", r"[A-Z0-9]{16}\b"))),
     ("slack_token", re.compile(_joined(r"\bxox[baprs]-", r"[A-Za-z0-9-]{20,}\b"))),
 )
 HEADER_CREDENTIALS = (
