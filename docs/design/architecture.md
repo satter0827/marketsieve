@@ -8,10 +8,11 @@ network clients, databases, delivery providers, or LLM providers.
 
 ## Current components
 
-The repository builds five public distributions at the same version. `marketsieve` contains the
+The repository builds six public distributions at the same version. `marketsieve` contains the
 I/O-independent SDK. `marketsieve-extension-api` defines the implemented daily-bar import contract,
 `marketsieve-source-csv` implements local import, `marketsieve-source-jquants` implements explicit
-J-Quants API V2 acquisition, and `marketsieve-cli` owns the executable application and immutable
+J-Quants API V2 acquisition, `marketsieve-source-alphavantage` implements explicit Alpha Vantage
+acquisition, and `marketsieve-cli` owns the executable application and immutable
 snapshot store.
 
 The `marketsieve_cli` package owns the command-line interface, offline diagnostics, use-case
@@ -94,8 +95,8 @@ demonstration support. The SDK depends on `tzdata` so exchange timezones remain 
 installations without an operating-system timezone database.
 Analysis and synthetic modules do not reference one another; the application combines them through
 the daily-source contract.
-Sources that perform file or network I/O are separate distributions. CSV and J-Quants are working
-sources. Alpha Vantage remains a roadmap candidate.
+Sources that perform file or network I/O are separate distributions. CSV, J-Quants, and Alpha
+Vantage are working sources.
 
 ## CSV acquisition and snapshot path
 
@@ -152,12 +153,29 @@ responses do not expose a per-record publication timestamp, they use retrieval a
 cannot enter an earlier knowledge-as-of analysis. Raw responses are never retained; only response
 digests enter snapshot identity.
 
+## Alpha Vantage acquisition path
+
+`marketsieve-source-alphavantage` supports explicitly selected XNAS and XNYS instruments through
+the fixed official query endpoint. Raw daily bars use `TIME_SERIES_DAILY`. Adjusted daily bars use
+the premium `TIME_SERIES_DAILY_ADJUSTED` endpoint and apply its adjusted-close factor to OHLC while
+adjusting volume only for subsequent split coefficients. `outputsize=full` and adjusted acquisition
+require `plan=premium`; an unsupported request fails without retry, shortening, or substitution.
+
+Company identity comes from `OVERVIEW`. Financial facts come from `INCOME_STATEMENT`,
+`BALANCE_SHEET`, `CASH_FLOW`, and `EARNINGS`. Omitted fiscal starts, accounting standards,
+consolidation bases, revision states, and publication instants remain explicitly unknown and
+retrieval-bounded. Events use explicitly selected `EARNINGS`, `DIVIDENDS`, and `SPLITS` endpoints.
+Every data kind validates the requested symbol, MIC, and equity classification against `OVERVIEW`
+before accepting provider facts. Contract tests inject a synthetic transport and do not contact
+the provider.
+
 Daily bars, financials, and events are stored as independent content-addressed objects and have
 independent mutable references. A failed or unavailable data kind does not overwrite another kind.
 Financial records preserve fiscal boundaries, publication time, consolidation, revision, currency,
 scale, provider field, and normalized concept. Earnings schedules without a provider publication
-timestamp use retrieval availability. Split events are not inferred from adjusted-price factors;
-they remain missing until a provider contract supplies explicit split facts.
+timestamp use retrieval availability. Split events come only from the explicitly selected
+`SPLITS` endpoint and are never inferred from adjusted-price factors; an unselected or unavailable
+event kind remains missing.
 
 Source registration, priority, fallback, authentication, retries, rate-limit handling, caching,
 and provider-symbol mapping belong to the application or adapter packages. A source must not:
@@ -170,11 +188,11 @@ and provider-symbol mapping belong to the application or adapter packages. A sou
 
 ## Packaging boundary
 
-The supported build produces independent SDK, extension API, CLI, CSV source, and J-Quants source
-wheels and source distributions. Explicit build allowlists prevent sibling package code, tests,
-local configuration, caches, notes, and generated reports from crossing artifact boundaries. The
-complete wheel set is installed offline in an isolated environment. Source dependencies do not
-expand the core SDK.
+The supported build produces independent SDK, extension API, CLI, CSV source, J-Quants source, and
+Alpha Vantage source wheels and source distributions. Explicit build allowlists prevent sibling
+package code, tests, local configuration, caches, notes, and generated reports from crossing
+artifact boundaries. The complete wheel set is installed offline in an isolated environment.
+Source dependencies do not expand the core SDK.
 
 ## Approved 0.2 target architecture
 

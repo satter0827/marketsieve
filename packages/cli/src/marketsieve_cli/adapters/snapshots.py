@@ -125,7 +125,11 @@ def _financial_document(imported: ImportedFinancials) -> dict[str, Any]:
                 "accounting_standard": fact.accounting_standard,
                 "period": fact.period.value,
                 "provider_period": fact.provider_period,
-                "fiscal_period_start": fact.fiscal_period_start.isoformat(),
+                "fiscal_period_start": (
+                    fact.fiscal_period_start.isoformat()
+                    if fact.fiscal_period_start is not None
+                    else None
+                ),
                 "fiscal_period_end": fact.fiscal_period_end.isoformat(),
                 "published_at": fact.published_at.isoformat() if fact.published_at else None,
                 "available_at": fact.available_at.isoformat(),

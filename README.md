@@ -18,12 +18,11 @@ the SDK depend on email, LINE, an LLM provider, or a database.
 
 ## Current status
 
-`0.1.0` is the current public baseline. The next develop slice adds independently packaged CSV
-import, immutable local snapshots, verification, and price inspection. The `marketsieve` package exposes validated
-exchange-qualified instruments, daily-bar contracts, deterministic Japanese and U.S. synthetic
-sources, SMA20 state-change analysis, time-correct historical replay, and channel-neutral reports.
-The repository-local CLI presents the same evidence-backed report for people and machine clients;
-it is not an investment recommendation.
+`0.1.0` is the current public release. Develop now contains the 0.2 data-workbench foundation:
+independent CSV, J-Quants, and Alpha Vantage sources; immutable verified snapshots; price,
+financial, and event inspection; and seven deterministic technical indicators. Network access is
+limited to explicit `source fetch` commands. Offline inspection and analysis never refresh data
+implicitly. The CLI presents evidence and missing-data reasons, not an investment recommendation.
 
 ## Installation
 
@@ -34,7 +33,8 @@ Python 3.12 through 3.14 is supported. Development uses Python 3.13 and
 make sync
 ```
 
-The SDK, extension API, CLI, and CSV source can be built as independent artifacts:
+The SDK, extension API, CLI, CSV source, J-Quants source, and Alpha Vantage source build as
+independent artifacts:
 
 ```shell
 make build
@@ -42,8 +42,9 @@ make build
 
 ## CLI
 
-The public `marketsieve-cli` distribution depends on, but is not included in, the SDK wheel. Its
-current commands perform no network requests and require no secrets.
+The public `marketsieve-cli` distribution depends on, but is not included in, the SDK wheel. Read
+commands are offline. Only an explicit provider fetch reads its provider credential from the
+environment and accesses the network.
 
 ```shell
 uv run marketsieve --version
@@ -65,6 +66,7 @@ uv run marketsieve report --market all --output rich
 uv run marketsieve capabilities --output json
 uv run marketsieve source list --output json
 uv run marketsieve source import ./example-bundle --output json
+uv run marketsieve --config marketsieve.toml source fetch us XNAS:MSFT --start 2026-01-01 --end 2026-07-31 --output json
 uv run marketsieve snapshot verify SNAPSHOT_ID --output json
 uv run marketsieve inspect XTKS:7203 --source-profile offline-jp --output json
 uv run marketsieve analyze rsi XTKS:7203 --period 14 --source-profile offline-jp --output json
@@ -73,9 +75,9 @@ uv run marketsieve analyze rsi XTKS:7203 --period 14 --source-profile offline-jp
 ## Architecture
 
 The public SDK lives under `packages/core`, the implemented extension contract under
-`packages/extension-api`, the CSV adapter under `packages/source-csv`, and the CLI under
-`packages/cli`. The SDK cannot import the application or infrastructure
-libraries. See the [documentation index](docs/README.md) and formal
+`packages/extension-api`, provider adapters under `packages/source-*`, and the CLI under
+`packages/cli`. The SDK cannot import application or infrastructure libraries. See the
+[documentation index](docs/README.md) and formal
 [Architecture](docs/design/architecture.md) for the dependency rules.
 
 ## Development
@@ -104,9 +106,9 @@ request is the release boundary. See [Contributing](CONTRIBUTING.md) for the wor
 
 ## Roadmap
 
-The historical-report path is the `0.1.0` baseline. External data sources and personal delivery
-channels remain later milestones. See the [Roadmap](docs/roadmap.md) and the
-[formal design](docs/design/README.md).
+The next 0.2 slice completes section aggregation, valuation, risk, comparison, and deterministic
+reporting. The grounded explanation agent follows in 0.3. See the [Roadmap](docs/roadmap.md) and
+the [formal design](docs/design/README.md).
 
 ## License
 

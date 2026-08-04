@@ -248,12 +248,13 @@ def check_package(path: Path) -> None:
         "marketsieve-cli",
         "marketsieve-source-csv",
         "marketsieve-source-jquants",
+        "marketsieve-source-alphavantage",
     ):
         run(("uv", "build", "--package", package_name, "--out-dir", str(dist)))
     wheels = tuple(dist.glob("*.whl"))
     sdists = tuple(dist.glob("*.tar.gz"))
-    if len(wheels) != 5 or len(sdists) != 5:
-        raise RuntimeError("the public build must produce five wheels and five sdists")
+    if len(wheels) != 6 or len(sdists) != 6:
+        raise RuntimeError("the public build must produce six wheels and six sdists")
     run(("uv", "run", "twine", "check", *(str(path) for path in (*wheels, *sdists))))
     core_wheel = next(item for item in wheels if item.name.startswith("marketsieve-"))
     cli_wheel = next(item for item in wheels if item.name.startswith("marketsieve_cli-"))
@@ -264,6 +265,9 @@ def check_package(path: Path) -> None:
     jquants_wheel = next(
         item for item in wheels if item.name.startswith("marketsieve_source_jquants-")
     )
+    alphavantage_wheel = next(
+        item for item in wheels if item.name.startswith("marketsieve_source_alphavantage-")
+    )
     core_sdist = next(item for item in sdists if item.name.startswith("marketsieve-"))
     cli_sdist = next(item for item in sdists if item.name.startswith("marketsieve_cli-"))
     extension_sdist = next(
@@ -272,6 +276,9 @@ def check_package(path: Path) -> None:
     csv_sdist = next(item for item in sdists if item.name.startswith("marketsieve_source_csv-"))
     jquants_sdist = next(
         item for item in sdists if item.name.startswith("marketsieve_source_jquants-")
+    )
+    alphavantage_sdist = next(
+        item for item in sdists if item.name.startswith("marketsieve_source_alphavantage-")
     )
     wheel_files = {
         "marketsieve": verify_core_wheel(core_wheel),
@@ -291,6 +298,11 @@ def check_package(path: Path) -> None:
             "marketsieve_source_jquants",
             forbidden=("marketsieve_cli/", "marketsieve_extension_api/", "marketsieve/"),
         ),
+        "marketsieve-source-alphavantage": verify_module_wheel(
+            alphavantage_wheel,
+            "marketsieve_source_alphavantage",
+            forbidden=("marketsieve_cli/", "marketsieve_extension_api/", "marketsieve/"),
+        ),
     }
     sdist_files = {
         "marketsieve": verify_sdist(core_sdist, forbidden_package="marketsieve_cli"),
@@ -300,6 +312,9 @@ def check_package(path: Path) -> None:
         ),
         "marketsieve-source-csv": verify_sdist(csv_sdist, forbidden_package="packages/cli"),
         "marketsieve-source-jquants": verify_sdist(jquants_sdist, forbidden_package="packages/cli"),
+        "marketsieve-source-alphavantage": verify_sdist(
+            alphavantage_sdist, forbidden_package="packages/cli"
+        ),
     }
 
     with tempfile.TemporaryDirectory(prefix="marketsieve-install-") as temp_dir:
@@ -310,6 +325,7 @@ def check_package(path: Path) -> None:
             (cli_wheel, "import marketsieve_cli"),
             (csv_wheel, "import marketsieve_source_csv"),
             (jquants_wheel, "import marketsieve_source_jquants"),
+            (alphavantage_wheel, "import marketsieve_source_alphavantage"),
         )
         for target, statement in isolated_targets:
             verify_isolated_target(
@@ -336,6 +352,7 @@ def check_package(path: Path) -> None:
                 str(cli_wheel),
                 str(csv_wheel),
                 str(jquants_wheel),
+                str(alphavantage_wheel),
             )
         )
         installed = capture(
@@ -344,6 +361,7 @@ def check_package(path: Path) -> None:
                 "-c",
                 "import marketsieve; import marketsieve_cli; import marketsieve_extension_api; "
                 "import marketsieve_source_csv; import marketsieve_source_jquants; "
+                "import marketsieve_source_alphavantage; "
                 "import marketsieve.analysis.sma20; "
                 "import marketsieve.analysis.replay; import marketsieve.data.daily; "
                 "import marketsieve.domain; import marketsieve.reporting.sma20; "

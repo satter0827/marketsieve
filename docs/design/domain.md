@@ -105,11 +105,16 @@ knowledge-as-of view. Snapshot manifests separately retain retrieval time.
 ## Approved 0.2 financial facts
 
 A normalized financial fact retains its provider name, normalized concept, accounting standard,
-annual, single-quarter, cumulative interim, or trailing period, the provider's period label, fiscal
-boundaries, publication instant, consolidation basis,
+annual, single-quarter, cumulative interim, or trailing period, the provider's period label, known
+fiscal boundaries, publication instant, consolidation basis,
 reported or restated status, currency, scale, and provenance. Derived growth, margin, return,
 leverage, and valuation values are calculated only from compatible inputs. Provider-reported and
 MarketSieve-derived ratios remain distinguishable.
+
+When a provider omits a fiscal-period start, consolidation basis, revision state, accounting
+standard, or publication instant, the normalized fact keeps that dimension unknown and reports a
+missing reason. MarketSieve does not manufacture a period boundary or treat an unspecified basis as
+compatible.
 
 The implemented J-Quants summary mapping preserves `1Q` as a single quarter, `2Q` and `3Q` as
 cumulative interim periods, and `FY` as annual. It covers revenue, operating income, net income, EPS,

@@ -3,8 +3,9 @@
 ## Supported current operation
 
 MarketSieve currently supports local development, public distribution builds, offline analysis,
-immutable CSV snapshots, and explicit J-Quants price, financial-summary, dividend, and earnings
-acquisition on Python 3.12 through 3.14. Python 3.13 is the primary development version.
+immutable CSV snapshots, explicit J-Quants price, financial-summary, dividend, and earnings
+acquisition, and explicit Alpha Vantage price, profile, financial-statement, earnings, dividend,
+and split acquisition on Python 3.12 through 3.14. Python 3.13 is the primary development version.
 
 ```shell
 make sync
@@ -119,6 +120,13 @@ contract. The adapter does not claim that a configured plan supports a range, do
 responses, and preserves HTTP authorization and limit failures for the operator. Before a release,
 maintainers recheck the official [J-Quants site](https://jpx-jquants.com/) and endpoint contracts
 instead of relying on fixtures as legal or commercial authority.
+
+Alpha Vantage uses only `https://www.alphavantage.co/query` and reads
+`ALPHAVANTAGE_API_KEY` from the invoking environment. Official documentation reviewed on 2026-08-04
+identifies raw compact daily data as available to free and premium keys, raw full history as
+premium, and daily adjusted as premium. The adapter records the configured plan rather than
+probing or downgrading it. Raw responses are hashed but not persisted. Provider documentation and
+terms must be rechecked before a live release test or any change to raw-storage policy.
 
 Content-addressed objects are written to a temporary sibling directory, verified, and atomically
 renamed. Raw responses are retained only when the adapter's approved terms policy permits local

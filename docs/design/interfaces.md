@@ -143,6 +143,18 @@ and optionally `dividend`; unselected or unavailable endpoints are not called au
 unavailable provider plan, excessive exact request, or rate limit is an explicit failure rather
 than a shortened or substituted success.
 
+### Implemented Alpha Vantage commands
+
+The same `source doctor` and `source fetch` commands accept an Alpha Vantage profile for XNAS and
+XNYS instruments. `ALPHAVANTAGE_API_KEY` is the only credential input. Daily settings explicitly
+declare `plan` and `outputsize`; adjusted or full-history requests reject a free plan before network
+access. Event settings explicitly select earnings, dividend, and/or split endpoints. Provider
+errors, compact coverage gaps, and rate limits fail without retry, range shortening, or fallback.
+For Alpha Vantage financial statements, `--start` and `--end` filter the provider's
+`fiscalDateEnding`; they do not imply that the fact was published inside that range. Earnings,
+dividend, and split events are filtered by their provider-reported event dates. All values without
+a publication timestamp remain retrieval-bounded for knowledge-as-of use.
+
 ## Approved 0.3 agent target
 
 ```shell

@@ -28,6 +28,7 @@ PACKAGE_PROJECTS = (
     ROOT / "packages" / "cli" / "pyproject.toml",
     ROOT / "packages" / "source-csv" / "pyproject.toml",
     ROOT / "packages" / "source-jquants" / "pyproject.toml",
+    ROOT / "packages" / "source-alphavantage" / "pyproject.toml",
 )
 PUBLIC_PACKAGES = (
     "marketsieve",
@@ -35,6 +36,7 @@ PUBLIC_PACKAGES = (
     "marketsieve-cli",
     "marketsieve-source-csv",
     "marketsieve-source-jquants",
+    "marketsieve-source-alphavantage",
 )
 
 
@@ -75,8 +77,8 @@ def sha256(path: Path) -> str:
 def distributions(dist_dir: Path) -> tuple[tuple[Path, ...], tuple[Path, ...]]:
     wheels = tuple(sorted(dist_dir.glob("marketsieve*.whl")))
     sdists = tuple(sorted(dist_dir.glob("marketsieve*.tar.gz")))
-    if len(wheels) != 5 or len(sdists) != 5:
-        raise RuntimeError("release directory must contain five project wheels and five sdists")
+    if len(wheels) != 6 or len(sdists) != 6:
+        raise RuntimeError("release directory must contain six project wheels and six sdists")
     return wheels, sdists
 
 
@@ -106,6 +108,7 @@ def verify_contents(wheels: tuple[Path, ...], sdists: tuple[Path, ...]) -> None:
                     "marketsieve_extension_api/",
                     "marketsieve_source_csv/",
                     "marketsieve_source_jquants/",
+                    "marketsieve_source_alphavantage/",
                 )
             )
         violations.extend(name for name in names if any(item in name for item in forbidden))
@@ -222,6 +225,7 @@ def verify(version: str, commit: str, dist_dir: Path) -> None:
                 "-c",
                 "import marketsieve; import marketsieve_cli; import marketsieve_extension_api; "
                 "import marketsieve_source_csv; import marketsieve_source_jquants; "
+                "import marketsieve_source_alphavantage; "
                 "import marketsieve.analysis.sma20; "
                 "import marketsieve.data.daily; import marketsieve.domain; "
                 "import marketsieve.synthetic.daily; print(marketsieve.__version__)",

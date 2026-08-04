@@ -66,6 +66,7 @@ build: ## Build all public distributions into the generated-artifact directory.
 	uv build --package marketsieve-extension-api --out-dir "$(STATE_DIR)/artifacts/build"
 	uv build --package marketsieve-source-csv --out-dir "$(STATE_DIR)/artifacts/build"
 	uv build --package marketsieve-source-jquants --out-dir "$(STATE_DIR)/artifacts/build"
+	uv build --package marketsieve-source-alphavantage --out-dir "$(STATE_DIR)/artifacts/build"
 
 evidence: check evidence-bundle ## Run the development gate and create a review bundle.
 
