@@ -18,7 +18,7 @@ The Offline Analysis Preview tests:
 - stable evidence and results for identical inputs;
 - the source contract against its first synthetic implementation.
 
-The historical-report candidate additionally tests:
+The 0.1.0 historical report additionally tests:
 
 - independent source retrieval at every replay instant and rejection of invalid schedules;
 - stable replay, report, and evidence identities for identical inputs;

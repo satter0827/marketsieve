@@ -13,7 +13,7 @@ MarketSieveは、検証済みの市場情報から再現可能な分析、過去
 
 ## 現在の状態
 
-`0.1.0` candidateの処理経路は完成しています。公開`marketsieve` packageは、取引所を明示した銘柄、日足contract、決定論的な日米Synthetic source、SMA20状態変化分析、未来情報を排除したhistorical replay、channel-neutral reportを提供します。リポジトリ内のCLIは、人とmachine clientへ同じ根拠付きreportを提示します。この結果は投資推奨ではありません。
+`0.1.0`が現在の公開基準です。公開`marketsieve` packageは、取引所を明示した銘柄、日足contract、決定論的な日米Synthetic source、SMA20状態変化分析、未来情報を排除したhistorical replay、channel-neutral reportを提供します。リポジトリ内のCLIは、人とmachine clientへ同じ根拠付きreportを提示します。この結果は投資推奨ではありません。
 
 ## インストール
 
@@ -73,7 +73,7 @@ VS Codeはworkspaceの`.venv`を使用し、依存同期、format、現在のテ
 
 ## Roadmap
 
-historical reportの処理経路が最初の`0.1.0` candidateです。`develop`から`main`への昇格は人が判断します。外部data sourceと個人向け配信channelは後続milestoneです。順序は[Roadmap](docs/roadmap.md)、制約は[正式設計](docs/design/README.md)を参照してください。
+historical reportの処理経路が`0.1.0`の基準です。外部data sourceと個人向け配信channelは後続milestoneです。順序は[Roadmap](docs/roadmap.md)、制約は[正式設計](docs/design/README.md)を参照してください。
 
 ## ライセンス
 

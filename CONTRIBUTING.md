@@ -54,6 +54,6 @@ its cause is identified.
 
 ## Release policy
 
-The Foundation is not a release. The first tag and GitHub Release will be `0.1.0` after the offline
-analysis path is complete. Only the `marketsieve` wheel and source distribution are public release
-artifacts; the repository-local application is never uploaded.
+`0.1.0` is the first stable release. Only the `marketsieve` wheel and source distribution are public
+release artifacts; the repository-local application is never uploaded. PyPI publication remains
+disabled until Trusted Publishing has a separate approved design.

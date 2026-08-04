@@ -18,7 +18,7 @@ the SDK depend on email, LINE, an LLM provider, or a database.
 
 ## Current status
 
-The `0.1.0` candidate path is complete. The public `marketsieve` package exposes validated
+`0.1.0` is the current public baseline. The `marketsieve` package exposes validated
 exchange-qualified instruments, daily-bar contracts, deterministic Japanese and U.S. synthetic
 sources, SMA20 state-change analysis, time-correct historical replay, and channel-neutral reports.
 The repository-local CLI presents the same evidence-backed report for people and machine clients;
@@ -97,9 +97,9 @@ request is the release boundary. See [Contributing](CONTRIBUTING.md) for the wor
 
 ## Roadmap
 
-The historical-report path is the first `0.1.0` candidate. Promotion from `develop` to `main`
-remains a human release decision. External data sources and personal delivery channels remain later
-milestones. See the [Roadmap](docs/roadmap.md) and the [formal design](docs/design/README.md).
+The historical-report path is the `0.1.0` baseline. External data sources and personal delivery
+channels remain later milestones. See the [Roadmap](docs/roadmap.md) and the
+[formal design](docs/design/README.md).
 
 ## License
 

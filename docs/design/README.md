@@ -1,7 +1,7 @@
 # Design
 
-This directory is the normative system-level design for implemented behavior through the
-historical-report candidate. It does not make later roadmap items available or public.
+This directory is the normative system-level design for implemented `0.1.0` behavior. It does not
+make later roadmap items available or public.
 
 ## Documents
 

@@ -22,14 +22,13 @@ behavior; current and approved near-term constraints live in the [formal design]
 The preview validates the first data-kind-specific source contract with its synthetic implementation
 and tests. It publishes no file or network adapters.
 
-## 0.1.0 candidate — complete
+## 0.1.0 — complete
 
 - Add historical replay that prevents future-information leakage.
 - Generate channel-neutral template reports with evidence references.
 - Deliver reports through a console adapter.
 
-Completion of this path creates the first `0.1.0` release candidate. Promotion from `develop` to
-`main` remains a human release decision.
+This path defines the first stable public SDK release.
 
 ## External source expansion
 
