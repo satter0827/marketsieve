@@ -83,6 +83,14 @@ def test_secret_scan_rejects_url_credentials(tmp_path: Path, parameter: str) -> 
     assert [finding.kind for finding in scan_paths((path,))] == ["url_credential"]
 
 
+def test_secret_scan_rejects_url_userinfo_credentials(tmp_path: Path) -> None:
+    userinfo_value = "opaque-production-credential"
+    url = "https://alice:" + userinfo_value + "@provider.invalid/data\n"
+    path = write(tmp_path / "request.txt", url)
+
+    assert [finding.kind for finding in scan_paths((path,))] == ["url_credential"]
+
+
 def test_secret_scan_rejects_sensitive_tracked_path(tmp_path: Path) -> None:
     path = write(tmp_path / ".env", "SAFE=placeholder\n")
 
