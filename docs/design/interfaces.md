@@ -153,7 +153,7 @@ For Alpha Vantage financial statements, `--start` and `--end` filter the provide
 dividend, and split events are filtered by their provider-reported event dates. All values without
 a publication timestamp remain retrieval-bounded for knowledge-as-of use.
 
-## Approved 0.3 agent target
+## Agent explanation
 
 ```shell
 marketsieve agent explain MIC:SYMBOL --source-profile PROFILE --provider fake
@@ -168,3 +168,7 @@ Fake is the default. Real model names are explicit configuration and are not fro
 Dry-run shows the credential-free outgoing fact payload. Unsafe, invalid, or unavailable model
 output produces a warning on stderr and a deterministic template on stdout. No provider failure
 changes the selected destination.
+
+`agent doctor PROVIDER` validates configuration without contacting a model. LM Studio endpoints are
+loopback-only unless `--allow-remote` is explicit. Provider model names and the optional LM Studio
+endpoint are read from `[agent.providers.NAME]`; credentials are never valid TOML settings.
