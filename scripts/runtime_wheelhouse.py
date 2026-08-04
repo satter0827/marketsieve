@@ -10,6 +10,7 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).parents[1]
+SUPPORTED_PYTHON_VERSIONS = ("3.12", "3.13", "3.14")
 
 
 def run(command: tuple[str, ...], *, cwd: Path = ROOT) -> None:
@@ -22,6 +23,26 @@ def capture(command: tuple[str, ...]) -> str:
 
 def python_in_venv(venv: Path) -> Path:
     return venv / ("Scripts/python.exe" if sys.platform == "win32" else "bin/python")
+
+
+def download_command(
+    python: Path, requirement_file: Path, output: Path, target_version: str
+) -> tuple[str, ...]:
+    return (
+        str(python),
+        "-m",
+        "pip",
+        "download",
+        "--disable-pip-version-check",
+        "--only-binary=:all:",
+        "--require-hashes",
+        "--python-version",
+        target_version,
+        "--dest",
+        str(output),
+        "--requirement",
+        str(requirement_file),
+    )
 
 
 def prepare(output: Path) -> None:
@@ -52,21 +73,9 @@ def prepare(output: Path) -> None:
         requirement_file.write_text(requirements, encoding="utf-8")
         venv = temporary / "venv"
         run((sys.executable, "-m", "venv", str(venv)))
-        run(
-            (
-                str(python_in_venv(venv)),
-                "-m",
-                "pip",
-                "download",
-                "--disable-pip-version-check",
-                "--only-binary=:all:",
-                "--require-hashes",
-                "--dest",
-                str(resolved),
-                "--requirement",
-                str(requirement_file),
-            )
-        )
+        python = python_in_venv(venv)
+        for target_version in SUPPORTED_PYTHON_VERSIONS:
+            run(download_command(python, requirement_file, resolved, target_version))
 
 
 def main() -> None:

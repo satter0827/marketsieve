@@ -135,7 +135,9 @@ manifests.
 
 GitHub Release is the approved distribution channel. Release evidence contains every wheel and
 source distribution, a wheelhouse archive, constraints, a SHA-256 manifest, and compatibility
-results. PyPI publication remains disabled, so installation uses an unpacked wheelhouse with
+results. The build-once job includes locked runtime wheels for Python 3.12, 3.13, and 3.14 on the
+release runner platform; every compatibility job verifies and installs that same checksummed
+artifact without regenerating dependencies. PyPI publication remains disabled, so installation uses an unpacked wheelhouse with
 `pip --no-index --find-links`.
 
 ## Approved 0.3 operation
