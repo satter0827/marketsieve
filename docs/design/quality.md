@@ -31,6 +31,11 @@ The 0.1.0 historical report additionally tests:
 Tests cover unit behavior, application integration, CLI execution, and structural boundaries. No
 test depends on network access, provider credentials, local portfolio data, or wall-clock timing.
 
+The CSV snapshot vertical slice additionally tests strict manifest metadata, publication and
+retrieval availability, path containment, deterministic object identity, idempotent import,
+normalized-content tamper detection, interrupted-write exclusion, explicit plugin metadata, and
+the offline import-to-inspect CLI path.
+
 ## Repository acceptance
 
 The SDK must not import the application, configuration, logging, network, database, delivery, or
@@ -62,9 +67,10 @@ After semantic review succeeds, `make review-attest REVIEWED_SHA=<full-commit-sh
 matching local evidence and clean HEAD before publishing the `Pre-PR Review` commit status. The
 develop ruleset requires that status for the current head; a later commit cannot inherit it.
 
-The Release Gate builds the SDK and CLI distributions once and verifies the same artifact set on
-every supported Python version. It admits only a same-repository `develop -> main` pull request. Tags, GitHub
-Releases, and package publication remain separate human-authorized operations.
+The Release Gate builds the SDK, extension API, CLI, and CSV source distributions once and verifies
+the same artifact set on every supported Python version. It admits only a same-repository
+`develop -> main` pull request. Tags, GitHub Releases, and package publication remain separate
+human-authorized operations.
 
 Repository-owned machine contracts use JSON Schema Draft 2020-12. Each schema has a stable
 identifier and a SemVer payload version: breaking changes increment major, compatible field

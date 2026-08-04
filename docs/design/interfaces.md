@@ -97,6 +97,14 @@ Capabilities version 2 describes actual network, secret, read, write, plugin, sc
 exit behavior. Partial results are successful only when their completeness and missing reasons are
 explicit.
 
+### Implemented CSV vertical slice
+
+`source list`, `source import`, `snapshot list`, `snapshot show`, `snapshot verify`, and `inspect`
+are implemented for daily-bar CSV snapshots. Import is the only command in this slice that writes
+market-data state. Snapshot and inspection commands are offline. `inspect` currently returns an
+available price section and explicitly unavailable technical, financial, valuation, risk, event,
+and data-quality sections. It never treats those omissions as zero values.
+
 ## Approved 0.3 agent target
 
 ```shell

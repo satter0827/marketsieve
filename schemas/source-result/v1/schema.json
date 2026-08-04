@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:marketsieve:schema:source-result:1.0.0",
+  "title": "MarketSieve source result",
+  "type": "object",
+  "required": ["schema_version"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "sources": {"type": "array", "items": {"type": "object"}},
+    "status": {"enum": ["imported"]},
+    "object_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "source_profile": {"type": "string", "minLength": 1},
+    "instrument": {"type": "string", "pattern": "^[A-Z0-9]{4}:[A-Z0-9]+$"},
+    "kind": {"const": "daily_bars"},
+    "observations": {"type": "integer", "minimum": 1}
+  },
+  "oneOf": [
+    {"required": ["sources"]},
+    {"required": ["status", "object_id", "source_profile", "instrument", "kind", "observations"]}
+  ],
+  "additionalProperties": false
+}

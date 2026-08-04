@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 MarketSieve is an open-source Python foundation for reproducible analysis of Japanese and U.S.
-equities. The public SDK and the repository-local operational application have separate dependency
+equities. The public SDK and CLI application have separate dependency
 boundaries so market logic can remain independent from data providers, report agents, and delivery
 channels.
 
@@ -18,7 +18,8 @@ the SDK depend on email, LINE, an LLM provider, or a database.
 
 ## Current status
 
-`0.1.0` is the current public baseline. The `marketsieve` package exposes validated
+`0.1.0` is the current public baseline. The next develop slice adds independently packaged CSV
+import, immutable local snapshots, verification, and price inspection. The `marketsieve` package exposes validated
 exchange-qualified instruments, daily-bar contracts, deterministic Japanese and U.S. synthetic
 sources, SMA20 state-change analysis, time-correct historical replay, and channel-neutral reports.
 The repository-local CLI presents the same evidence-backed report for people and machine clients;
@@ -33,7 +34,7 @@ Python 3.12 through 3.14 is supported. Development uses Python 3.13 and
 make sync
 ```
 
-The public SDK and CLI can be built as independent artifacts:
+The SDK, extension API, CLI, and CSV source can be built as independent artifacts:
 
 ```shell
 make build
@@ -62,12 +63,17 @@ The direct commands expose all output modes:
 uv run marketsieve doctor --output json
 uv run marketsieve report --market all --output rich
 uv run marketsieve capabilities --output json
+uv run marketsieve source list --output json
+uv run marketsieve source import ./example-bundle --output json
+uv run marketsieve snapshot verify SNAPSHOT_ID --output json
+uv run marketsieve inspect XTKS:7203 --source-profile offline-jp --output json
 ```
 
 ## Architecture
 
-The public SDK lives under `packages/core`. The operational application lives under
-`packages/cli` and depends on the SDK. The SDK cannot import the application or infrastructure
+The public SDK lives under `packages/core`, the implemented extension contract under
+`packages/extension-api`, the CSV adapter under `packages/source-csv`, and the CLI under
+`packages/cli`. The SDK cannot import the application or infrastructure
 libraries. See the [documentation index](docs/README.md) and formal
 [Architecture](docs/design/architecture.md) for the dependency rules.
 

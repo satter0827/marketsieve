@@ -18,9 +18,12 @@ def test_schemas_are_draft_2020_12_and_semantically_versioned() -> None:
         "capabilities-result",
         "cli-error",
         "doctor-result",
+        "inspect-result",
         "log-record",
         "report-result",
         "review-report",
+        "snapshot-result",
+        "source-result",
     }
 
     for path in paths:

@@ -10,6 +10,8 @@ FORBIDDEN_SDK_IMPORTS = {
     "http",
     "logging",
     "marketsieve_cli",
+    "marketsieve_extension_api",
+    "marketsieve_source_csv",
     "os",
     "smtplib",
     "sqlite3",
@@ -43,6 +45,18 @@ def test_application_depends_on_public_sdk() -> None:
     imports = set().union(*(imported_roots(path) for path in application_source.rglob("*.py")))
 
     assert "marketsieve" in imports
+
+
+def test_extension_and_csv_packages_follow_inward_dependencies() -> None:
+    extension = ROOT / "packages/extension-api/src/marketsieve_extension_api"
+    csv_source = ROOT / "packages/source-csv/src/marketsieve_source_csv"
+    extension_imports = set().union(*(imported_roots(path) for path in extension.rglob("*.py")))
+    csv_imports = set().union(*(imported_roots(path) for path in csv_source.rglob("*.py")))
+
+    assert "marketsieve" in extension_imports
+    assert "marketsieve_cli" not in extension_imports | csv_imports
+    assert "marketsieve_source_csv" not in extension_imports
+    assert "marketsieve_extension_api" in csv_imports
 
 
 def test_analysis_and_synthetic_sources_do_not_reference_each_other() -> None:

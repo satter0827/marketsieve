@@ -83,9 +83,9 @@ calculated facts. The report is channel-neutral and contains no recommendation, 
 suitability decision. Its identity is derived from normalized report content rather than rendered
 text.
 
-## Approved 0.2 availability model
+## Availability model
 
-The target model distinguishes four related values:
+CSV acquisition distinguishes four related values:
 
 - `observation_date` identifies the market or accounting period being described;
 - `published_at` identifies when the source or issuer made the fact available, when known;
@@ -96,6 +96,10 @@ A fact without a verified publication instant uses retrieval availability and ca
 about knowledge before it was retrieved. Historical coverage is not evidence of historical
 availability. Restated facts retain their revision identity rather than replacing earlier snapshot
 evidence.
+
+The current normalized daily-bar document retains the trading date as its observation date and the
+selected availability instant on each bar. Its snapshot manifest separately retains retrieval time
+and the declared publication-or-retrieval basis. Broader fact types will use the same distinction.
 
 ## Approved 0.2 financial facts
 

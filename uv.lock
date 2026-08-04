@@ -6,6 +6,8 @@ requires-python = ">=3.12, <3.15"
 members = [
     "marketsieve",
     "marketsieve-cli",
+    "marketsieve-extension-api",
+    "marketsieve-source-csv",
     "marketsieve-workspace",
 ]
 
@@ -570,14 +572,49 @@ source = { editable = "packages/cli" }
 dependencies = [
     { name = "click" },
     { name = "marketsieve" },
+    { name = "marketsieve-extension-api" },
     { name = "rich" },
+]
+
+[package.optional-dependencies]
+all-sources = [
+    { name = "marketsieve-source-csv" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "click", specifier = ">=8.1,<9" },
     { name = "marketsieve", editable = "packages/core" },
+    { name = "marketsieve-extension-api", editable = "packages/extension-api" },
+    { name = "marketsieve-source-csv", marker = "extra == 'all-sources'", editable = "packages/source-csv" },
     { name = "rich", specifier = ">=14,<15" },
+]
+provides-extras = ["all-sources"]
+
+[[package]]
+name = "marketsieve-extension-api"
+version = "0.1.0"
+source = { editable = "packages/extension-api" }
+dependencies = [
+    { name = "marketsieve" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "marketsieve", editable = "packages/core" }]
+
+[[package]]
+name = "marketsieve-source-csv"
+version = "0.1.0"
+source = { editable = "packages/source-csv" }
+dependencies = [
+    { name = "marketsieve" },
+    { name = "marketsieve-extension-api" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "marketsieve", editable = "packages/core" },
+    { name = "marketsieve-extension-api", editable = "packages/extension-api" },
 ]
 
 [[package]]
@@ -586,6 +623,7 @@ version = "0.0.0"
 source = { virtual = "." }
 dependencies = [
     { name = "marketsieve-cli" },
+    { name = "marketsieve-source-csv" },
 ]
 
 [package.dev-dependencies]
@@ -603,7 +641,10 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "marketsieve-cli", editable = "packages/cli" }]
+requires-dist = [
+    { name = "marketsieve-cli", editable = "packages/cli" },
+    { name = "marketsieve-source-csv", editable = "packages/source-csv" },
+]
 
 [package.metadata.requires-dev]
 dev = [

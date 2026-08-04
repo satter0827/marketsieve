@@ -3,7 +3,7 @@
 [![CI](https://github.com/satter0827/marketsieve/actions/workflows/ci.yml/badge.svg)](https://github.com/satter0827/marketsieve/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-MarketSieveは、日本株と米国株を再現可能な方法で分析するためのオープンソースPython基盤です。公開SDKとリポジトリ内の運用アプリケーションの依存境界を分け、市場ロジックをデータプロバイダー、レポートエージェント、配信チャネルから独立させます。
+MarketSieveは、日本株と米国株を再現可能な方法で分析するためのオープンソースPython基盤です。公開SDKとCLI applicationの依存境界を分け、市場ロジックをデータプロバイダー、レポートエージェント、配信チャネルから独立させます。
 
 [English README](README.md)
 
@@ -13,7 +13,7 @@ MarketSieveは、検証済みの市場情報から再現可能な分析、過去
 
 ## 現在の状態
 
-`0.1.0`が現在の公開基準です。公開`marketsieve` packageは、取引所を明示した銘柄、日足contract、決定論的な日米Synthetic source、SMA20状態変化分析、未来情報を排除したhistorical replay、channel-neutral reportを提供します。リポジトリ内のCLIは、人とmachine clientへ同じ根拠付きreportを提示します。この結果は投資推奨ではありません。
+`0.1.0`が現在の公開基準です。次のdevelop sliceでは、独立packageのCSV import、変更不能なlocal snapshot、検証、price inspectionを追加します。公開`marketsieve` packageは、取引所を明示した銘柄、日足contract、決定論的な日米Synthetic source、SMA20状態変化分析、未来情報を排除したhistorical replay、channel-neutral reportを提供します。CLIが提示する結果は投資推奨ではありません。
 
 ## インストール
 
@@ -23,7 +23,7 @@ Python 3.12から3.14をサポートします。開発にはPython 3.13と[uv](h
 make sync
 ```
 
-公開SDKは単独でビルドできます。
+SDK、extension API、CLI、CSV sourceは独立artifactとしてビルドできます。
 
 ```shell
 make build
@@ -49,11 +49,15 @@ make capabilities-json
 uv run marketsieve doctor --output json
 uv run marketsieve report --market all --output rich
 uv run marketsieve capabilities --output json
+uv run marketsieve source list --output json
+uv run marketsieve source import ./example-bundle --output json
+uv run marketsieve snapshot verify SNAPSHOT_ID --output json
+uv run marketsieve inspect XTKS:7203 --source-profile offline-jp --output json
 ```
 
 ## アーキテクチャ
 
-公開SDKは`packages/core`、運用アプリケーションは`packages/cli`に配置します。運用アプリケーションはSDKへ依存しますが、SDKはアプリケーションやインフラストラクチャ用ライブラリをimportできません。[文書索引](docs/README.md)と正式な[Architecture](docs/design/architecture.md)に依存規則を記載しています。
+公開SDKは`packages/core`、実装済みextension contractは`packages/extension-api`、CSV adapterは`packages/source-csv`、CLIは`packages/cli`に配置します。SDKはアプリケーションやインフラストラクチャ用ライブラリをimportできません。[文書索引](docs/README.md)と正式な[Architecture](docs/design/architecture.md)に依存規則を記載しています。
 
 ## 開発
 

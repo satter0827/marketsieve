@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import sys
+from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 import click
@@ -12,6 +14,7 @@ from marketsieve_cli.bootstrap import (
     build_console_output,
     build_diagnostics_service,
     build_report_service,
+    build_snapshot_service,
     sdk_version,
 )
 
@@ -29,6 +32,30 @@ COMMAND_METADATA = {
     "report": {
         "output_schema": "urn:marketsieve:schema:report-result:1.0.0",
         "effects": {"network": False, "secrets": False, "optional_writes": ["log_file"]},
+    },
+    "source list": {
+        "output_schema": "urn:marketsieve:schema:source-result:1.0.0",
+        "effects": {"network": False, "secrets": False, "optional_writes": []},
+    },
+    "source import": {
+        "output_schema": "urn:marketsieve:schema:source-result:1.0.0",
+        "effects": {"network": False, "secrets": False, "optional_writes": ["snapshot"]},
+    },
+    "snapshot list": {
+        "output_schema": "urn:marketsieve:schema:snapshot-result:1.0.0",
+        "effects": {"network": False, "secrets": False, "optional_writes": []},
+    },
+    "snapshot show": {
+        "output_schema": "urn:marketsieve:schema:snapshot-result:1.0.0",
+        "effects": {"network": False, "secrets": False, "optional_writes": []},
+    },
+    "snapshot verify": {
+        "output_schema": "urn:marketsieve:schema:snapshot-result:1.0.0",
+        "effects": {"network": False, "secrets": False, "optional_writes": []},
+    },
+    "inspect": {
+        "output_schema": "urn:marketsieve:schema:inspect-result:1.0.0",
+        "effects": {"network": False, "secrets": False, "optional_writes": []},
     },
 }
 
@@ -113,16 +140,129 @@ def report(context: click.Context, market: str, output_mode: str) -> None:
         raise click.exceptions.Exit(1) from None
 
 
+@main.group()
+def source() -> None:
+    """Inspect installed sources and explicitly import local data."""
+
+
+@source.command("list")
+@output_option
+@click.pass_context
+def source_list(context: click.Context, output_mode: str) -> None:
+    """List source package metadata without loading plugin code."""
+
+    _console(context, output_mode).emit_document(
+        build_snapshot_service().sources(), title="Installed sources"
+    )
+
+
+@source.command("import")
+@click.argument("path", type=click.Path(path_type=Path, exists=True, file_okay=False))
+@click.option("--plugin", default="csv", show_default=True, help="Select one installed source.")
+@output_option
+@click.pass_context
+def source_import(context: click.Context, path: Path, plugin: str, output_mode: str) -> None:
+    """Import one local dataset bundle into immutable storage."""
+
+    console = _console(context, output_mode)
+    try:
+        document = build_snapshot_service().import_bundle(path, plugin)
+    except (LookupError, RuntimeError, TypeError, ValueError, OSError) as error:
+        console.emit_error("source_import_failed", str(error))
+        raise click.exceptions.Exit(1) from None
+    console.emit_document(document, title="Imported snapshot")
+
+
+@main.group()
+def snapshot() -> None:
+    """List, show, and verify immutable snapshots."""
+
+
+@snapshot.command("list")
+@output_option
+@click.pass_context
+def snapshot_list(context: click.Context, output_mode: str) -> None:
+    """List locally stored snapshots."""
+
+    _console(context, output_mode).emit_document(
+        build_snapshot_service().snapshots(), title="Snapshots"
+    )
+
+
+@snapshot.command("show")
+@click.argument("object_id")
+@output_option
+@click.pass_context
+def snapshot_show(context: click.Context, object_id: str, output_mode: str) -> None:
+    """Show one snapshot manifest."""
+
+    _snapshot_read(
+        context, output_mode, "Snapshot", lambda: build_snapshot_service().show(object_id)
+    )
+
+
+@snapshot.command("verify")
+@click.argument("object_id")
+@output_option
+@click.pass_context
+def snapshot_verify(context: click.Context, object_id: str, output_mode: str) -> None:
+    """Verify one snapshot's checksums and content identity."""
+
+    _snapshot_read(
+        context,
+        output_mode,
+        "Snapshot verification",
+        lambda: build_snapshot_service().verify(object_id),
+    )
+
+
+def _snapshot_read(
+    context: click.Context,
+    output_mode: str,
+    title: str,
+    operation: Callable[[], dict[str, Any]],
+) -> None:
+    console = _console(context, output_mode)
+    try:
+        document = operation()
+    except (LookupError, TypeError, ValueError, OSError) as error:
+        console.emit_error("snapshot_read_failed", str(error))
+        raise click.exceptions.Exit(1) from None
+    console.emit_document(document, title=title)
+
+
+@main.command()
+@click.argument("instrument")
+@click.option("--source-profile", required=True, help="Select the exact stored source profile.")
+@output_option
+@click.pass_context
+def inspect(context: click.Context, instrument: str, source_profile: str, output_mode: str) -> None:
+    """Inspect available and missing equity sections offline."""
+
+    if instrument.count(":") != 1:
+        raise click.UsageError("instrument must use MIC:SYMBOL form")
+    console = _console(context, output_mode)
+    try:
+        document = build_snapshot_service().inspect(instrument, source_profile)
+    except (LookupError, TypeError, ValueError, OSError) as error:
+        console.emit_error("inspect_failed", str(error))
+        raise click.exceptions.Exit(1) from None
+    console.emit_document(document, title="Equity inspection")
+
+
 def capabilities_document() -> dict[str, Any]:
     """Describe the real Click command surface and its operational contract."""
 
     def option_payload(parameter: click.Option) -> dict[str, Any]:
         choices = list(parameter.type.choices) if isinstance(parameter.type, click.Choice) else None
+        default = parameter.default
+        if not isinstance(default, (str, int, float, bool, list, dict, type(None))):
+            default = None
         return {
             "name": parameter.name,
             "flags": list(parameter.opts),
             "required": parameter.required,
-            "default": parameter.default,
+            "default": default,
             "choices": choices,
         }
 
@@ -131,8 +271,19 @@ def capabilities_document() -> dict[str, Any]:
         for parameter in main.params
         if isinstance(parameter, click.Option) and parameter.name != "version"
     ]
+
+    def leaf_commands(group: click.Group, prefix: str = "") -> list[tuple[str, click.Command]]:
+        leaves: list[tuple[str, click.Command]] = []
+        for name, command in sorted(group.commands.items()):
+            qualified = f"{prefix} {name}".strip()
+            if isinstance(command, click.Group):
+                leaves.extend(leaf_commands(command, qualified))
+            else:
+                leaves.append((qualified, command))
+        return leaves
+
     commands = []
-    for name, command in sorted(main.commands.items()):
+    for name, command in leaf_commands(main):
         options = []
         for parameter in command.params:
             if not isinstance(parameter, click.Option):

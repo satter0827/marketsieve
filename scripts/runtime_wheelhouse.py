@@ -38,6 +38,8 @@ def prepare(output: Path) -> None:
             "--locked",
             "--package",
             "marketsieve-cli",
+            "--extra",
+            "all-sources",
             "--no-dev",
             "--no-emit-workspace",
             "--no-annotate",

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TextIO
 
 from marketsieve import __version__
@@ -15,8 +16,11 @@ from marketsieve.synthetic.daily import (
     us_source,
 )
 from marketsieve_cli.adapters.console import ConsoleOutput, OutputMode
+from marketsieve_cli.adapters.plugins import SourcePluginRegistry
+from marketsieve_cli.adapters.snapshots import SnapshotStore
 from marketsieve_cli.application.diagnostics import DiagnosticsService
 from marketsieve_cli.application.report import ReportMarket, ReportService
+from marketsieve_cli.application.snapshots import SnapshotService
 from marketsieve_cli.observability import configure_logger
 
 
@@ -74,6 +78,15 @@ def build_report_service(
     )
     logger = configure_logger(level=level, write_file=write_log_file)
     return ReportService(markets, output, logger)
+
+
+def build_snapshot_service() -> SnapshotService:
+    """Build explicit source-import and offline snapshot use cases."""
+
+    return SnapshotService(
+        SourcePluginRegistry(),
+        SnapshotStore(Path(".marketsieve/data")),
+    )
 
 
 def sdk_version() -> str:

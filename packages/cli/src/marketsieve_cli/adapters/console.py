@@ -249,6 +249,18 @@ class ConsoleOutput:
             table.add_row(command["name"], command["summary"], command["output_schema"] or "-")
         self._console.print(table)
 
+    def emit_document(self, payload: dict[str, Any], *, title: str) -> None:
+        """Render a workbench document without changing its machine values."""
+
+        if self._mode is OutputMode.JSON:
+            self._stdout.write(_json(payload) + "\n")
+            return
+        rendered = json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True)
+        if self._mode is OutputMode.TEXT:
+            self._stdout.write(rendered + "\n")
+            return
+        self._console.print(Panel(rendered, title=title, border_style="cyan"))
+
     def emit_error(self, code: str, message: str) -> None:
         if self._mode is OutputMode.JSON:
             payload = {"schema_version": ERROR_SCHEMA_VERSION, "error": code, "message": message}
