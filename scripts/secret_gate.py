@@ -89,6 +89,15 @@ def _scan_text(label: str, text: str) -> list[Finding]:
     return findings
 
 
+def _scan_added_lines(label: str, patch: bytes) -> list[Finding]:
+    additions = "\n".join(
+        line[1:]
+        for line in patch.decode("utf-8", errors="replace").splitlines()
+        if line.startswith("+") and not line.startswith("+++")
+    )
+    return _scan_text(label, additions)
+
+
 def scan_paths(paths: Iterable[Path]) -> list[Finding]:
     findings: list[Finding] = []
     for path in dict.fromkeys(paths):
@@ -106,13 +115,36 @@ def scan_paths(paths: Iterable[Path]) -> list[Finding]:
 
 def scan_diff(base: str) -> list[Finding]:
     patch = _capture(("git", "diff", "--no-ext-diff", "--unified=0", base, "--"))
-    return _scan_text(f"git-diff:{base}", patch.decode("utf-8", errors="replace"))
+    return _scan_added_lines(f"git-diff:{base}", patch)
+
+
+def scan_history(base: str) -> list[Finding]:
+    commits = _capture(("git", "rev-list", "--reverse", f"{base}..HEAD")).splitlines()
+    findings: list[Finding] = []
+    for commit in commits:
+        sha = commit.decode("ascii")
+        patch = _capture(
+            (
+                "git",
+                "diff-tree",
+                "--root",
+                "-m",
+                "-p",
+                "--no-commit-id",
+                "--unified=0",
+                sha,
+                "--",
+            )
+        )
+        findings.extend(_scan_added_lines(f"git-commit:{sha}", patch))
+    return findings
 
 
 def check(paths: tuple[Path, ...], base: str | None) -> None:
     findings = scan_paths((*_tracked_paths(), *_artifact_paths(paths)))
     if base is not None:
         findings.extend(scan_diff(base))
+        findings.extend(scan_history(base))
     unique = sorted(set(findings), key=lambda item: (item.path, item.line, item.kind))
     if unique:
         for finding in unique:
