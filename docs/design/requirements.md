@@ -9,7 +9,7 @@ report generation infrastructure, and delivery channels.
 ## Current foundation
 
 - **FND-01:** The `marketsieve` distribution builds and installs as a typed public SDK.
-- **FND-02:** The repository-local application exposes version and offline diagnostic commands.
+- **FND-02:** The public CLI distribution exposes version and offline diagnostic commands.
 - **FND-03:** The public SDK remains independent from the application, configuration, logging,
   network clients, databases, delivery providers, and LLM providers.
 - **FND-04:** Local and CI gates verify code quality, tests, and public distribution isolation.

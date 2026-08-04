@@ -54,6 +54,7 @@ its cause is identified.
 
 ## Release policy
 
-`0.1.0` is the first stable release. Only the `marketsieve` wheel and source distribution are public
-release artifacts; the repository-local application is never uploaded. PyPI publication remains
-disabled until Trusted Publishing has a separate approved design.
+`0.1.0` is the first stable release. Starting with the 0.2 development line, `marketsieve` and
+`marketsieve-cli` are independently built public distributions and retain the same version. Release
+artifacts are published through GitHub Releases only. PyPI publication remains disabled until
+Trusted Publishing has a separate approved design.

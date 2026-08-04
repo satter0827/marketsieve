@@ -24,6 +24,7 @@ help: ## Show the available project commands.
 
 sync: ## Install the locked workspace and development dependencies.
 	uv sync --locked
+	uv run python scripts/runtime_wheelhouse.py prepare --output "$(STATE_DIR)/cache/runtime-wheelhouse"
 
 format: ## Format source, tests, scripts, and configuration snippets.
 	uv run ruff format .

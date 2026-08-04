@@ -17,6 +17,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 ROOT = Path(__file__).parents[1]
+RUNTIME_WHEELHOUSE = ROOT / ".marketsieve" / "cache" / "runtime-wheelhouse"
 VERSION = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+$")
 COMMIT = re.compile(r"^[0-9a-f]{40}$")
 CHANGELOG_HEADING = re.compile(r"^## \[([^]]+)] - (\d{4}-\d{2}-\d{2})$", re.MULTILINE)
@@ -156,7 +157,19 @@ def verify(version: str, commit: str, dist_dir: Path) -> None:
         venv = Path(temp_dir) / "venv"
         run((sys.executable, "-m", "venv", str(venv)))
         isolated = python_in_venv(venv)
-        run((str(isolated), "-m", "pip", "install", *(str(wheel) for wheel in wheels)))
+        run(
+            (
+                str(isolated),
+                "-m",
+                "pip",
+                "install",
+                "--disable-pip-version-check",
+                "--no-index",
+                "--find-links",
+                str(RUNTIME_WHEELHOUSE),
+                *(str(wheel) for wheel in wheels),
+            )
+        )
         installed = capture(
             (
                 str(isolated),

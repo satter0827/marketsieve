@@ -1,4 +1,4 @@
-"""Composition root for repository-local application services."""
+"""Composition root for the public CLI application."""
 
 from __future__ import annotations
 

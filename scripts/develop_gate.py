@@ -19,6 +19,7 @@ from jsonschema import Draft202012Validator, FormatChecker
 
 ROOT = Path(__file__).parents[1]
 STATE_ROOT = ROOT / ".marketsieve"
+RUNTIME_WHEELHOUSE = STATE_ROOT / "cache" / "runtime-wheelhouse"
 
 
 def run(command: Sequence[str], *, cwd: Path = ROOT) -> None:
@@ -223,7 +224,20 @@ def check_package(path: Path) -> None:
         venv = Path(temp_dir) / "venv"
         run((sys.executable, "-m", "venv", str(venv)))
         isolated = python_in_venv(venv)
-        run((str(isolated), "-m", "pip", "install", str(core_wheel), str(cli_wheel)))
+        run(
+            (
+                str(isolated),
+                "-m",
+                "pip",
+                "install",
+                "--disable-pip-version-check",
+                "--no-index",
+                "--find-links",
+                str(RUNTIME_WHEELHOUSE),
+                str(core_wheel),
+                str(cli_wheel),
+            )
+        )
         installed = capture(
             (
                 str(isolated),
