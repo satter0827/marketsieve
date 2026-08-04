@@ -162,6 +162,26 @@ def test_history_scan_reads_archive_before_later_removal(monkeypatch: pytest.Mon
     assert any("-r" in command for command in commands if "--name-only" in command)
 
 
+def test_history_scan_fails_closed_for_binary_before_later_removal(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    responses = iter(
+        (
+            b"first\nsecond\n",
+            b"Binary files differ\n",
+            b"nested/content.bin\0",
+            b"\0opaque-binary-content",
+            b"Binary files differ\n",
+            b"",
+        )
+    )
+    monkeypatch.setattr("scripts.secret_gate._capture", lambda _command: next(responses))
+
+    findings = scan_history("base")
+
+    assert [finding.kind for finding in findings] == ["unscannable_content"]
+
+
 def test_secret_scan_reads_wheel_members(tmp_path: Path) -> None:
     value = "opaque-production-credential"
     path = tmp_path / "artifact.whl"
@@ -189,6 +209,26 @@ def test_secret_scan_reads_nested_archive(tmp_path: Path) -> None:
         archive.writestr("artifact.whl", nested.getvalue())
 
     assert [finding.kind for finding in scan_paths((path,))] == ["credential_assignment"]
+
+
+def test_secret_scan_fails_closed_for_malformed_archive(tmp_path: Path) -> None:
+    path = tmp_path / "artifact.whl"
+    path.write_bytes(b"not-a-valid-wheel")
+
+    assert [finding.kind for finding in scan_paths((path,))] == ["unscannable_content"]
+
+
+def test_secret_scan_fails_closed_at_nested_archive_limit(tmp_path: Path) -> None:
+    payload = b"plain"
+    for depth in range(5):
+        nested = io.BytesIO()
+        with zipfile.ZipFile(nested, "w") as archive:
+            archive.writestr(f"level-{depth}.zip", payload)
+        payload = nested.getvalue()
+    path = tmp_path / "wheelhouse.zip"
+    path.write_bytes(payload)
+
+    assert "unscannable_content" in {finding.kind for finding in scan_paths((path,))}
 
 
 def test_secret_scan_reads_sdist_members(tmp_path: Path) -> None:

@@ -90,14 +90,16 @@ def _artifact_paths(roots: Iterable[Path]) -> tuple[Path, ...]:
 def _decode_text(payload: bytes) -> str | None:
     if len(payload) > MAX_TEXT_BYTES:
         return None
+    if b"\0" in payload:
+        if not payload.startswith((b"\xff\xfe", b"\xfe\xff")):
+            return None
+        try:
+            return payload.decode("utf-16")
+        except UnicodeDecodeError:
+            return None
     try:
         return payload.decode("utf-8")
     except UnicodeDecodeError:
-        if payload.startswith((b"\xff\xfe", b"\xfe\xff")) or b"\0" in payload:
-            try:
-                return payload.decode("utf-16")
-            except UnicodeDecodeError:
-                return None
         return None
 
 
@@ -171,6 +173,8 @@ def _scan_archive_payload(payload: bytes, label: str, *, depth: int = 0) -> list
                         findings.extend(
                             _scan_archive_payload(member_payload, member_label, depth=depth + 1)
                         )
+                    elif nested_archive:
+                        findings.append(Finding(member_label, 0, "unscannable_content"))
         else:
             stream.seek(0)
             with tarfile.open(fileobj=stream, mode="r:*") as archive:
@@ -200,8 +204,10 @@ def _scan_archive_payload(payload: bytes, label: str, *, depth: int = 0) -> list
                         findings.extend(
                             _scan_archive_payload(member_payload, member_label, depth=depth + 1)
                         )
+                    elif nested_archive:
+                        findings.append(Finding(member_label, 0, "unscannable_content"))
     except (OSError, tarfile.TarError, zipfile.BadZipFile):
-        return findings
+        findings.append(Finding(label, 0, "unscannable_content"))
     return findings
 
 
@@ -211,7 +217,7 @@ def _scan_archive(path: Path, label: str) -> list[Finding]:
     try:
         return _scan_archive_payload(path.read_bytes(), label)
     except OSError:
-        return []
+        return [Finding(label, 0, "unscannable_content")]
 
 
 def _scan_added_lines(label: str, patch: bytes) -> list[Finding]:
@@ -289,9 +295,17 @@ def scan_history(base: str) -> list[Finding]:
             name = changed_path.rsplit("/", maxsplit=1)[-1]
             if _is_sensitive_path(changed_path, name):
                 findings.append(Finding(f"git-commit:{sha}:{changed_path}", 0, "sensitive_path"))
+            label = f"git-commit:{sha}:{changed_path}"
+            payload = _capture(("git", "show", f"{sha}:{changed_path}"))
             if _is_archive(changed_path):
-                payload = _capture(("git", "show", f"{sha}:{changed_path}"))
-                findings.extend(_scan_archive_payload(payload, f"git-commit:{sha}:{changed_path}"))
+                findings.extend(_scan_archive_payload(payload, label))
+            else:
+                text = _decode_text(payload)
+                if text is None:
+                    if not _is_sensitive_path(changed_path, name):
+                        findings.append(Finding(label, 0, "unscannable_content"))
+                else:
+                    findings.extend(_scan_text(label, text))
     return findings
 
 
