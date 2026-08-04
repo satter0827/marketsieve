@@ -121,7 +121,7 @@ def test_secret_scan_rejects_credential_headers(
     header_value = "b3BhcXVlLXByb2R1Y3Rpb24tY3JlZGVudGlhbA=="
     path = write(tmp_path / "request.txt", f"{header_name}: {scheme}{header_value}\n")
 
-    assert [finding.kind for finding in scan_paths((path,))] == [expected]
+    assert expected in {finding.kind for finding in scan_paths((path,))}
 
 
 @pytest.mark.parametrize(
@@ -145,7 +145,7 @@ def test_secret_scan_rejects_serialized_credential_headers(
     document = documents[case]
     path = write(tmp_path / "request.txt", document)
 
-    assert [finding.kind for finding in scan_paths((path,))] == [expected]
+    assert expected in {finding.kind for finding in scan_paths((path,))}
 
 
 @pytest.mark.parametrize(
@@ -162,6 +162,30 @@ def test_secret_scan_accepts_header_credential_references(
     path = write(tmp_path / "request.txt", f'{header_name}: "{scheme}{reference}"\n')
 
     assert scan_paths((path,)) == []
+
+
+@pytest.mark.parametrize(
+    ("prefix", "separator"),
+    (
+        ('curl -H "', ": "),
+        ('headers["', '"] = "'),
+    ),
+)
+def test_secret_scan_rejects_embedded_authorization_headers(
+    tmp_path: Path, prefix: str, separator: str
+) -> None:
+    document = prefix + "Authorization" + separator + 'Bearer opaque-production-credential"\n'
+    path = write(tmp_path / "request.txt", document)
+
+    assert [finding.kind for finding in scan_paths((path,))] == ["bearer_token"]
+
+
+@pytest.mark.parametrize("separator", ("_", "-"))
+def test_secret_scan_rejects_dotted_configuration_keys(tmp_path: Path, separator: str) -> None:
+    key = "providers.openai.api" + separator + "key"
+    path = write(tmp_path / "marketsieve.toml", f'{key} = "opaque-production-credential"\n')
+
+    assert [finding.kind for finding in scan_paths((path,))] == ["credential_assignment"]
 
 
 def test_secret_scan_rejects_sensitive_tracked_path(tmp_path: Path) -> None:

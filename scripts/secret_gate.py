@@ -60,29 +60,32 @@ HEADER_CREDENTIALS = (
     (
         "bearer_token",
         re.compile(
-            r"(?i)(?:^|[{,]\s*)[\"']?authorization[\"']?\s*[:=]\s*[\"']?bearer\s+"
+            r"(?i)(?:\[\s*)?[\"']?authorization[\"']?(?:\s*\])?\s*[:=]\s*"
+            r"[\"']?bearer\s+"
             r"([^\s\"']+)"
         ),
     ),
     (
         "basic_auth",
         re.compile(
-            r"(?i)(?:^|[{,]\s*)[\"']?authorization[\"']?\s*:\s*[\"']?basic\s+"
+            r"(?i)(?:\[\s*)?[\"']?authorization[\"']?(?:\s*\])?\s*:\s*"
+            r"[\"']?basic\s+"
             r"([^\s\"']+)"
         ),
     ),
     (
         "api_key_header",
         re.compile(
-            r"(?i)(?:^|[{,]\s*)[\"']?(?:x-)?api-key[\"']?\s*:\s*[\"']?"
+            r"(?i)(?:\[\s*)?[\"']?(?:x-)?api-key[\"']?(?:\s*\])?\s*:\s*[\"']?"
             r"([^\s\"']+)"
         ),
     ),
 )
 ASSIGNMENT = re.compile(
     r"(?i)^\s*(?:export\s+)?(?:[{,]\s*)?[\"']?"
-    r"([A-Z0-9_]*(?:API_KEY|ACCESS_KEY|SECRET_KEY|PRIVATE_KEY|ACCESS_TOKEN|AUTH_TOKEN|"
-    r"REFRESH_TOKEN|TOKEN|CLIENT_SECRET|SECRET|PASSWORD))[\"']?"
+    r"([A-Z0-9_.-]*(?:API[-_]?KEY|ACCESS[-_]?KEY|SECRET[-_]?KEY|PRIVATE[-_]?KEY|"
+    r"ACCESS[-_]?TOKEN|AUTH[-_]?TOKEN|REFRESH[-_]?TOKEN|TOKEN|CLIENT[-_]?SECRET|"
+    r"SECRET|PASSWORD))[\"']?"
     r"\s*(?:=|:)\s*(.+?)\s*,?\s*$"
 )
 
