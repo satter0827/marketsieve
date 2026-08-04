@@ -6,6 +6,10 @@
 .env.*
 credentials
 secrets
+credential.*
+credentials.*
+secret.*
+secrets.*
 models
 __pycache__
 *.pem

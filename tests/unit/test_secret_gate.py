@@ -91,6 +91,23 @@ def test_secret_scan_rejects_url_userinfo_credentials(tmp_path: Path) -> None:
     assert [finding.kind for finding in scan_paths((path,))] == ["url_credential"]
 
 
+@pytest.mark.parametrize(
+    ("header_name", "scheme", "expected"),
+    (
+        ("Authorization", "Basic ", "basic_auth"),
+        ("X-" + "API-Key", "", "api_key_header"),
+        ("API-Key", "", "api_key_header"),
+    ),
+)
+def test_secret_scan_rejects_credential_headers(
+    tmp_path: Path, header_name: str, scheme: str, expected: str
+) -> None:
+    header_value = "b3BhcXVlLXByb2R1Y3Rpb24tY3JlZGVudGlhbA=="
+    path = write(tmp_path / "request.txt", f"{header_name}: {scheme}{header_value}\n")
+
+    assert [finding.kind for finding in scan_paths((path,))] == [expected]
+
+
 def test_secret_scan_rejects_sensitive_tracked_path(tmp_path: Path) -> None:
     path = write(tmp_path / ".env", "SAFE=placeholder\n")
 
@@ -101,6 +118,13 @@ def test_secret_scan_rejects_case_variant_sensitive_directory(tmp_path: Path) ->
     directory = tmp_path / "Credentials"
     directory.mkdir()
     path = write(directory / "token.bin", "opaque\n")
+
+    assert [finding.kind for finding in scan_paths((path,))] == ["sensitive_path"]
+
+
+@pytest.mark.parametrize("name", ("credentials.json", "secrets.toml", "Credential.yaml"))
+def test_secret_scan_rejects_sensitive_filename_with_extension(tmp_path: Path, name: str) -> None:
+    path = write(tmp_path / name, "opaque\n")
 
     assert [finding.kind for finding in scan_paths((path,))] == ["sensitive_path"]
 

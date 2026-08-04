@@ -16,7 +16,8 @@ ROOT = Path(__file__).parents[1]
 MAX_TEXT_BYTES = 5 * 1024 * 1024
 MAX_ARCHIVE_DEPTH = 3
 SENSITIVE_NAMES = re.compile(
-    r"(?:^|/)(?:\.env(?:\..+)?|credentials?|secrets?)(?:$|/)", re.IGNORECASE
+    r"(?:^|/)(?:\.env(?:\..+)?|(?:credentials?|secrets?)(?:\.[^/]+)?)(?:$|/)",
+    re.IGNORECASE,
 )
 SENSITIVE_SUFFIXES = (".key", ".p12", ".pem", ".pfx", ".private-key")
 ARCHIVE_SUFFIXES = (".tar", ".tar.gz", ".tgz", ".whl", ".zip")
@@ -57,6 +58,14 @@ PATTERNS = (
     (
         "bearer_token",
         re.compile(_joined(r"(?i)authorization\s*[:=]\s*bearer\s+", r"[^\s\"']{12,}")),
+    ),
+    (
+        "basic_auth",
+        re.compile(_joined(r"(?i)^\s*authorization\s*:\s*basic\s+", r"[A-Za-z0-9+/=]{8,}")),
+    ),
+    (
+        "api_key_header",
+        re.compile(_joined(r"(?i)^\s*(?:x-)?api-key\s*:\s*", r"[^\s\"']{8,}")),
     ),
 )
 ASSIGNMENT = re.compile(

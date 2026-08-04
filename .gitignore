@@ -15,4 +15,8 @@ __pycache__/
 # Provider and model state must remain outside version control.
 credentials/
 secrets/
+credential.*
+credentials.*
+secret.*
+secrets.*
 models/
