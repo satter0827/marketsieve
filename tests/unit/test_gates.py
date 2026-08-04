@@ -3,10 +3,12 @@ from __future__ import annotations
 import hashlib
 import json
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
 import pytest
+import scripts.release_gate as release_gate
 import scripts.review_gate as review_gate
 from scripts.github_repository import repository_name
 from scripts.governance_gate import normalized_ruleset
@@ -24,6 +26,24 @@ def test_release_inputs_require_pep440_version_and_complete_commit() -> None:
         validate_inputs("0.1.0.dev0", "a" * 40)
     with pytest.raises(ValueError, match="commit"):
         validate_inputs("0.1.0", "abc")
+
+
+def test_release_artifacts_are_secret_scanned(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    commands: list[tuple[str, ...]] = []
+    monkeypatch.setattr(release_gate, "run", commands.append)
+
+    release_gate.verify_secrets(tmp_path)
+
+    assert commands == [
+        (
+            sys.executable,
+            str(release_gate.ROOT / "scripts" / "secret_gate.py"),
+            "--path",
+            str(tmp_path),
+        )
+    ]
 
 
 def test_governance_ruleset_comparison_ignores_github_metadata() -> None:

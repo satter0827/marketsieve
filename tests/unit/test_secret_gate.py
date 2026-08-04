@@ -125,6 +125,26 @@ def test_secret_scan_reads_wheel_members(tmp_path: Path) -> None:
     assert [finding.kind for finding in scan_paths((path,))] == ["credential_assignment"]
 
 
+def test_secret_scan_rejects_sensitive_wheel_member(tmp_path: Path) -> None:
+    path = tmp_path / "artifact.whl"
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr("package/client.p12", b"\0opaque-binary-content")
+
+    assert [finding.kind for finding in scan_paths((path,))] == ["sensitive_path"]
+
+
+def test_secret_scan_reads_nested_archive(tmp_path: Path) -> None:
+    value = "opaque-production-credential"
+    nested = io.BytesIO()
+    with zipfile.ZipFile(nested, "w") as archive:
+        archive.writestr("package/settings.txt", f"JQUANTS_API_KEY={value}\n")
+    path = tmp_path / "wheelhouse.zip"
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr("artifact.whl", nested.getvalue())
+
+    assert [finding.kind for finding in scan_paths((path,))] == ["credential_assignment"]
+
+
 def test_secret_scan_reads_sdist_members(tmp_path: Path) -> None:
     value = "opaque-production-credential"
     settings = write(tmp_path / "settings.txt", f"JQUANTS_API_KEY={value}\n")

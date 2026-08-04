@@ -14,6 +14,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).parents[1]
 MAX_TEXT_BYTES = 5 * 1024 * 1024
+MAX_ARCHIVE_DEPTH = 3
 SENSITIVE_NAMES = re.compile(r"(?:^|/)(?:\.env(?:\..+)?|credentials?|secrets?)(?:$|/)")
 SENSITIVE_SUFFIXES = (".key", ".p12", ".pem", ".pfx", ".private-key")
 ARCHIVE_SUFFIXES = (".tar", ".tar.gz", ".tgz", ".whl", ".zip")
@@ -120,7 +121,7 @@ def _is_sensitive_path(label: str, name: str) -> bool:
     )
 
 
-def _scan_archive_payload(payload: bytes, label: str) -> list[Finding]:
+def _scan_archive_payload(payload: bytes, label: str, *, depth: int = 0) -> list[Finding]:
     findings: list[Finding] = []
     stream = io.BytesIO(payload)
     try:
@@ -128,21 +129,43 @@ def _scan_archive_payload(payload: bytes, label: str) -> list[Finding]:
             stream.seek(0)
             with zipfile.ZipFile(stream) as archive:
                 for zip_member in archive.infolist():
-                    if zip_member.is_dir() or zip_member.file_size > MAX_TEXT_BYTES:
+                    if zip_member.is_dir():
                         continue
-                    text = _decode_text(archive.read(zip_member))
+                    member_label = f"{label}!{zip_member.filename}"
+                    member_name = zip_member.filename.rsplit("/", maxsplit=1)[-1]
+                    if _is_sensitive_path(zip_member.filename, member_name):
+                        findings.append(Finding(member_label, 0, "sensitive_path"))
+                    if zip_member.file_size > MAX_TEXT_BYTES:
+                        continue
+                    member_payload = archive.read(zip_member)
+                    text = _decode_text(member_payload)
                     if text is not None:
-                        findings.extend(_scan_text(f"{label}!{zip_member.filename}", text))
+                        findings.extend(_scan_text(member_label, text))
+                    if depth < MAX_ARCHIVE_DEPTH and _is_archive(zip_member.filename):
+                        findings.extend(
+                            _scan_archive_payload(member_payload, member_label, depth=depth + 1)
+                        )
         else:
             stream.seek(0)
             with tarfile.open(fileobj=stream, mode="r:*") as archive:
                 for tar_member in archive.getmembers():
-                    if not tar_member.isfile() or tar_member.size > MAX_TEXT_BYTES:
+                    if not tar_member.isfile():
+                        continue
+                    member_label = f"{label}!{tar_member.name}"
+                    member_name = tar_member.name.rsplit("/", maxsplit=1)[-1]
+                    if _is_sensitive_path(tar_member.name, member_name):
+                        findings.append(Finding(member_label, 0, "sensitive_path"))
+                    if tar_member.size > MAX_TEXT_BYTES:
                         continue
                     handle = archive.extractfile(tar_member)
-                    text = _decode_text(handle.read()) if handle is not None else None
+                    member_payload = handle.read() if handle is not None else b""
+                    text = _decode_text(member_payload)
                     if text is not None:
-                        findings.extend(_scan_text(f"{label}!{tar_member.name}", text))
+                        findings.extend(_scan_text(member_label, text))
+                    if depth < MAX_ARCHIVE_DEPTH and _is_archive(tar_member.name):
+                        findings.extend(
+                            _scan_archive_payload(member_payload, member_label, depth=depth + 1)
+                        )
     except (OSError, tarfile.TarError, zipfile.BadZipFile):
         return findings
     return findings
