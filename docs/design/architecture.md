@@ -20,8 +20,9 @@ one bounded non-streaming request, follows no redirects, and accepts only loopba
 remote access is separately allowed. OpenAI uses its fixed Responses endpoint only after explicit
 cloud consent, disables storage and tools, and has an independent mocked-transport contract. The
 Anthropic adapter separately implements the fixed Messages API, API-version, authentication, and
-text-block contract with the same consent and request bounds. The remaining cloud transport and CLI
-exposure remain later 0.3 milestones.
+text-block contract with the same consent and request bounds. Google uses the fixed Gemini
+Interactions endpoint, header-based authentication, JSON response format, and a completed
+single-text contract. CLI exposure remains a later 0.3 milestone.
 
 The `marketsieve_cli` package owns the command-line interface, offline diagnostics, use-case
 orchestration, and console presentation. It is independently installable and is never included in

@@ -10,6 +10,7 @@ from marketsieve_agent.pipeline import (
 )
 from marketsieve_agent.providers import (
     AnthropicModel,
+    GoogleModel,
     HttpResponse,
     HttpTransport,
     LmStudioModel,
@@ -23,6 +24,7 @@ __all__ = [
     "Fact",
     "FactCatalog",
     "FakeModel",
+    "GoogleModel",
     "HttpResponse",
     "HttpTransport",
     "LmStudioModel",
