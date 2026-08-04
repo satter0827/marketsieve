@@ -31,7 +31,7 @@ Each milestone must remain usable without later milestones.
 ## 0.3.0 Grounded Report Agent — approved
 
 1. ~~Build a fact-selection pipeline with FakeListLLM and deterministic template fallback.~~
-2. Add loopback-only-by-default LM Studio through its OpenAI-compatible endpoint.
+2. ~~Add loopback-only-by-default LM Studio through its OpenAI-compatible endpoint.~~
 3. Add explicit, separately tested OpenAI, Anthropic, and Google integrations.
 4. Reject ungrounded, numeric, unsafe, or recommendation-like model content before rendering.
 5. Require per-invocation cloud consent and expose credential-free payload dry runs.

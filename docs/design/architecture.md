@@ -14,9 +14,11 @@ I/O-independent SDK. `marketsieve-extension-api` defines the implemented daily-b
 J-Quants API V2 acquisition, `marketsieve-source-alphavantage` implements explicit Alpha Vantage
 acquisition, and `marketsieve-cli` owns the executable application and immutable
 snapshot store.
-The optional `marketsieve-agent` distribution now implements the FakeListLLM fact-selection
-pipeline and deterministic safe fallback. Real provider transports and CLI exposure remain later
-0.3 milestones.
+The optional `marketsieve-agent` distribution implements the FakeListLLM fact-selection pipeline,
+deterministic safe fallback, and an injectable LM Studio OpenAI-compatible adapter. LM Studio uses
+one bounded non-streaming request, follows no redirects, and accepts only loopback endpoints unless
+remote access is separately allowed. Cloud provider transports and CLI exposure remain later 0.3
+milestones.
 
 The `marketsieve_cli` package owns the command-line interface, offline diagnostics, use-case
 orchestration, and console presentation. It is independently installable and is never included in
