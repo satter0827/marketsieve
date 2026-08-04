@@ -17,8 +17,9 @@ snapshot store.
 The optional `marketsieve-agent` distribution implements the FakeListLLM fact-selection pipeline,
 deterministic safe fallback, and an injectable LM Studio OpenAI-compatible adapter. LM Studio uses
 one bounded non-streaming request, follows no redirects, and accepts only loopback endpoints unless
-remote access is separately allowed. Cloud provider transports and CLI exposure remain later 0.3
-milestones.
+remote access is separately allowed. OpenAI uses its fixed Responses endpoint only after explicit
+cloud consent, disables storage and tools, and has an independent mocked-transport contract. The
+remaining cloud transports and CLI exposure remain later 0.3 milestones.
 
 The `marketsieve_cli` package owns the command-line interface, offline diagnostics, use-case
 orchestration, and console presentation. It is independently installable and is never included in

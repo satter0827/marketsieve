@@ -8,7 +8,13 @@ from marketsieve_agent.pipeline import (
     ModelPlan,
     explain,
 )
-from marketsieve_agent.providers import HttpResponse, HttpTransport, LmStudioModel, UrlLibTransport
+from marketsieve_agent.providers import (
+    HttpResponse,
+    HttpTransport,
+    LmStudioModel,
+    OpenAIModel,
+    UrlLibTransport,
+)
 
 __all__ = [
     "ExplanationResult",
@@ -19,6 +25,7 @@ __all__ = [
     "HttpTransport",
     "LmStudioModel",
     "ModelPlan",
+    "OpenAIModel",
     "UrlLibTransport",
     "explain",
 ]
