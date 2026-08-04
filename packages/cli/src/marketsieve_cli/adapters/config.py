@@ -11,9 +11,28 @@ from typing import Any
 @dataclass(frozen=True, slots=True)
 class SourceProfile:
     name: str
-    daily_bars_plugin: str
     currency: str
     timezone: str
+    sources: dict[str, SourceBinding]
+
+    @property
+    def daily_bars_plugin(self) -> str:
+        return self.binding("daily_bars").plugin
+
+    @property
+    def settings(self) -> dict[str, str]:
+        return self.binding("daily_bars").settings
+
+    def binding(self, kind: str) -> SourceBinding:
+        try:
+            return self.sources[kind]
+        except KeyError:
+            raise LookupError(f"source profile {self.name!r} does not configure {kind}") from None
+
+
+@dataclass(frozen=True, slots=True)
+class SourceBinding:
+    plugin: str
     settings: dict[str, str]
 
 
@@ -57,23 +76,32 @@ class Configuration:
         value = profiles[name]
         if not isinstance(value, dict):
             raise ValueError(f"source profile {name!r} must be a TOML table")
-        daily = value.get("daily_bars")
-        if not isinstance(daily, dict) or not isinstance(daily.get("plugin"), str):
-            raise ValueError(f"source profile {name!r} must declare daily_bars.plugin")
         currency = value.get("currency")
         timezone = value.get("timezone")
         if not isinstance(currency, str) or not isinstance(timezone, str):
             raise ValueError(f"source profile {name!r} must declare currency and timezone")
-        settings = daily.get("settings", {})
-        if not isinstance(settings, dict) or any(
-            not isinstance(key, str) or not isinstance(item, (str, int, float))
-            for key, item in settings.items()
-        ):
-            raise ValueError(f"source profile {name!r} daily_bars.settings must be scalar values")
+        sources: dict[str, SourceBinding] = {}
+        for kind in ("daily_bars", "financials", "events"):
+            source = value.get(kind)
+            if source is None:
+                continue
+            if not isinstance(source, dict) or not isinstance(source.get("plugin"), str):
+                raise ValueError(f"source profile {name!r} {kind}.plugin must be a string")
+            settings = source.get("settings", {})
+            if not isinstance(settings, dict) or any(
+                not isinstance(key, str) or not isinstance(item, (str, int, float))
+                for key, item in settings.items()
+            ):
+                raise ValueError(f"source profile {name!r} {kind}.settings must be scalar values")
+            sources[kind] = SourceBinding(
+                plugin=source["plugin"],
+                settings={key: str(item) for key, item in settings.items()},
+            )
+        if not sources:
+            raise ValueError(f"source profile {name!r} must configure at least one data kind")
         return SourceProfile(
             name=name,
-            daily_bars_plugin=daily["plugin"],
             currency=currency,
             timezone=timezone,
-            settings={key: str(item) for key, item in settings.items()},
+            sources=sources,
         )

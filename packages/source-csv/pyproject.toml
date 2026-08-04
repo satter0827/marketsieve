@@ -17,6 +17,9 @@ dependencies = [
 [project.entry-points."marketsieve.sources"]
 csv = "marketsieve_source_csv:CsvDailyBarImporter"
 
+[project.entry-points."marketsieve.sources.daily_bars.importers"]
+csv = "marketsieve_source_csv:CsvDailyBarImporter"
+
 [build-system]
 requires = ["hatchling>=1.27,<2"]
 build-backend = "hatchling.build"

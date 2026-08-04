@@ -13,15 +13,28 @@ from typing import Any, Protocol
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import HTTPRedirectHandler, OpenerDirector, Request, build_opener
+from zoneinfo import ZoneInfo
 
 from marketsieve.data.daily import Adjustment, DailyBar, Provenance
 from marketsieve_extension_api import (
     AvailabilityBasis,
+    Consolidation,
+    CorporateEvent,
+    CorporateEventType,
     DailyBarFetcher,
     DailyBarFetchRequest,
     DailyBarSourceConfiguration,
+    EventFetcher,
+    FactFetchRequest,
+    FinancialFact,
+    FinancialFetcher,
+    FinancialPeriod,
     ImportedDailyBars,
+    ImportedEvents,
+    ImportedFinancials,
     InstrumentProfile,
+    Revision,
+    SourceConfiguration,
     SourceDiagnostic,
 )
 
@@ -77,7 +90,7 @@ class UrllibTransport:
             raise RuntimeError("J-Quants request failed before receiving a response") from error
 
 
-class JQuantsSource(DailyBarFetcher):
+class JQuantsSource(DailyBarFetcher, FinancialFetcher, EventFetcher):
     """Fetch exact TSE daily bars and matching instrument profile facts."""
 
     def __init__(
@@ -92,9 +105,32 @@ class JQuantsSource(DailyBarFetcher):
         self._clock = clock or (lambda: datetime.now(UTC))
 
     def doctor(self, configuration: DailyBarSourceConfiguration) -> SourceDiagnostic:
+        return self._doctor(configuration.currency, configuration.timezone, configuration.settings)
+
+    def doctor_financials(self, configuration: SourceConfiguration) -> SourceDiagnostic:
+        return self._doctor(configuration.currency, configuration.timezone, configuration.settings)
+
+    def doctor_events(self, configuration: SourceConfiguration) -> SourceDiagnostic:
+        return self._doctor(
+            configuration.currency,
+            configuration.timezone,
+            configuration.settings,
+            validate_event_types=True,
+        )
+
+    def _doctor(
+        self,
+        currency: str,
+        timezone: str,
+        settings: Mapping[str, str],
+        *,
+        validate_event_types: bool = False,
+    ) -> SourceDiagnostic:
         try:
-            self._validate_market(configuration.currency, configuration.timezone)
-            self._validated_settings(configuration.settings)
+            self._validate_market(currency, timezone)
+            self._validated_settings(settings, allow_event_types=validate_event_types)
+            if validate_event_types:
+                self._event_types(settings)
         except ValueError as error:
             return SourceDiagnostic(
                 False, "invalid_configuration", str(error), "Fix marketsieve.toml."
@@ -167,6 +203,318 @@ class JQuantsSource(DailyBarFetcher):
             fetch_request=request,
         )
 
+    def fetch_financials(self, request: FactFetchRequest) -> ImportedFinancials:
+        base_url, timeout, headers = self._fact_request_context(request)
+        rows, bodies = self._pages(
+            f"{base_url}/fins/summary",
+            {"code": request.instrument.symbol},
+            headers,
+            timeout,
+        )
+        retrieved_at = self._retrieved_at()
+        facts = self._financial_facts(rows, request, retrieved_at)
+        concepts = {fact.concept for fact in facts}
+        reasons = (
+            *(
+                reason
+                for concept, reason in (
+                    ("revenue", "revenue_not_present_in_summary"),
+                    ("operating_income", "operating_income_not_present_in_summary"),
+                    ("net_income", "net_income_not_present_in_summary"),
+                    ("eps", "eps_not_present_in_summary"),
+                    ("operating_cash_flow", "operating_cash_flow_not_present_in_summary"),
+                    ("assets", "assets_not_present_in_summary"),
+                    ("equity", "equity_not_present_in_summary"),
+                    ("interest_bearing_debt", "interest_bearing_debt_not_present_in_summary"),
+                )
+                if concept not in concepts
+            ),
+            "accounting_standard_not_provided_by_summary",
+        )
+        if not facts:
+            reasons = ("no_financial_facts_in_requested_period", *reasons)
+        return ImportedFinancials(
+            request=request,
+            source_name="jquants",
+            source_version=SOURCE_VERSION,
+            dataset="fins/summary",
+            retrieved_at=retrieved_at,
+            facts=facts,
+            response_hash=self._response_hash(bodies),
+            missing_reasons=reasons,
+        )
+
+    def fetch_events(self, request: FactFetchRequest) -> ImportedEvents:
+        base_url, timeout, headers = self._fact_request_context(request, allow_event_types=True)
+        event_types = self._event_types(request.settings)
+        dividend_rows: list[dict[str, Any]] = []
+        dividend_bodies: list[bytes] = []
+        earnings_rows: list[dict[str, Any]] = []
+        earnings_bodies: list[bytes] = []
+        if "dividend" in event_types:
+            dividend_rows, dividend_bodies = self._pages(
+                f"{base_url}/fins/dividend",
+                {
+                    "code": request.instrument.symbol,
+                    "from": request.start.isoformat(),
+                    "to": request.end.isoformat(),
+                },
+                headers,
+                timeout,
+            )
+        if "earnings" in event_types:
+            earnings_rows, earnings_bodies = self._pages(
+                f"{base_url}/equities/earnings-calendar", {}, headers, timeout
+            )
+        retrieved_at = self._retrieved_at()
+        events = self._events(dividend_rows, earnings_rows, request, retrieved_at)
+        return ImportedEvents(
+            request=request,
+            source_name="jquants",
+            source_version=SOURCE_VERSION,
+            dataset="+".join(
+                endpoint
+                for event_type, endpoint in (
+                    ("dividend", "fins/dividend"),
+                    ("earnings", "equities/earnings-calendar"),
+                )
+                if event_type in event_types
+            ),
+            retrieved_at=retrieved_at,
+            events=events,
+            response_hash=self._response_hash((*dividend_bodies, *earnings_bodies)),
+            missing_reasons=tuple(
+                reason
+                for event_type, reason in (
+                    ("dividend", "dividend_endpoint_not_selected"),
+                    ("earnings", "earnings_endpoint_not_selected"),
+                    ("split", "split_events_not_provided_by_selected_jquants_endpoints"),
+                )
+                if event_type not in event_types
+            ),
+        )
+
+    def _fact_request_context(
+        self, request: FactFetchRequest, *, allow_event_types: bool = False
+    ) -> tuple[str, float, dict[str, str]]:
+        if request.instrument.mic != "XTKS":
+            raise ValueError("J-Quants facts support only XTKS instruments")
+        self._validate_market(request.instrument.currency, request.instrument.exchange_timezone.key)
+        base_url, timeout = self._validated_settings(
+            request.settings, allow_event_types=allow_event_types
+        )
+        try:
+            api_key = self._credential()
+        except ValueError as error:
+            raise RuntimeError(str(error)) from None
+        if api_key is None:
+            raise RuntimeError(f"missing credential; set {API_KEY_ENV}")
+        headers = {"Accept": "application/json"}
+        headers["x-api-key"] = api_key
+        return base_url, timeout, headers
+
+    def _retrieved_at(self) -> datetime:
+        value = self._clock()
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("source clock must return an offset-aware datetime")
+        return value
+
+    @staticmethod
+    def _event_types(settings: Mapping[str, str]) -> frozenset[str]:
+        selected = frozenset(
+            item.strip() for item in settings.get("event_types", "earnings").split(",")
+        )
+        if not selected or not selected <= {"earnings", "dividend"}:
+            raise ValueError("J-Quants event_types must select earnings and/or dividend")
+        return selected
+
+    @staticmethod
+    def _response_hash(bodies: tuple[bytes, ...] | list[bytes]) -> str:
+        digest = hashlib.sha256()
+        for body in bodies:
+            digest.update(hashlib.sha256(body).digest())
+        return digest.hexdigest()
+
+    @classmethod
+    def _financial_facts(
+        cls,
+        rows: list[dict[str, Any]],
+        request: FactFetchRequest,
+        retrieved_at: datetime,
+    ) -> tuple[FinancialFact, ...]:
+        mappings = (
+            (
+                Consolidation.CONSOLIDATED,
+                {
+                    "Sales": "revenue",
+                    "OP": "operating_income",
+                    "NP": "net_income",
+                    "EPS": "eps",
+                    "CFO": "operating_cash_flow",
+                    "TA": "assets",
+                    "Eq": "equity",
+                },
+            ),
+            (
+                Consolidation.NON_CONSOLIDATED,
+                {
+                    "NCSales": "revenue",
+                    "NCOP": "operating_income",
+                    "NCNP": "net_income",
+                    "NCEPS": "eps",
+                    "NCTA": "assets",
+                    "NCEq": "equity",
+                },
+            ),
+        )
+        provider_code = f"{request.instrument.symbol}0"
+        facts: list[FinancialFact] = []
+        for row in rows:
+            if str(row.get("Code", "")) != provider_code:
+                raise ValueError("J-Quants returned financials for a different issue")
+            publication_date = cls._provider_date(row, "DiscDate")
+            if not request.start <= publication_date <= request.end:
+                continue
+            published_at = cls._provider_datetime(row, "DiscDate", "DiscTime")
+            available_at = published_at or retrieved_at
+            availability_basis = (
+                AvailabilityBasis.PUBLISHED
+                if published_at is not None
+                else AvailabilityBasis.RETRIEVAL
+            )
+            try:
+                period_start = date.fromisoformat(str(row["CurPerSt"]))
+                period_end = date.fromisoformat(str(row["CurPerEn"]))
+            except (KeyError, ValueError) as error:
+                raise ValueError("J-Quants financial period is invalid") from error
+            provider_period = str(row.get("CurPerType", ""))
+            if provider_period not in {"1Q", "2Q", "3Q", "FY"}:
+                raise ValueError("J-Quants financial period type is unsupported")
+            period = {
+                "1Q": FinancialPeriod.QUARTERLY,
+                "2Q": FinancialPeriod.INTERIM_YTD,
+                "3Q": FinancialPeriod.INTERIM_YTD,
+                "FY": FinancialPeriod.ANNUAL,
+            }[provider_period]
+            revision = (
+                Revision.RESTATED
+                if str(row.get("RetroRst", "")).lower() not in {"", "0", "false", "none"}
+                else Revision.REPORTED
+            )
+            for consolidation, mapping in mappings:
+                for provider_fact, concept in mapping.items():
+                    value = row.get(provider_fact)
+                    if value in (None, ""):
+                        continue
+                    try:
+                        decimal = Decimal(str(value))
+                    except InvalidOperation as error:
+                        raise ValueError("J-Quants financial value is invalid") from error
+                    facts.append(
+                        FinancialFact(
+                            concept=concept,
+                            provider_fact=provider_fact,
+                            accounting_standard=None,
+                            period=period,
+                            provider_period=provider_period,
+                            fiscal_period_start=period_start,
+                            fiscal_period_end=period_end,
+                            published_at=published_at,
+                            available_at=available_at,
+                            availability_basis=availability_basis,
+                            consolidation=consolidation,
+                            revision=revision,
+                            currency=request.instrument.currency,
+                            scale=1,
+                            value=decimal,
+                        )
+                    )
+        return tuple(sorted(facts, key=lambda fact: (fact.available_at, fact.concept)))
+
+    @classmethod
+    def _events(
+        cls,
+        dividends: list[dict[str, Any]],
+        earnings: list[dict[str, Any]],
+        request: FactFetchRequest,
+        retrieved_at: datetime,
+    ) -> tuple[CorporateEvent, ...]:
+        provider_code = f"{request.instrument.symbol}0"
+        events: list[CorporateEvent] = []
+        for row in dividends:
+            if str(row.get("Code", "")) != provider_code:
+                raise ValueError("J-Quants returned a dividend for a different issue")
+            publication_date = cls._provider_date(row, "PubDate")
+            if not request.start <= publication_date <= request.end:
+                continue
+            published_at = cls._provider_datetime(row, "PubDate", "PubTime")
+            effective = cls._provider_date(row, "ExDate", fallback="RecDate")
+            values = tuple(
+                (name, str(row[field]))
+                for name, field in (("dividend_rate", "DivRate"), ("status_code", "StatCode"))
+                if row.get(field) not in (None, "")
+            )
+            events.append(
+                CorporateEvent(
+                    CorporateEventType.DIVIDEND,
+                    publication_date,
+                    effective,
+                    published_at,
+                    published_at or retrieved_at,
+                    AvailabilityBasis.PUBLISHED
+                    if published_at is not None
+                    else AvailabilityBasis.RETRIEVAL,
+                    values,
+                )
+            )
+        for row in earnings:
+            if str(row.get("Code", "")) != provider_code:
+                continue
+            effective = cls._provider_date(row, "Date")
+            if not request.start <= effective <= request.end:
+                continue
+            events.append(
+                CorporateEvent(
+                    CorporateEventType.EARNINGS,
+                    effective,
+                    effective,
+                    None,
+                    retrieved_at,
+                    AvailabilityBasis.RETRIEVAL,
+                    tuple(
+                        (name, str(row[field]))
+                        for name, field in (("fiscal_year", "FY"), ("quarter", "FQ"))
+                        if row.get(field) not in (None, "")
+                    ),
+                )
+            )
+        return tuple(sorted(events, key=lambda event: (event.effective_date, event.event_type)))
+
+    @staticmethod
+    def _provider_datetime(
+        row: Mapping[str, Any], date_field: str, time_field: str
+    ) -> datetime | None:
+        try:
+            day = date.fromisoformat(str(row[date_field]))
+            raw = row.get(time_field)
+            if raw in (None, ""):
+                return None
+            raw_time = str(raw)
+            parsed_time = datetime.fromisoformat(f"{day.isoformat()}T{raw_time}").time()
+        except (KeyError, ValueError) as error:
+            raise ValueError("J-Quants publication timestamp is invalid") from error
+        return datetime.combine(day, parsed_time, ZoneInfo("Asia/Tokyo"))
+
+    @staticmethod
+    def _provider_date(row: Mapping[str, Any], field: str, *, fallback: str | None = None) -> date:
+        raw = row.get(field)
+        if raw in (None, "") and fallback is not None:
+            raw = row.get(fallback)
+        try:
+            return date.fromisoformat(str(raw))
+        except ValueError as error:
+            raise ValueError("J-Quants event date is invalid") from error
+
     @staticmethod
     def _validate_market(currency: str, timezone: str) -> None:
         if currency != "JPY":
@@ -183,8 +531,13 @@ class JQuantsSource(DailyBarFetcher):
         return value
 
     @staticmethod
-    def _validated_settings(settings: Mapping[str, str]) -> tuple[str, float]:
-        unknown = set(settings) - {"base_url", "timeout_seconds"}
+    def _validated_settings(
+        settings: Mapping[str, str], *, allow_event_types: bool = False
+    ) -> tuple[str, float]:
+        allowed = {"base_url", "timeout_seconds"}
+        if allow_event_types:
+            allowed.add("event_types")
+        unknown = set(settings) - allowed
         if unknown:
             raise ValueError(f"unsupported J-Quants settings: {', '.join(sorted(unknown))}")
         base_url = settings.get("base_url", API_BASE_URL).rstrip("/")

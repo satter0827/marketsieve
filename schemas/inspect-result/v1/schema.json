@@ -42,7 +42,7 @@
       "type": "object",
       "required": ["status", "completeness", "values", "warnings", "missing_reasons", "provenance", "evidence_id"],
       "properties": {
-        "status": {"enum": ["available", "partial", "unavailable"]},
+        "status": {"enum": ["available", "partial", "unavailable", "invalid"]},
         "as_of": {"type": "string", "format": "date-time"},
         "completeness": {"type": "string", "pattern": "^(0(\\.[0-9]+)?|1)$"},
         "values": {"type": "object"},

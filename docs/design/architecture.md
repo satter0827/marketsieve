@@ -134,8 +134,10 @@ insufficient-history completeness explicitly.
 
 `marketsieve-source-jquants` implements the individual J-Quants API V2 contract. It uses the fixed
 `https://api.jquants.com/v2` origin, sends `JQUANTS_API_KEY` only in the `x-api-key` header, and
-calls `/equities/master` and `/equities/bars/daily` only after an explicit configured profile is
-selected. Contract tests inject a synthetic HTTP transport and never connect to the network.
+calls only the data-kind endpoints selected by an explicit configured profile. Price uses
+`/equities/master` and `/equities/bars/daily`; financial facts use `/fins/summary`; events use
+`/equities/earnings-calendar` and, only when configured, `/fins/dividend`. Contract tests inject a
+synthetic HTTP transport and never connect to the network.
 
 The adapter accepts only `XTKS`/`JPY`/`Asia/Tokyo`, preserves the exact requested date range and
 adjustment choice, follows explicit pagination, and rejects duplicate, out-of-range,
@@ -150,6 +152,13 @@ responses do not expose a per-record publication timestamp, they use retrieval a
 cannot enter an earlier knowledge-as-of analysis. Raw responses are never retained; only response
 digests enter snapshot identity.
 
+Daily bars, financials, and events are stored as independent content-addressed objects and have
+independent mutable references. A failed or unavailable data kind does not overwrite another kind.
+Financial records preserve fiscal boundaries, publication time, consolidation, revision, currency,
+scale, provider field, and normalized concept. Earnings schedules without a provider publication
+timestamp use retrieval availability. Split events are not inferred from adjusted-price factors;
+they remain missing until a provider contract supplies explicit split facts.
+
 Source registration, priority, fallback, authentication, retries, rate-limit handling, caching,
 and provider-symbol mapping belong to the application or adapter packages. A source must not:
 
@@ -162,9 +171,10 @@ and provider-symbol mapping belong to the application or adapter packages. A sou
 ## Packaging boundary
 
 The supported build produces independent SDK, extension API, CLI, CSV source, and J-Quants source
-wheels and source distributions. Explicit build allowlists prevent sibling package code, tests, local configuration,
-caches, notes, and generated reports from crossing artifact boundaries. The complete wheel set is
-installed offline in an isolated environment. Source dependencies do not expand the core SDK.
+wheels and source distributions. Explicit build allowlists prevent sibling package code, tests,
+local configuration, caches, notes, and generated reports from crossing artifact boundaries. The
+complete wheel set is installed offline in an isolated environment. Source dependencies do not
+expand the core SDK.
 
 ## Approved 0.2 target architecture
 

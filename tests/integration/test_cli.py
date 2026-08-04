@@ -1,8 +1,10 @@
 import json
 import sys
 from dataclasses import replace
-from datetime import datetime
+from datetime import UTC, date, datetime
+from decimal import Decimal
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import pytest
 from click.testing import CliRunner
@@ -13,7 +15,21 @@ from marketsieve.data.daily import DailyBarRequest, DailyBarSeries
 from marketsieve.synthetic.daily import JP_BARS, SyntheticDailySource
 from marketsieve_cli.application.diagnostics import DiagnosticCheck, DiagnosticsService
 from marketsieve_cli.interfaces.cli import entrypoint, main
-from marketsieve_extension_api import DailyBarFetchRequest, ImportedDailyBars, InstrumentProfile
+from marketsieve_extension_api import (
+    AvailabilityBasis,
+    Consolidation,
+    CorporateEvent,
+    CorporateEventType,
+    DailyBarFetchRequest,
+    FactFetchRequest,
+    FinancialFact,
+    FinancialPeriod,
+    ImportedDailyBars,
+    ImportedEvents,
+    ImportedFinancials,
+    InstrumentProfile,
+    Revision,
+)
 from marketsieve_source_csv import CsvDailyBarImporter
 from marketsieve_source_jquants import JQuantsSource
 
@@ -301,6 +317,8 @@ def test_csv_import_snapshot_and_price_inspect_are_one_offline_path(tmp_path: Pa
     validate("source-result", source_document)
     assert source_document["sources"][0]["name"] == "csv"
     assert source_document["sources"][0]["loaded"] is False
+    jquants = next(item for item in source_document["sources"] if item["name"] == "jquants")
+    assert jquants["data_kinds"] == ["daily_bars", "financials", "events"]
     validate("source-result", import_document)
     assert import_document["observations"] == 2
     for result in (listed, shown, verified):
@@ -381,6 +399,7 @@ def test_jquants_doctor_and_fetch_use_only_explicit_profile(
             main,
             ["inspect", "XTKS:7203", "--source-profile", "japan", "--output", "json"],
         )
+        assert inspected.exit_code == 0, (inspected.output, inspected.exception)
 
     assert missing.exit_code == 1
     validate("source-result", json.loads(missing.stdout))
@@ -443,3 +462,210 @@ def test_configured_import_only_source_explains_import_recovery() -> None:
 
     assert result.exit_code == 1
     assert "marketsieve source import PATH" in json.loads(result.stderr)["message"]
+
+
+def test_jquants_financials_and_events_join_price_inspection_offline(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    bundle = write_csv_bundle(tmp_path / "fundamental-fixture")
+    daily = CsvDailyBarImporter().import_bundle(bundle)
+
+    def fake_daily(_: JQuantsSource, request: DailyBarFetchRequest) -> ImportedDailyBars:
+        return replace(
+            daily,
+            source_profile=request.source_profile,
+            source_name="jquants",
+            source_version="jquants-api-v2",
+            fetch_request=request,
+        )
+
+    def fake_financials(_: JQuantsSource, request: FactFetchRequest) -> ImportedFinancials:
+        return ImportedFinancials(
+            request,
+            "jquants",
+            "jquants-api-v2",
+            "fins/summary",
+            datetime(2026, 8, 1, tzinfo=UTC),
+            (
+                FinancialFact(
+                    "revenue",
+                    "Sales",
+                    None,
+                    FinancialPeriod.ANNUAL,
+                    "FY",
+                    date(2025, 4, 1),
+                    date(2026, 3, 31),
+                    datetime(2026, 7, 31, 15, tzinfo=ZoneInfo("Asia/Tokyo")),
+                    datetime(2026, 7, 31, 15, tzinfo=ZoneInfo("Asia/Tokyo")),
+                    AvailabilityBasis.PUBLISHED,
+                    Consolidation.CONSOLIDATED,
+                    Revision.REPORTED,
+                    "JPY",
+                    1,
+                    Decimal("48000000000000"),
+                ),
+                FinancialFact(
+                    "operating_income",
+                    "OP",
+                    None,
+                    FinancialPeriod.ANNUAL,
+                    "FY",
+                    date(2025, 4, 1),
+                    date(2026, 3, 31),
+                    datetime(2026, 7, 31, 7, tzinfo=UTC),
+                    datetime(2026, 7, 31, 7, tzinfo=UTC),
+                    AvailabilityBasis.PUBLISHED,
+                    Consolidation.CONSOLIDATED,
+                    Revision.REPORTED,
+                    "JPY",
+                    1,
+                    Decimal("5000000000000"),
+                ),
+            ),
+            "c" * 64,
+            ("interest_bearing_debt_not_present_in_summary",),
+        )
+
+    def fake_events(_: JQuantsSource, request: FactFetchRequest) -> ImportedEvents:
+        return ImportedEvents(
+            request,
+            "jquants",
+            "jquants-api-v2",
+            "equities/earnings-calendar",
+            datetime(2026, 7, 20, tzinfo=UTC),
+            (
+                CorporateEvent(
+                    CorporateEventType.EARNINGS,
+                    date(2026, 7, 30),
+                    date(2026, 7, 30),
+                    None,
+                    datetime(2026, 7, 20, tzinfo=UTC),
+                    AvailabilityBasis.RETRIEVAL,
+                    (("quarter", "1Q"),),
+                ),
+            ),
+            "d" * 64,
+            (
+                "dividend_endpoint_not_selected",
+                "split_events_not_provided_by_selected_jquants_endpoints",
+            ),
+        )
+
+    monkeypatch.setattr(JQuantsSource, "fetch", fake_daily)
+    monkeypatch.setattr(JQuantsSource, "fetch_financials", fake_financials)
+    monkeypatch.setattr(JQuantsSource, "fetch_events", fake_events)
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        Path("marketsieve.toml").write_text(
+            "[source_profiles.japan]\n"
+            'currency = "JPY"\n'
+            'timezone = "Asia/Tokyo"\n'
+            '[source_profiles.japan.daily_bars]\nplugin = "jquants"\n'
+            '[source_profiles.japan.financials]\nplugin = "jquants"\n'
+            '[source_profiles.japan.events]\nplugin = "jquants"\n',
+            encoding="utf-8",
+        )
+        results = [
+            runner.invoke(
+                main,
+                [
+                    "source",
+                    "fetch",
+                    "japan",
+                    "XTKS:7203",
+                    "--start",
+                    "2026-07-01",
+                    "--end",
+                    "2026-07-31",
+                    "--kind",
+                    kind,
+                    "--output",
+                    "json",
+                ],
+                env={"JQUANTS_API_KEY": "example"},
+            )
+            for kind in ("daily_bars", "financials", "events")
+        ]
+        inspected = runner.invoke(
+            main,
+            ["inspect", "XTKS:7203", "--source-profile", "japan", "--output", "json"],
+        )
+        assert inspected.exit_code == 0, (inspected.output, inspected.exception)
+        financial_id = json.loads(results[1].stdout)["object_id"]
+        normalized = (
+            Path(".marketsieve/data/objects") / financial_id / "normalized" / "financials.json"
+        )
+        normalized.write_bytes(normalized.read_bytes().replace(b'"revenue"', b'"tampered"'))
+        inspected_with_corrupt_financials = runner.invoke(
+            main,
+            ["inspect", "XTKS:7203", "--source-profile", "japan", "--output", "json"],
+        )
+
+        def mismatched_financials(
+            source: JQuantsSource, request: FactFetchRequest
+        ) -> ImportedFinancials:
+            imported = fake_financials(source, request)
+            return replace(imported, request=replace(request, end=request.start))
+
+        def mismatched_events(source: JQuantsSource, request: FactFetchRequest) -> ImportedEvents:
+            imported = fake_events(source, request)
+            return replace(imported, request=replace(request, end=request.start))
+
+        monkeypatch.setattr(JQuantsSource, "fetch_financials", mismatched_financials)
+        mismatched_financial_result = runner.invoke(
+            main,
+            [
+                "source",
+                "fetch",
+                "japan",
+                "XTKS:7203",
+                "--start",
+                "2026-07-01",
+                "--end",
+                "2026-07-31",
+                "--kind",
+                "financials",
+                "--output",
+                "json",
+            ],
+        )
+        monkeypatch.setattr(JQuantsSource, "fetch_events", mismatched_events)
+        mismatched_event_result = runner.invoke(
+            main,
+            [
+                "source",
+                "fetch",
+                "japan",
+                "XTKS:7203",
+                "--start",
+                "2026-07-01",
+                "--end",
+                "2026-07-31",
+                "--kind",
+                "events",
+                "--output",
+                "json",
+            ],
+        )
+
+    for result in results:
+        assert result.exit_code == 0, result.output
+        validate("source-result", json.loads(result.stdout))
+    inspection = json.loads(inspected.stdout)
+    validate("inspect-result", inspection)
+    assert inspection["sections"]["financial"]["values"]["facts"][0]["concept"] == "revenue"
+    assert inspection["sections"]["financial"]["completeness"] == "0.25"
+    assert inspection["sections"]["financial"]["as_of"] == "2026-07-31T07:00:00+00:00"
+    assert inspection["sections"]["events"]["values"]["events"][0]["type"] == "earnings"
+    assert inspection["sections"]["events"]["completeness"] == "0.333333"
+    corrupt_inspection = json.loads(inspected_with_corrupt_financials.stdout)
+    validate("inspect-result", corrupt_inspection)
+    assert inspected_with_corrupt_financials.exit_code == 0
+    assert corrupt_inspection["sections"]["price"]["status"] == "available"
+    assert corrupt_inspection["sections"]["financial"]["status"] == "invalid"
+    assert corrupt_inspection["sections"]["financial"]["missing_reasons"] == [
+        "snapshot_verification_failed"
+    ]
+    for mismatched in (mismatched_financial_result, mismatched_event_result):
+        assert mismatched.exit_code == 1
+        assert "preserve the exact request" in json.loads(mismatched.stderr)["message"]

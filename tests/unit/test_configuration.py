@@ -16,7 +16,13 @@ def test_explicit_configuration_resolves_one_exact_profile(tmp_path: Path) -> No
         "[source_profiles.japan.daily_bars]\n"
         'plugin = "jquants"\n'
         "[source_profiles.japan.daily_bars.settings]\n"
-        "timeout_seconds = 15\n",
+        "timeout_seconds = 15\n"
+        "[source_profiles.japan.financials]\n"
+        'plugin = "jquants"\n'
+        "[source_profiles.japan.events]\n"
+        'plugin = "jquants"\n'
+        "[source_profiles.japan.events.settings]\n"
+        'event_types = "earnings,dividend"\n',
         encoding="utf-8",
     )
 
@@ -26,6 +32,10 @@ def test_explicit_configuration_resolves_one_exact_profile(tmp_path: Path) -> No
     assert profile.currency == "JPY"
     assert profile.timezone == "Asia/Tokyo"
     assert profile.settings == {"timeout_seconds": "15"}
+    assert profile.binding("financials").plugin == "jquants"
+    assert profile.binding("events").settings == {"event_types": "earnings,dividend"}
+    with pytest.raises(LookupError, match="does not configure"):
+        profile.binding("news")
 
 
 def test_configuration_does_not_guess_missing_profile(tmp_path: Path) -> None:
@@ -33,9 +43,30 @@ def test_configuration_does_not_guess_missing_profile(tmp_path: Path) -> None:
         Configuration(None).source_profile("missing")
 
     path = tmp_path / "invalid.toml"
-    path.write_text("[source_profiles.japan]\ndaily_bars = 3\n", encoding="utf-8")
+    path.write_text(
+        '[source_profiles.japan]\ncurrency = "JPY"\ntimezone = "Asia/Tokyo"\ndaily_bars = 3\n',
+        encoding="utf-8",
+    )
     with pytest.raises(ValueError, match=r"daily_bars\.plugin"):
         Configuration(path).source_profile("japan")
+
+
+def test_configuration_allows_a_fact_only_profile(tmp_path: Path) -> None:
+    path = tmp_path / "facts.toml"
+    path.write_text(
+        "[source_profiles.facts]\n"
+        'currency = "JPY"\n'
+        'timezone = "Asia/Tokyo"\n'
+        "[source_profiles.facts.financials]\n"
+        'plugin = "jquants"\n',
+        encoding="utf-8",
+    )
+
+    profile = Configuration(path).source_profile("facts")
+
+    assert profile.binding("financials").plugin == "jquants"
+    with pytest.raises(LookupError, match="daily_bars"):
+        profile.binding("daily_bars")
 
 
 def test_explicit_configuration_rejects_missing_invalid_and_secret_like_shapes(

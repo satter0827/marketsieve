@@ -67,6 +67,10 @@ class ImportedDailyBars:
         )
         if any(not value for value in text_fields):
             raise ValueError("import identity fields must not be empty")
+        if len(self.bundle_hash) != 64 or any(
+            character not in "0123456789abcdef" for character in self.bundle_hash
+        ):
+            raise ValueError("bundle_hash must be a lowercase SHA-256 digest")
         if self.retrieved_at.tzinfo is None or self.retrieved_at.utcoffset() is None:
             raise ValueError("retrieved_at must include a UTC offset")
         dates = tuple(bar.trading_date for bar in self.bars)

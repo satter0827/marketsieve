@@ -209,14 +209,22 @@ def source_import(context: click.Context, path: Path, plugin: str, output_mode: 
 
 @source.command("doctor")
 @click.argument("source_profile")
+@click.option(
+    "--kind",
+    type=click.Choice(("daily_bars", "financials", "events")),
+    default="daily_bars",
+    show_default=True,
+)
 @output_option
 @click.pass_context
-def source_doctor(context: click.Context, source_profile: str, output_mode: str) -> None:
+def source_doctor(context: click.Context, source_profile: str, kind: str, output_mode: str) -> None:
     """Check one configured source without making a network request."""
 
     console = _console(context, output_mode)
     try:
-        document = build_snapshot_service(context.obj["config_path"]).doctor_source(source_profile)
+        document = build_snapshot_service(context.obj["config_path"]).doctor_source(
+            source_profile, kind
+        )
     except (LookupError, RuntimeError, TypeError, ValueError, OSError) as error:
         console.emit_error("source_doctor_failed", str(error))
         raise click.exceptions.Exit(1) from None
@@ -236,6 +244,12 @@ def source_doctor(context: click.Context, source_profile: str, output_mode: str)
     default="raw",
     show_default=True,
 )
+@click.option(
+    "--kind",
+    type=click.Choice(("daily_bars", "financials", "events")),
+    default="daily_bars",
+    show_default=True,
+)
 @output_option
 @click.pass_context
 def source_fetch(
@@ -245,6 +259,7 @@ def source_fetch(
     start: datetime,
     end: datetime,
     adjustment: str,
+    kind: str,
     output_mode: str,
 ) -> None:
     """Fetch one exact range and persist an immutable normalized snapshot."""
@@ -252,7 +267,7 @@ def source_fetch(
     console = _console(context, output_mode)
     try:
         document = build_snapshot_service(context.obj["config_path"]).fetch(
-            source_profile, instrument, start.date(), end.date(), adjustment
+            source_profile, instrument, start.date(), end.date(), adjustment, kind
         )
     except (LookupError, RuntimeError, TypeError, ValueError, OSError) as error:
         console.emit_error("source_fetch_failed", str(error))

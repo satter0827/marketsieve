@@ -65,10 +65,15 @@ def test_source_listing_does_not_import_plugin_code(monkeypatch: pytest.MonkeyPa
         "source_entry_points",
         lambda **_: cast(Any, (entry,)),
     )
+    monkeypatch.setattr(plugins, "importer_entry_points", lambda: cast(Any, (entry,)))
+    monkeypatch.setattr(plugins, "fetcher_entry_points", lambda: cast(Any, ()))
+    monkeypatch.setattr(plugins, "financial_entry_points", lambda: cast(Any, ()))
+    monkeypatch.setattr(plugins, "event_entry_points", lambda: cast(Any, ()))
 
     installed = plugins.SourcePluginRegistry().installed()
 
     assert installed[0].distribution == "marketsieve-source-fixture"
+    assert installed[0].data_kinds == ("daily_bars",)
     assert entry.loaded is False
 
 
