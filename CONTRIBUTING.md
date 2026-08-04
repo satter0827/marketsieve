@@ -16,12 +16,18 @@ Create short-lived branches from `develop` and open pull requests back to `devel
 name such as `feature/instrument-model`, `fix/invalid-timezone`, or `docs/market-semantics`.
 Repository coding agents use their required agent-specific prefix.
 
-Normal pull requests are squash-merged after `Develop Gate` succeeds and unresolved conversations
-are closed. Direct pushes to `develop` and `main` are not part of the normal workflow.
+Normal pull requests are squash-merged by automation after `Develop Gate` and `Review Gate` succeed
+and unresolved conversations are closed. A human decision is required only when a finding depends
+on product meaning or another non-automatable tradeoff. Direct pushes to `develop` and `main` are
+not part of the normal workflow.
 
 Open a `develop -> main` pull request to promote a release candidate. `Release Gate` verifies the
 source branch, supported Python versions, and public distribution. Release pull requests use merge
 commits so the promotion boundary remains visible.
+
+`make review` runs the local development checks and creates an AI-first, human-readable review
+bundle. CI retains the bundle for 30 days. The machine-readable `review.json` is authoritative;
+`summary.md` is a deterministic projection for reviewers.
 
 ## Change expectations
 

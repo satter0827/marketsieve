@@ -13,6 +13,10 @@ uv run marketsieve doctor
 installed SDK and application packages. Both commands are deterministic, perform no network
 requests, read no secrets, and create no operational state.
 
+The root command accepts `--log-level {DEBUG,INFO,WARNING,ERROR}` and `--log-file`. Result text is
+always written to stdout. Structured JSON Lines records are written to stderr and, only when
+requested, below `.marketsieve/logs/`.
+
 The repository-local CLI is not included in the public `marketsieve` wheel.
 
 ## Approved offline demo

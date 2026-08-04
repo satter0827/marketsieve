@@ -19,6 +19,17 @@ Project-local caches and generated artifacts are rooted at `.marketsieve`. The `
 the only repository-root development environment. Human, agent, editor, and CI workflows use the
 Makefile entry points so their commands do not drift.
 
+Application output is written to stdout. Structured JSON Lines logs are written to stderr at
+`WARNING` or above by default. `--log-level` accepts `DEBUG`, `INFO`, `WARNING`, or `ERROR`.
+`--log-file` additionally stores records under `.marketsieve/logs/`; no log file is created unless
+that option is present. The application composition root configures logging and injects a standard
+library logger into application services.
+
+Develop evidence, review bundles, and release candidates are stored below
+`.marketsieve/artifacts/`. `review.json` is the review authority, while `summary.md` is generated
+from it for human reading. Logs and schemas exclude credentials, recipients, portfolio data, and
+unbounded exception dumps.
+
 ## Approved preview operation
 
 The Offline Analysis Preview adds a deterministic demo backed only by repository-licensed synthetic

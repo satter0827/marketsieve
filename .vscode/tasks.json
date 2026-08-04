@@ -27,6 +27,19 @@
       "problemMatcher": []
     },
     {
+      "label": "Gate: Review",
+      "type": "shell",
+      "command": "make review",
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "Review: Validate",
+      "type": "shell",
+      "command": "make review-validate",
+      "problemMatcher": []
+    },
+    {
       "label": "App: Doctor",
       "type": "shell",
       "command": "make doctor",

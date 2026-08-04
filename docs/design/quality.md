@@ -29,6 +29,28 @@ reports remain excluded.
 Documentation structure tests verify the formal-design index, local links, required design files,
 temporary-note naming, and the absence of duplicate legacy authorities.
 
+## Evidence gates
+
+The Develop Gate runs formatting, lint, strict typing, import contracts, structure and behavior
+tests, branch coverage, schema validation, CLI smoke tests, package checks, public-artifact
+inspection, isolated installation, and whitespace validation once. Its machine-readable evidence
+is retained under `.marketsieve/artifacts/checks/<commit>/`.
+
+The Review Gate reuses that evidence. It creates `review.json` as the authoritative report,
+`summary.md` as its deterministic human projection, a text-only patch, supporting evidence, JSON
+Lines logs, and checksums under `.marketsieve/artifacts/review/<commit>/`. Schema, commit identity,
+references, summary projection, and checksums must validate before merge.
+
+The Release Gate builds the SDK distribution once and verifies the same artifact on every supported
+Python version. It admits only a same-repository `develop -> main` pull request. Tags, GitHub
+Releases, and package publication remain separate human-authorized operations.
+
+Repository-owned machine contracts use JSON Schema Draft 2020-12. Each schema has a stable
+identifier and a SemVer payload version: breaking changes increment major, compatible field
+additions increment minor, and clarifications that preserve constraints increment patch. Consumers
+reject unknown major versions. Established formats such as JUnit XML and coverage JSON remain in
+their native form rather than being wrapped in repository-specific schemas.
+
 ## Required gate
 
 Every handoff runs the focused checks used during development and then:
@@ -39,6 +61,7 @@ make lint
 make typecheck
 make test
 make check
+make review
 ```
 
 A failure is corrected and the affected checks are rerun. Environment or tool failures are reported

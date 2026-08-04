@@ -43,6 +43,12 @@ AST structure tests separately protect the SDK from I/O dependencies and protect
 distribution boundary. New layers or public ports are added only with a working use case and tests;
 empty adapter, repository, or base-class packages are prohibited.
 
+The core returns typed results and evidence and does not depend on logging, clocks, handlers,
+files, or environment variables. Application services accept a standard-library `Logger` from the
+composition root and emit records only at an application boundary. The bootstrap owns logging
+configuration and output destinations; command interfaces keep results on stdout and logs on
+stderr.
+
 ## Approved Offline Analysis Preview
 
 The preview adds a vertical path in dependency order:

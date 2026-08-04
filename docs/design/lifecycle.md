@@ -20,7 +20,7 @@ trigger, required input, completion condition, and retained evidence.
 | Inspect current code and formal design | Automated | Relevant sources and constraints are identified |
 | Convert approved requirements into code, tests, and documentation | Automated | Focused diff with matching behavior and prose |
 | Run format, lint, type, test, and package gates | Automated | Successful command and CI results |
-| Prepare a focused pull request to `develop` | Automated | Reviewable diff, impact summary, and validation evidence |
+| Prepare and merge a focused pull request to `develop` | Automated | Develop and Review Gates pass, with no unresolved human judgment |
 | Correct deterministic review or CI findings | Automated | Finding resolved and affected checks rerun |
 | Resolve ambiguous market meaning or product tradeoffs | Human decision | Decision recorded in formal design or roadmap |
 | Assess provider terms, licensing, and redistribution | Human decision | Approved scope and evidence of terms review |
