@@ -252,6 +252,20 @@ def test_secret_scan_rejects_python_dict_and_keyword_credentials(tmp_path: Path)
     ]
 
 
+def test_secret_scan_rejects_python_subscript_and_bytes_credentials(tmp_path: Path) -> None:
+    key = "JQUANTS_" + "API_KEY"
+    source = (
+        f'import os\nos.environ["{key}"] = "opaque-production-credential"\n'
+        f'{key} = b"another-credential"\n'
+    )
+    path = write(tmp_path / "provider.py", source)
+
+    assert [finding.kind for finding in scan_paths((path,))] == [
+        "credential_assignment",
+        "credential_assignment",
+    ]
+
+
 def test_secret_scan_rejects_sensitive_tracked_path(tmp_path: Path) -> None:
     path = write(tmp_path / ".env", "SAFE=placeholder\n")
 

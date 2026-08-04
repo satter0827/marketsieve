@@ -140,7 +140,25 @@ def redact_patch(path: Path) -> None:
     if any(finding.line <= 0 for finding in findings):
         raise RuntimeError("review patch contains content that cannot be safely redacted")
     lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
-    for line_number in {finding.line for finding in findings}:
+    redacted_lines = {finding.line for finding in findings}
+    for finding in findings:
+        if finding.kind != "private_key":
+            continue
+        end_line = next(
+            (
+                index
+                for index in range(finding.line, len(lines))
+                if (
+                    lines[index][1:] if lines[index].startswith(("+", "-", " ")) else lines[index]
+                ).startswith("-----END ")
+                and "PRIVATE KEY-----" in lines[index]
+            ),
+            None,
+        )
+        if end_line is None:
+            raise RuntimeError("review patch contains an unterminated private-key block")
+        redacted_lines.update(range(finding.line, end_line + 2))
+    for line_number in redacted_lines:
         original = lines[line_number - 1]
         prefix = original[0] if original.startswith(("+", "-", " ")) else ""
         newline = "\n" if original.endswith("\n") else ""

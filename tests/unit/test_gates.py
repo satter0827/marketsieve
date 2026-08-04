@@ -142,6 +142,19 @@ def test_review_patch_redacts_removed_credentials(tmp_path: Path) -> None:
     assert patch.read_text(encoding="utf-8") == "-[REDACTED CREDENTIAL]\n+safe\n"
 
 
+def test_review_patch_redacts_complete_private_key_block(tmp_path: Path) -> None:
+    patch = tmp_path / "changes.patch"
+    header = "-----BEGIN " + "PRIVATE KEY-----"
+    footer = "-----END " + "PRIVATE KEY-----"
+    patch.write_text(f"-{header}\n-private-material\n-{footer}\n+safe\n", encoding="utf-8")
+
+    review_gate.redact_patch(patch)
+
+    assert patch.read_text(encoding="utf-8") == (
+        "-[REDACTED CREDENTIAL]\n-[REDACTED CREDENTIAL]\n-[REDACTED CREDENTIAL]\n+safe\n"
+    )
+
+
 def create_review_bundle(tmp_path: Path) -> Path:
     head = subprocess.run(
         ("git", "rev-parse", "HEAD"), check=True, capture_output=True, text=True
