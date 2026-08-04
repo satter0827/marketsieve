@@ -9,6 +9,7 @@ import io
 import re
 import subprocess
 import tarfile
+import tokenize
 import zipfile
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
@@ -212,12 +213,38 @@ def _is_python_output_sink(node: ast.expr) -> bool:
     return node.id == "print" or node.id.endswith(("Error", "Exception"))
 
 
+def _embedded_findings(label: str, line: int, value: str) -> list[Finding]:
+    return [
+        Finding(label, line, finding.kind)
+        for finding in _scan_text("embedded-text.txt", value, scan_assignments=True)
+    ]
+
+
+def _scan_python_noncode(label: str, text: str, tree: ast.AST) -> list[Finding]:
+    findings: list[Finding] = []
+    try:
+        tokens = tokenize.generate_tokens(io.StringIO(text).readline)
+        for token in tokens:
+            if token.type == tokenize.COMMENT:
+                findings.extend(
+                    _embedded_findings(label, token.start[0], token.string.lstrip("# \t"))
+                )
+    except tokenize.TokenError:
+        return [Finding(label, 0, "unscannable_content")]
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Expr):
+            literal = _python_literal(node.value)
+            if literal is not None:
+                findings.extend(_embedded_findings(label, node.lineno, literal))
+    return findings
+
+
 def _scan_python_assignments(label: str, text: str) -> list[Finding]:
     try:
         tree = ast.parse(text)
     except SyntaxError:
         return [Finding(label, 0, "unscannable_content")]
-    findings: list[Finding] = []
+    findings = _scan_python_noncode(label, text, tree)
     for node in ast.walk(tree):
         targets: tuple[ast.expr, ...] = ()
         value: ast.expr | None = None
@@ -295,6 +322,13 @@ def _scan_python_assignments(label: str, text: str) -> list[Finding]:
                     )
                 output_name = _python_target_name(output_value)
                 if output_name is not None and CREDENTIAL_NAME.search(output_name) is not None:
+                    findings.append(Finding(label, output_value.lineno, "credential_output"))
+                if any(
+                    (nested_name := _python_target_name(nested)) is not None
+                    and CREDENTIAL_NAME.search(nested_name) is not None
+                    for nested in ast.walk(output_value)
+                    if isinstance(nested, ast.expr)
+                ):
                     findings.append(Finding(label, output_value.lineno, "credential_output"))
         if isinstance(node, (ast.Assign, ast.AnnAssign, ast.NamedExpr)):
             for target in targets:
@@ -546,7 +580,7 @@ def check(paths: tuple[Path, ...], base: str | None) -> None:
         for finding in unique:
             safe_path = (
                 _hashed_label(finding.path)
-                if _scan_text("path-name", finding.path)
+                if _credential_path_finding(finding.path) is not None
                 else finding.path
             )
             location = f"{safe_path}:{finding.line}" if finding.line else safe_path

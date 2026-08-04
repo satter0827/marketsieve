@@ -4,7 +4,13 @@ import zipfile
 from pathlib import Path
 
 import pytest
-from scripts.secret_gate import _scan_added_lines, scan_history, scan_patch_text, scan_paths
+from scripts.secret_gate import (
+    _credential_path_finding,
+    _scan_added_lines,
+    scan_history,
+    scan_patch_text,
+    scan_paths,
+)
 
 
 def write(path: Path, value: str) -> Path:
@@ -260,6 +266,32 @@ def test_secret_scan_rejects_credential_expressions_in_output_sinks(
     assert [finding.kind for finding in scan_paths((path,))] == ["credential_output"]
 
 
+@pytest.mark.parametrize("container", ("comment", "docstring"))
+def test_secret_scan_rejects_credentials_in_python_noncode(tmp_path: Path, container: str) -> None:
+    key = "JQUANTS_" + "API_KEY"
+    assignment = f"{key}=opaque-production-credential"
+    source = f"# {assignment}\n" if container == "comment" else f'"""{assignment}"""\n'
+    path = write(tmp_path / "provider.py", source)
+
+    assert [finding.kind for finding in scan_paths((path,))] == ["credential_assignment"]
+
+
+@pytest.mark.parametrize(
+    "source",
+    (
+        'logger.info(f"token={token}")\n',
+        'RuntimeError(f"password={provider_password}")\n',
+        'logger.error("%s", mask(api_key))\n',
+    ),
+)
+def test_secret_scan_rejects_compound_credential_output_expressions(
+    tmp_path: Path, source: str
+) -> None:
+    path = write(tmp_path / "provider.py", source)
+
+    assert [finding.kind for finding in scan_paths((path,))] == ["credential_output"]
+
+
 @pytest.mark.parametrize("separator", ("_", "-"))
 def test_secret_scan_rejects_dotted_configuration_keys(tmp_path: Path, separator: str) -> None:
     key = "providers.openai.api" + separator + "key"
@@ -410,6 +442,17 @@ def test_patch_scan_rejects_assignment_in_diff_path() -> None:
     assert [finding.kind for finding in scan_patch_text("change", patch)] == [
         "credential_assignment"
     ]
+
+
+def test_credential_path_detector_hashes_archive_member_assignments() -> None:
+    key = "JQUANTS_" + "API_KEY"
+    label = f"artifact.zip!package/{key}=opaque-production-credential"
+
+    finding = _credential_path_finding(label)
+
+    assert finding is not None
+    assert finding.path.startswith("path-sha256:")
+    assert "opaque-production-credential" not in finding.path
 
 
 def test_patch_scan_strips_diff_prefix_for_assignments() -> None:
