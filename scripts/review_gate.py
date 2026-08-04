@@ -81,12 +81,11 @@ def tool_version(*command: str) -> str:
 def render_summary(report: dict[str, Any]) -> str:
     failures = [item for item in report["checks"] if item["status"] != "passed"]
     findings = report["findings"]
-    report_results = report.get("cli", {}).get("report", {}).get("reports", [])
-    cli_lines = [
-        f"- {item['market'].upper()}: status={item['latest']['status']}, "
-        f"transitions={len(item['transitions'])}, report={item['report_id']}"
-        for item in report_results
-    ]
+    cli_report = report.get("cli", {}).get("report", {})
+    section_statuses = cli_report.get("section_statuses", {})
+    cli_lines = [f"- {name}: status={status}" for name, status in sorted(section_statuses.items())]
+    if cli_report.get("report_id"):
+        cli_lines.append(f"- report={cli_report['report_id']}")
     lines = [
         "# Review Summary",
         "",

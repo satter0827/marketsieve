@@ -31,8 +31,6 @@ def test_readmes_show_the_same_commands() -> None:
         "make test",
         "make check",
         "make build",
-        "make report",
-        "make report-json",
         "make capabilities-json",
     )
     readmes = (
@@ -141,8 +139,6 @@ def test_makefile_exposes_stable_entry_points() -> None:
         "secret-check",
         "check",
         "doctor",
-        "report",
-        "report-json",
         "capabilities-json",
         "build",
         "clean-generated",

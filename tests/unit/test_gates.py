@@ -206,14 +206,16 @@ def create_review_bundle(tmp_path: Path) -> Path:
                 "exit_code": 0,
                 "schema_valid": True,
                 "reproducible": True,
-                "reports": [
-                    {
-                        "market": "jp",
-                        "latest": {"status": "ok"},
-                        "transitions": [],
-                        "report_id": "a" * 64,
-                    }
-                ],
+                "report_id": "a" * 64,
+                "section_statuses": {
+                    "price": "available",
+                    "technical": "partial",
+                    "financial": "unavailable",
+                    "valuation": "unavailable",
+                    "risk": "unavailable",
+                    "events": "unavailable",
+                    "data_quality": "partial",
+                },
             },
         },
         "artifacts": [

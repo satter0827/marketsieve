@@ -2,21 +2,27 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Protocol
 
 from marketsieve.analysis.indicators import (
     IndicatorName,
-    IndicatorResult,
     IndicatorSpec,
-    IndicatorStatus,
     calculate,
 )
 from marketsieve.data.daily import Adjustment, DailyBar
 from marketsieve.domain import Instrument
+from marketsieve_cli.application.equity import (
+    comparison_document,
+    data_quality_section,
+    financial_section,
+    indicator_document,
+    report_document,
+    risk_section,
+    technical_section,
+    valuation_section,
+)
 from marketsieve_extension_api import (
     DailyBarBundleImporter,
     DailyBarFetcher,
@@ -135,34 +141,7 @@ DEFAULT_INDICATORS = (
     IndicatorSpec.create(IndicatorName.PERIOD_RETURN, period=20),
     IndicatorSpec.create(IndicatorName.MAX_DRAWDOWN, period=252),
 )
-FINANCIAL_CONCEPTS = frozenset(
-    {
-        "revenue",
-        "operating_income",
-        "net_income",
-        "eps",
-        "operating_cash_flow",
-        "assets",
-        "equity",
-        "interest_bearing_debt",
-    }
-)
-EIGHTHS = ("0", "0.125", "0.25", "0.375", "0.5", "0.625", "0.75", "0.875", "1")
 THIRDS = ("0", "0.333333", "0.666667", "1")
-
-
-def indicator_document(result: IndicatorResult) -> dict[str, Any]:
-    return {
-        "name": result.name.value,
-        "definition_version": result.definition_version,
-        "parameters": dict(result.parameters),
-        "status": result.status.value,
-        "as_of": result.as_of.isoformat() if result.as_of is not None else None,
-        "values": dict(result.values),
-        "observation_count": result.observation_count,
-        "numeric_policy": result.numeric_policy,
-        "evidence_id": result.evidence_id,
-    }
 
 
 class SnapshotService:
@@ -340,83 +319,51 @@ class SnapshotService:
         daily_bars = self._repository.daily_bars(stored.object_id)
         bars = normalized["bars"]
         latest = bars[-1]
-        evidence = hashlib.sha256(
-            json.dumps(
-                {"object_id": stored.object_id, "section": "price", "value": latest},
-                separators=(",", ":"),
-                sort_keys=True,
-            ).encode()
-        ).hexdigest()
-        unavailable: dict[str, Any] = {
-            "status": "unavailable",
-            "completeness": "0",
-            "values": {},
-            "warnings": [],
-            "missing_reasons": ["not_present_in_snapshot"],
-            "provenance": [],
-            "evidence_id": None,
-        }
+        from marketsieve_cli.application.equity import digest
+
+        evidence = digest({"object_id": stored.object_id, "section": "price", "value": latest})
         indicators = tuple(calculate(spec, daily_bars) for spec in DEFAULT_INDICATORS)
-        available_count = sum(result.status is IndicatorStatus.OK for result in indicators)
-        completeness = (
-            "0"
-            if available_count == 0
-            else "1"
-            if available_count == len(indicators)
-            else f"{available_count / len(indicators):.6f}".rstrip("0")
-        )
-        technical_evidence = hashlib.sha256(
-            json.dumps(
-                [result.evidence_id for result in indicators],
-                separators=(",", ":"),
-            ).encode()
-        ).hexdigest()
-        technical = {
-            "status": "available" if available_count == len(indicators) else "partial",
-            "as_of": latest["available_at"],
-            "completeness": completeness,
-            "values": {result.name.value: indicator_document(result) for result in indicators},
-            "warnings": [],
-            "missing_reasons": (
-                [] if available_count == len(indicators) else ["insufficient_history"]
-            ),
-            "provenance": [latest["provenance"]],
-            "evidence_id": technical_evidence,
-        }
+        technical = technical_section(indicators, latest)
         instrument_document = dict(normalized["instrument"])
         if "instrument_profile" in normalized:
             instrument_document["profile"] = normalized["instrument_profile"]
-        financial = self._optional_section(profile, instrument, "financials", "facts")
+        financial = financial_section(
+            self._optional_section(profile, instrument, "financials", "facts")
+        )
         events = self._optional_section(profile, instrument, "events", "events")
+        price = {
+            "status": "available",
+            "as_of": latest["available_at"],
+            "completeness": "1",
+            "values": {
+                "trading_date": latest["trading_date"],
+                "open": latest["open"],
+                "high": latest["high"],
+                "low": latest["low"],
+                "close": latest["close"],
+                "volume": latest["volume"],
+                "adjustment": normalized["adjustment"],
+            },
+            "warnings": [],
+            "missing_reasons": [],
+            "provenance": [latest["provenance"]],
+            "evidence_id": evidence,
+        }
+        sections = {
+            "price": price,
+            "technical": technical,
+            "financial": financial,
+            "valuation": valuation_section(instrument_document, price, financial),
+            "risk": risk_section(technical),
+            "events": events,
+        }
+        sections["data_quality"] = data_quality_section(sections)
         return {
-            "schema_version": "1.0.0",
+            "schema_version": "2.0.0",
             "instrument": instrument_document,
             "source_profile": profile,
             "snapshot_id": stored.object_id,
-            "sections": {
-                "price": {
-                    "status": "available",
-                    "as_of": latest["available_at"],
-                    "completeness": "1",
-                    "values": {
-                        "trading_date": latest["trading_date"],
-                        "open": latest["open"],
-                        "high": latest["high"],
-                        "low": latest["low"],
-                        "close": latest["close"],
-                        "volume": latest["volume"],
-                        "adjustment": normalized["adjustment"],
-                    },
-                    "warnings": [],
-                    "missing_reasons": [],
-                    "provenance": [latest["provenance"]],
-                    "evidence_id": evidence,
-                },
-                "technical": technical,
-                **{section: unavailable for section in ("valuation", "risk", "data_quality")},
-                "financial": financial,
-                "events": events,
-            },
+            "sections": sections,
         }
 
     def _optional_section(
@@ -488,12 +435,7 @@ class SnapshotService:
     @staticmethod
     def _section_completeness(kind: str, values: list[Any], missing: list[str]) -> str:
         if kind == "financials":
-            concepts = {
-                item.get("concept")
-                for item in values
-                if isinstance(item, dict) and isinstance(item.get("concept"), str)
-            }
-            return EIGHTHS[len(concepts & FINANCIAL_CONCEPTS)]
+            return "1" if values and not missing else "0" if not values else "0.5"
         unavailable_types = sum(
             any(reason.startswith(prefix) for reason in missing)
             for prefix in ("dividend_", "earnings_", "split_")
@@ -519,3 +461,9 @@ class SnapshotService:
             "snapshot_id": stored.object_id,
             "indicator": indicator_document(result),
         }
+
+    def compare(self, instruments: tuple[str, ...], profile: str) -> dict[str, Any]:
+        return comparison_document(tuple(self.inspect(item, profile) for item in instruments))
+
+    def report(self, instrument: str, profile: str) -> dict[str, Any]:
+        return report_document(self.inspect(instrument, profile))

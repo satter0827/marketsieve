@@ -14,7 +14,6 @@ import click
 from marketsieve_cli.bootstrap import (
     build_console_output,
     build_diagnostics_service,
-    build_report_service,
     build_snapshot_service,
     sdk_version,
 )
@@ -31,8 +30,12 @@ COMMAND_METADATA = {
         "effects": {"network": False, "secrets": False, "optional_writes": ["log_file"]},
     },
     "report": {
-        "output_schema": "urn:marketsieve:schema:report-result:1.0.0",
+        "output_schema": "urn:marketsieve:schema:report-result:2.0.0",
         "effects": {"network": False, "secrets": False, "optional_writes": ["log_file"]},
+    },
+    "compare": {
+        "output_schema": "urn:marketsieve:schema:comparison-result:1.0.0",
+        "effects": {"network": False, "secrets": False, "optional_writes": []},
     },
     "source list": {
         "output_schema": "urn:marketsieve:schema:source-result:1.0.0",
@@ -63,7 +66,7 @@ COMMAND_METADATA = {
         "effects": {"network": False, "secrets": False, "optional_writes": []},
     },
     "inspect": {
-        "output_schema": "urn:marketsieve:schema:inspect-result:1.0.0",
+        "output_schema": "urn:marketsieve:schema:inspect-result:2.0.0",
         "effects": {"network": False, "secrets": False, "optional_writes": []},
     },
     **{
@@ -102,6 +105,7 @@ def _console(context: click.Context, output_mode: str) -> Any:
         output_mode,
         stdout=click.get_text_stream("stdout"),
         stderr=click.get_text_stream("stderr"),
+        locale=context.obj["locale"],
     )
 
 
@@ -124,9 +128,20 @@ def _console(context: click.Context, output_mode: str) -> Any:
     default=None,
     help="Use this non-secret TOML configuration file.",
 )
+@click.option(
+    "--locale",
+    type=click.Choice(("ja", "en")),
+    default="ja",
+    show_default=True,
+    help="表示言語を選択します。JSONのキーは変わりません。",
+)
 @click.pass_context
 def main(
-    context: click.Context, log_level: str | None, log_file: bool, config_path: Path | None
+    context: click.Context,
+    log_level: str | None,
+    log_file: bool,
+    config_path: Path | None,
+    locale: str,
 ) -> None:
     """Analyze Japanese and U.S. equities with reproducible evidence."""
 
@@ -134,6 +149,7 @@ def main(
     context.obj["log_level"] = log_level.upper() if log_level else None
     context.obj["log_file"] = log_file
     context.obj["config_path"] = config_path
+    context.obj["locale"] = locale
     if context.invoked_subcommand is None:
         _console(context, "auto").emit_landing(sdk_version())
 
@@ -155,23 +171,62 @@ def doctor(context: click.Context, output_mode: str) -> None:
 
 
 @main.command()
-@click.option("--market", type=click.Choice(("jp", "us", "all")), default="all", show_default=True)
+@click.argument("instrument")
+@click.option("--source-profile", required=True, help="Select the exact stored source profile.")
+@click.option(
+    "--format",
+    "report_format",
+    type=click.Choice(("rich", "text", "json")),
+    default="text",
+    show_default=True,
+)
 @output_option
 @click.pass_context
-def report(context: click.Context, market: str, output_mode: str) -> None:
-    """Generate an evidence-backed historical SMA20 report."""
+def report(
+    context: click.Context,
+    instrument: str,
+    source_profile: str,
+    report_format: str,
+    output_mode: str,
+) -> None:
+    """Project one stored equity view as a durable offline report."""
 
-    console = _console(context, output_mode)
-    service = build_report_service(
-        console,
-        level=context.obj["log_level"],
-        write_log_file=context.obj["log_file"],
-    )
+    selected_output = report_format if output_mode == "auto" else output_mode
+    console = _console(context, selected_output)
     try:
-        service.run(market)
-    except (RuntimeError, TypeError, ValueError) as error:
+        document = build_snapshot_service(context.obj["config_path"]).report(
+            instrument, source_profile
+        )
+    except (LookupError, RuntimeError, TypeError, ValueError, OSError) as error:
         console.emit_error("report_failed", str(error))
         raise click.exceptions.Exit(1) from None
+    console.emit_document(document, title="Equity report")
+
+
+@main.command()
+@click.argument("instruments", nargs=-1, required=True)
+@click.option("--source-profile", required=True, help="Select the exact stored source profile.")
+@output_option
+@click.pass_context
+def compare(
+    context: click.Context,
+    instruments: tuple[str, ...],
+    source_profile: str,
+    output_mode: str,
+) -> None:
+    """Compare stored equity views at one explicit knowledge horizon."""
+
+    if len(instruments) < 2:
+        raise click.UsageError("comparison requires at least two instruments")
+    console = _console(context, output_mode)
+    try:
+        document = build_snapshot_service(context.obj["config_path"]).compare(
+            instruments, source_profile
+        )
+    except (LookupError, RuntimeError, TypeError, ValueError, OSError) as error:
+        console.emit_error("compare_failed", str(error))
+        raise click.exceptions.Exit(1) from None
+    console.emit_document(document, title="Equity comparison")
 
 
 @main.group()

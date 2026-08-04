@@ -226,7 +226,7 @@ def verify(version: str, commit: str, dist_dir: Path) -> None:
                 "import marketsieve; import marketsieve_cli; import marketsieve_extension_api; "
                 "import marketsieve_source_csv; import marketsieve_source_jquants; "
                 "import marketsieve_source_alphavantage; "
-                "import marketsieve.analysis.sma20; "
+                "import marketsieve.analysis.indicators; "
                 "import marketsieve.data.daily; import marketsieve.domain; "
                 "import marketsieve.synthetic.daily; print(marketsieve.__version__)",
             )

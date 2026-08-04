@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
 from enum import StrEnum
 from typing import Any, TextIO
 
@@ -14,12 +13,40 @@ from rich.table import Table
 from rich.text import Text
 
 from marketsieve_cli.application.diagnostics import DiagnosticCheck
-from marketsieve_cli.application.report import ReportDocument, serialize_report_document
 
 DOCTOR_SCHEMA_VERSION = "1.0.0"
 CAPABILITIES_SCHEMA_VERSION = "1.0.0"
 ERROR_SCHEMA_VERSION = "1.0.0"
-DISCLAIMER = "Observed market-data conditions; not investment advice."
+JA_LABELS = {
+    "schema_version": "スキーマ版",
+    "instrument": "銘柄",
+    "source_profile": "取得元プロファイル",
+    "snapshot_id": "スナップショットID",
+    "sections": "セクション",
+    "price": "価格",
+    "technical": "テクニカル",
+    "financial": "財務",
+    "valuation": "バリュエーション",
+    "risk": "リスク",
+    "events": "イベント",
+    "data_quality": "データ品質",
+    "status": "状態",
+    "as_of": "基準時点",
+    "completeness": "充足率",
+    "values": "値",
+    "warnings": "警告",
+    "missing_reasons": "欠損理由",
+    "provenance": "出典",
+    "evidence_id": "根拠ID",
+    "summary": "概要",
+    "disclaimer": "注意事項",
+    "available": "利用可能",
+    "partial": "一部利用可能",
+    "unavailable": "利用不可",
+    "invalid": "無効",
+    "insufficient_history": "履歴不足",
+    "not_present_in_snapshot": "スナップショットにデータがありません",
+}
 
 
 class OutputMode(StrEnum):
@@ -33,6 +60,21 @@ class OutputMode(StrEnum):
 
 def _json(payload: dict[str, Any]) -> str:
     return json.dumps(payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+
+
+def _localized(value: Any, locale: str) -> Any:
+    if locale != "ja":
+        return value
+    if isinstance(value, dict):
+        return {
+            JA_LABELS.get(str(key), str(key)): _localized(item, locale)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_localized(item, locale) for item in value]
+    if isinstance(value, str):
+        return JA_LABELS.get(value, value)
+    return value
 
 
 def doctor_document(checks: tuple[DiagnosticCheck, ...]) -> dict[str, Any]:
@@ -64,11 +106,13 @@ class ConsoleOutput:
         stdout: TextIO,
         stderr: TextIO,
         width: int | None = None,
+        locale: str = "ja",
     ) -> None:
         self._requested = mode
         self._mode = self._resolve(mode, stdout)
         self._stdout = stdout
         self._stderr = stderr
+        self._locale = locale
         self._console = Console(
             file=stdout,
             width=width,
@@ -89,24 +133,25 @@ class ConsoleOutput:
         return self._mode
 
     def emit_landing(self, version: str) -> None:
-        if self._mode is OutputMode.RICH:
-            body = Text.from_markup(
-                "[bold]Reproducible Japanese and U.S. equity analysis[/bold]\n"
-                "Offline by default. Evidence attached.\n\n"
-                "[cyan]marketsieve doctor[/cyan]\n"
-                "[cyan]marketsieve report --market all[/cyan]\n"
-                "[cyan]marketsieve capabilities --output json[/cyan]"
+        if self._locale == "ja":
+            description = "再現可能な日本株・米国株分析\n取得済みデータだけを使用します。"
+            quick_start = (
+                "marketsieve doctor\n"
+                "marketsieve source import PATH\n"
+                "marketsieve inspect MIC:SYMBOL --source-profile PROFILE"
             )
+        else:
+            description = "Reproducible Japanese and U.S. equity analysis\nOffline by default."
+            quick_start = (
+                "marketsieve doctor\n"
+                "marketsieve source import PATH\n"
+                "marketsieve inspect MIC:SYMBOL --source-profile PROFILE"
+            )
+        if self._mode is OutputMode.RICH:
+            body = Text(f"{description}\n\n{quick_start}")
             self._console.print(Panel(body, title=f"MarketSieve {version}", border_style="cyan"))
             return
-        self._stdout.write(
-            f"MarketSieve {version}\n"
-            "Reproducible Japanese and U.S. equity analysis. Offline by default.\n"
-            "Quick start:\n"
-            "  marketsieve doctor\n"
-            "  marketsieve report --market all\n"
-            "  marketsieve capabilities --output json\n"
-        )
+        self._stdout.write(f"MarketSieve {version}\n{description}\n{quick_start}\n")
 
     def emit_doctor(self, checks: tuple[DiagnosticCheck, ...]) -> None:
         document = doctor_document(checks)
@@ -115,12 +160,17 @@ class ConsoleOutput:
             return
         if self._mode is OutputMode.TEXT:
             for check in document["checks"]:
+                status = "合格" if check["status"] == "pass" else "不合格"
                 self._stdout.write(
-                    f"{check['status'].upper()} {check['name']}: {check['detail']}\n"
+                    f"{status if self._locale == 'ja' else check['status'].upper()} "
+                    f"{check['name']}: {check['detail']}\n"
                 )
                 if check["action"]:
-                    self._stdout.write(f"ACTION {check['action']}\n")
-            self._stdout.write(f"STATUS {document['status'].replace('_', ' ').title()}\n")
+                    label = "対応" if self._locale == "ja" else "ACTION"
+                    self._stdout.write(f"{label} {check['action']}\n")
+            ready = "利用可能" if document["status"] == "ready" else "要対応"
+            status = ready if self._locale == "ja" else document["status"].replace("_", " ").title()
+            self._stdout.write(f"{'状態' if self._locale == 'ja' else 'STATUS'} {status}\n")
             return
         table = Table(title="Environment diagnostics", box=box.ROUNDED, expand=True)
         table.add_column("Status", no_wrap=True)
@@ -144,95 +194,6 @@ class ConsoleOutput:
             )
         )
 
-    def emit_report(self, document: ReportDocument) -> None:
-        payload = serialize_report_document(document)
-        if self._mode is OutputMode.JSON:
-            self._stdout.write(_json(payload) + "\n")
-            return
-        if self._mode is OutputMode.TEXT:
-            self._emit_report_text(payload)
-            return
-        self._emit_report_rich(payload)
-
-    def _emit_report_text(self, payload: dict[str, Any]) -> None:
-        for item in payload["reports"]:
-            latest = item["latest"]
-            state = latest["current_state"] or latest["status"]
-            self._stdout.write(
-                f"{item['market'].upper()} {item['instrument']['mic']}:"
-                f"{item['instrument']['symbol']} date={latest['current_date']} "
-                f"close={latest['current_close']} sma20={latest['current_sma']} "
-                f"state={state} transitions={len(item['transitions'])}\n"
-            )
-            for transition in item["transitions"]:
-                self._stdout.write(
-                    f"TRANSITION {transition['trading_date']} "
-                    f"{transition['previous_state']}->{transition['current_state']} "
-                    f"evidence={transition['evidence_id']}\n"
-                )
-            self._stdout.write(f"REPORT {item['report_id']}\n")
-            self._stdout.write(f"LATEST_EVIDENCE {latest['evidence_id']}\n")
-        self._stdout.write(f"NOTICE {DISCLAIMER}\n")
-
-    def _emit_report_rich(self, payload: dict[str, Any]) -> None:
-        reports = payload["reports"]
-        markets = ", ".join(item["market"].upper() for item in reports)
-        first = min(item["input"]["start"] for item in reports)
-        last = max(item["input"]["end"] for item in reports)
-        last_as_of = max(
-            datetime.fromisoformat(item["input"]["last_as_of"]) for item in reports
-        ).isoformat()
-        self._console.print(
-            Panel(
-                f"Markets: [bold]{markets}[/]\nPeriod: {first} to {last}\nAs of: {last_as_of}",
-                title="MarketSieve Report",
-                border_style="cyan",
-            )
-        )
-        summary = Table(box=box.ROUNDED, expand=True)
-        for heading in ("Market", "Instrument", "Date", "Close", "SMA20", "State", "Changes"):
-            summary.add_column(heading, no_wrap=heading in {"Market", "Date", "State"})
-        state_styles = {"above": "green", "below": "red", "equal": "yellow"}
-        for item in reports:
-            latest = item["latest"]
-            state = latest["current_state"] or latest["status"]
-            style = state_styles.get(state, "dim")
-            summary.add_row(
-                item["market"].upper(),
-                f"{item['instrument']['mic']}:{item['instrument']['symbol']}",
-                latest["current_date"] or "-",
-                latest["current_close"] or "-",
-                latest["current_sma"] or "-",
-                f"[{style}]{state}[/]",
-                str(len(item["transitions"])),
-            )
-        self._console.print(summary)
-        for item in reports:
-            transitions = item["transitions"]
-            if transitions:
-                table = Table(title=f"{item['market'].upper()} state changes", box=box.SIMPLE_HEAVY)
-                table.add_column("Date")
-                table.add_column("Change")
-                table.add_column("Evidence")
-                for transition in transitions:
-                    table.add_row(
-                        transition["trading_date"],
-                        f"{transition['previous_state']} → {transition['current_state']}",
-                        transition["evidence_id"],
-                    )
-                self._console.print(table)
-            evidence = (
-                f"Report: {item['report_id']}\n"
-                f"Replay: {item['replay_id']}\n"
-                f"Latest evidence: {item['latest']['evidence_id']}"
-            )
-            if transitions:
-                evidence += "\nTransition evidence:\n" + "\n".join(
-                    transition["evidence_id"] for transition in transitions
-                )
-            self._console.print(Panel(evidence, title=f"{item['market'].upper()} evidence"))
-        self._console.print(f"[dim]{DISCLAIMER}[/]")
-
     def emit_capabilities(self, payload: dict[str, Any]) -> None:
         if self._mode is OutputMode.JSON:
             self._stdout.write(_json(payload) + "\n")
@@ -255,11 +216,25 @@ class ConsoleOutput:
         if self._mode is OutputMode.JSON:
             self._stdout.write(_json(payload) + "\n")
             return
-        rendered = json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True)
+        rendered = json.dumps(
+            _localized(payload, self._locale), ensure_ascii=False, indent=2, sort_keys=True
+        )
         if self._mode is OutputMode.TEXT:
             self._stdout.write(rendered + "\n")
             return
-        self._console.print(Panel(rendered, title=title, border_style="cyan"))
+        localized_title = {
+            "Equity inspection": "株式情報",
+            "Equity comparison": "株式比較",
+            "Equity report": "株式レポート",
+            "Indicator analysis": "指標分析",
+        }.get(title, title)
+        self._console.print(
+            Panel(
+                rendered,
+                title=localized_title if self._locale == "ja" else title,
+                border_style="cyan",
+            )
+        )
 
     def emit_error(self, code: str, message: str) -> None:
         if self._mode is OutputMode.JSON:
@@ -267,6 +242,8 @@ class ConsoleOutput:
             self._stderr.write(_json(payload) + "\n")
             return
         if self._mode is OutputMode.RICH:
-            self._error_console.print(Panel(message, title="Error", border_style="red"))
+            title = "エラー" if self._locale == "ja" else "Error"
+            self._error_console.print(Panel(message, title=title, border_style="red"))
             return
-        self._stderr.write(f"ERROR {code}: {message}\n")
+        prefix = "エラー" if self._locale == "ja" else "ERROR"
+        self._stderr.write(f"{prefix} {code}: {message}\n")

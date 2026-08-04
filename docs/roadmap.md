@@ -7,24 +7,24 @@ behavior; current and approved near-term constraints live in the [formal design]
 
 - Publish the typed, I/O-independent `marketsieve` SDK.
 - Validate exchange-qualified daily bars with deterministic Japanese and U.S. synthetic data.
-- Produce time-correct SMA20 replay, evidence, and a channel-neutral historical report.
+- Prove deterministic evidence with the initial SMA20 preview.
 - Establish reproducible local, review, develop, and release gates.
 
 ## 0.2.0 Data Workbench — approved
 
 Each milestone must remain usable without later milestones.
 
-1. Establish the target design, repository secret controls, and redacted evidence policy.
-2. Publish an independently installable CLI and build a checksummed multi-package wheelhouse.
-3. Prove the extension contract with CSV import, immutable daily-bar snapshots, and price inspection.
-4. Replace SMA20-specific analysis with SMA, EMA, RSI, MACD, ATR, return, and drawdown results.
+1. ~~Establish the target design, repository secret controls, and redacted evidence policy.~~
+2. ~~Publish an independently installable CLI and build a checksummed multi-package wheelhouse.~~
+3. ~~Prove the extension contract with CSV import, immutable daily-bar snapshots, and price inspection.~~
+4. ~~Replace SMA20-specific analysis with SMA, EMA, RSI, MACD, ATR, return, and drawdown results.~~
 5. ~~Add J-Quants API V2 price and instrument profile acquisition with explicit profile selection.~~
 6. ~~Add J-Quants financial and event facts with explicit availability.~~
    - ~~Normalize financial summaries, explicitly selected dividends, and earnings schedules.~~
    - ~~Keep J-Quants split events missing rather than relabeling a price adjustment factor as a
      confirmed split.~~
 7. ~~Add Alpha Vantage capabilities without weakening raw, adjusted, range, or plan requests.~~
-8. Complete financial, valuation, risk, comparison, and deterministic report projections.
+8. ~~Complete financial, valuation, risk, comparison, and deterministic report projections.~~
 9. Verify the same GitHub Release wheelhouse on every supported Python version before a human
    `develop -> main` promotion.
 

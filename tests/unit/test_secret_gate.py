@@ -7,6 +7,7 @@ import pytest
 from scripts.secret_gate import (
     _credential_path_finding,
     _scan_added_lines,
+    _tracked_paths,
     scan_history,
     scan_patch_text,
     scan_paths,
@@ -16,6 +17,10 @@ from scripts.secret_gate import (
 def write(path: Path, value: str) -> Path:
     path.write_text(value, encoding="utf-8")
     return path
+
+
+def test_tracked_paths_skip_files_deleted_in_the_worktree() -> None:
+    assert all(path.is_file() for path in _tracked_paths())
 
 
 def test_secret_scan_accepts_empty_documented_environment(tmp_path: Path) -> None:
