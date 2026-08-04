@@ -161,15 +161,8 @@ def _is_literal_credential(value: str) -> bool:
     raw = value.strip()
     quoted = len(raw) >= 2 and raw[0] in "\"'" and raw[-1] == raw[0]
     normalized = raw[1:-1] if quoted else raw
-    dynamic = not quoted and (
-        normalized in {"None", "True", "False"}
-        or ("(" in normalized and ")" in normalized)
-        or ("[" in normalized and "]" in normalized)
-        or re.match(r"(?i)^[fbru]+[\"']", normalized) is not None
-    )
     return (
-        not dynamic
-        and normalized.lower() not in PLACEHOLDERS
+        normalized.lower() not in PLACEHOLDERS
         and TEMPLATE_PLACEHOLDER.fullmatch(normalized) is None
         and REFERENCE_VALUE.fullmatch(normalized) is None
     )

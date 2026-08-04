@@ -239,6 +239,22 @@ def test_secret_scan_accepts_shell_environment_reference(tmp_path: Path) -> None
     assert scan_paths((path,)) == []
 
 
+@pytest.mark.parametrize(
+    "case",
+    ("assignment", "url", "header"),
+)
+def test_secret_scan_rejects_punctuation_bearing_credentials(tmp_path: Path, case: str) -> None:
+    documents = {
+        "assignment": "OPENAI_API_KEY=prod(secret)\n",
+        "url": "https://user:" + "prod(secret)" + "@provider.invalid\n",
+        "header": "Authorization: Bearer " + "prod(secret)" + "\n",
+    }
+    document = documents[case]
+    path = write(tmp_path / "settings.txt", document)
+
+    assert scan_paths((path,))
+
+
 def test_secret_scan_rejects_python_literal_credentials(tmp_path: Path) -> None:
     key = "provider_" + "token"
     path = write(tmp_path / "provider.py", f'{key} = "opaque-production-credential"\n')
