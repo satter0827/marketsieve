@@ -88,11 +88,16 @@ def _artifact_paths(roots: Iterable[Path]) -> tuple[Path, ...]:
 
 
 def _decode_text(payload: bytes) -> str | None:
-    if len(payload) > MAX_TEXT_BYTES or b"\0" in payload:
+    if len(payload) > MAX_TEXT_BYTES:
         return None
     try:
         return payload.decode("utf-8")
     except UnicodeDecodeError:
+        if payload.startswith((b"\xff\xfe", b"\xfe\xff")) or b"\0" in payload:
+            try:
+                return payload.decode("utf-16")
+            except UnicodeDecodeError:
+                return None
         return None
 
 
@@ -149,12 +154,20 @@ def _scan_archive_payload(payload: bytes, label: str, *, depth: int = 0) -> list
                     if _is_sensitive_path(zip_member.filename, member_name):
                         findings.append(Finding(member_label, 0, "sensitive_path"))
                     if zip_member.file_size > MAX_TEXT_BYTES:
+                        findings.append(Finding(member_label, 0, "unscannable_content"))
                         continue
                     member_payload = archive.read(zip_member)
                     text = _decode_text(member_payload)
                     if text is not None:
                         findings.extend(_scan_text(member_label, text))
-                    if depth < MAX_ARCHIVE_DEPTH and _is_archive(zip_member.filename):
+                    nested_archive = _is_archive(zip_member.filename)
+                    if (
+                        text is None
+                        and not nested_archive
+                        and not _is_sensitive_path(zip_member.filename, member_name)
+                    ):
+                        findings.append(Finding(member_label, 0, "unscannable_content"))
+                    if depth < MAX_ARCHIVE_DEPTH and nested_archive:
                         findings.extend(
                             _scan_archive_payload(member_payload, member_label, depth=depth + 1)
                         )
@@ -169,13 +182,21 @@ def _scan_archive_payload(payload: bytes, label: str, *, depth: int = 0) -> list
                     if _is_sensitive_path(tar_member.name, member_name):
                         findings.append(Finding(member_label, 0, "sensitive_path"))
                     if tar_member.size > MAX_TEXT_BYTES:
+                        findings.append(Finding(member_label, 0, "unscannable_content"))
                         continue
                     handle = archive.extractfile(tar_member)
                     member_payload = handle.read() if handle is not None else b""
                     text = _decode_text(member_payload)
                     if text is not None:
                         findings.extend(_scan_text(member_label, text))
-                    if depth < MAX_ARCHIVE_DEPTH and _is_archive(tar_member.name):
+                    nested_archive = _is_archive(tar_member.name)
+                    if (
+                        text is None
+                        and not nested_archive
+                        and not _is_sensitive_path(tar_member.name, member_name)
+                    ):
+                        findings.append(Finding(member_label, 0, "unscannable_content"))
+                    if depth < MAX_ARCHIVE_DEPTH and nested_archive:
                         findings.extend(
                             _scan_archive_payload(member_payload, member_label, depth=depth + 1)
                         )
@@ -209,12 +230,16 @@ def scan_paths(paths: Iterable[Path]) -> list[Finding]:
             label = str(path.relative_to(ROOT))
         except ValueError:
             label = str(path)
-        if _is_sensitive_path(label, path.name):
+        sensitive_path = _is_sensitive_path(label, path.name)
+        archive_path = _is_archive(label)
+        if sensitive_path:
             findings.append(Finding(label, 0, "sensitive_path"))
         findings.extend(_scan_archive(path, label))
         text = _read_text(path)
         if text is not None:
             findings.extend(_scan_text(label, text))
+        elif not sensitive_path and not archive_path:
+            findings.append(Finding(label, 0, "unscannable_content"))
     return findings
 
 

@@ -28,6 +28,21 @@ def test_secret_scan_reports_location_without_value(tmp_path: Path) -> None:
     assert all(value not in repr(finding) for finding in findings)
 
 
+def test_secret_scan_reads_utf16_configuration(tmp_path: Path) -> None:
+    key = "JQUANTS" + "_API_KEY"
+    path = tmp_path / "settings.txt"
+    path.write_text(f"{key}=opaque-production-credential\n", encoding="utf-16")
+
+    assert [finding.kind for finding in scan_paths((path,))] == ["credential_assignment"]
+
+
+def test_secret_scan_fails_closed_for_oversized_content(tmp_path: Path) -> None:
+    path = tmp_path / "large.bin"
+    path.write_bytes(b"x" * (5 * 1024 * 1024 + 1))
+
+    assert [finding.kind for finding in scan_paths((path,))] == ["unscannable_content"]
+
+
 @pytest.mark.parametrize(
     "document",
     (
