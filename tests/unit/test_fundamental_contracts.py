@@ -91,7 +91,7 @@ def test_financial_fact_rejects_ambiguous_or_non_finite_values(
 
 
 def test_financial_fact_requires_contract_types_and_consistent_availability() -> None:
-    with pytest.raises(TypeError, match="dates"):
+    with pytest.raises(TypeError, match="date or None"):
         replace(FACT, fiscal_period_start=datetime(2025, 4, 1, tzinfo=UTC))
     with pytest.raises(TypeError, match=r"decimal\.Decimal"):
         replace(FACT, value=1000)  # type: ignore[arg-type]

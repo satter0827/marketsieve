@@ -18,6 +18,7 @@ def test_license_copies_match() -> None:
         (ROOT / "packages" / "extension-api" / "LICENSE").read_text(encoding="utf-8"),
         (ROOT / "packages" / "source-csv" / "LICENSE").read_text(encoding="utf-8"),
         (ROOT / "packages" / "source-jquants" / "LICENSE").read_text(encoding="utf-8"),
+        (ROOT / "packages" / "source-alphavantage" / "LICENSE").read_text(encoding="utf-8"),
     )
 
     assert all(package_license == root_license for package_license in package_licenses)
@@ -50,6 +51,7 @@ def test_workspace_package_versions_match() -> None:
         ROOT / "packages/cli/pyproject.toml",
         ROOT / "packages/source-csv/pyproject.toml",
         ROOT / "packages/source-jquants/pyproject.toml",
+        ROOT / "packages/source-alphavantage/pyproject.toml",
     )
     versions = {
         tomllib.loads(path.read_text(encoding="utf-8"))["project"]["version"] for path in projects

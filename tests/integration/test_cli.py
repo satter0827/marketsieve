@@ -315,10 +315,14 @@ def test_csv_import_snapshot_and_price_inspect_are_one_offline_path(tmp_path: Pa
     assert sources.exit_code == imported.exit_code == 0
     source_document = json.loads(sources.stdout)
     validate("source-result", source_document)
-    assert source_document["sources"][0]["name"] == "csv"
-    assert source_document["sources"][0]["loaded"] is False
+    csv_source = next(item for item in source_document["sources"] if item["name"] == "csv")
+    assert csv_source["loaded"] is False
     jquants = next(item for item in source_document["sources"] if item["name"] == "jquants")
     assert jquants["data_kinds"] == ["daily_bars", "financials", "events"]
+    alphavantage = next(
+        item for item in source_document["sources"] if item["name"] == "alphavantage"
+    )
+    assert alphavantage["data_kinds"] == ["daily_bars", "financials", "events"]
     validate("source-result", import_document)
     assert import_document["observations"] == 2
     for result in (listed, shown, verified):

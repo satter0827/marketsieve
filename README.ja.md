@@ -13,7 +13,7 @@ MarketSieveは、検証済みの市場情報から再現可能な分析、過去
 
 ## 現在の状態
 
-`0.1.0`が現在の公開基準です。次のdevelop sliceでは、独立packageのCSV import、変更不能なlocal snapshot、検証、price inspectionを追加します。公開`marketsieve` packageは、取引所を明示した銘柄、日足contract、決定論的な日米Synthetic source、SMA20状態変化分析、未来情報を排除したhistorical replay、channel-neutral reportを提供します。CLIが提示する結果は投資推奨ではありません。
+`0.1.0`が現在の公開版です。developには、CSV、J-Quants、Alpha Vantageを独立した配布物として扱う0.2データワークベンチの基盤、変更不能な検証済みスナップショット、価格・財務・イベントの確認機能、7種類の決定論的なテクニカル指標が入っています。ネットワークへ接続するのは明示的な`source fetch`だけです。確認や分析が暗黙にデータを更新することはありません。CLIは根拠と欠損理由を提示し、投資判断を推奨しません。
 
 ## インストール
 
@@ -23,7 +23,7 @@ Python 3.12から3.14をサポートします。開発にはPython 3.13と[uv](h
 make sync
 ```
 
-SDK、extension API、CLI、CSV sourceは独立artifactとしてビルドできます。
+SDK、extension API、CLI、CSV source、J-Quants source、Alpha Vantage sourceは独立した配布物としてビルドできます。
 
 ```shell
 make build
@@ -31,7 +31,7 @@ make build
 
 ## CLI
 
-公開`marketsieve-cli` distributionはSDKへ依存しますが、SDK wheelには含まれません。現在のcommandはネットワークへ接続せず、秘密情報も要求しません。
+公開`marketsieve-cli` distributionはSDKへ依存しますが、SDK wheelには含まれません。参照系コマンドはオフラインで動作します。プロバイダーから取得する場合だけ、明示的な`source fetch`が環境変数の認証情報を読み、ネットワークへ接続します。
 
 ```shell
 uv run marketsieve --version
@@ -51,6 +51,7 @@ uv run marketsieve report --market all --output rich
 uv run marketsieve capabilities --output json
 uv run marketsieve source list --output json
 uv run marketsieve source import ./example-bundle --output json
+uv run marketsieve --config marketsieve.toml source fetch us XNAS:MSFT --start 2026-01-01 --end 2026-07-31 --output json
 uv run marketsieve snapshot verify SNAPSHOT_ID --output json
 uv run marketsieve inspect XTKS:7203 --source-profile offline-jp --output json
 uv run marketsieve analyze rsi XTKS:7203 --period 14 --source-profile offline-jp --output json
@@ -58,7 +59,7 @@ uv run marketsieve analyze rsi XTKS:7203 --period 14 --source-profile offline-jp
 
 ## アーキテクチャ
 
-公開SDKは`packages/core`、実装済みextension contractは`packages/extension-api`、CSV adapterは`packages/source-csv`、CLIは`packages/cli`に配置します。SDKはアプリケーションやインフラストラクチャ用ライブラリをimportできません。[文書索引](docs/README.md)と正式な[Architecture](docs/design/architecture.md)に依存規則を記載しています。
+公開SDKは`packages/core`、実装済みextension contractは`packages/extension-api`、プロバイダーadapterは`packages/source-*`、CLIは`packages/cli`に配置します。SDKはアプリケーションやインフラストラクチャ用ライブラリをimportできません。[文書索引](docs/README.md)と正式な[Architecture](docs/design/architecture.md)に依存規則を記載しています。
 
 ## 開発
 
@@ -78,7 +79,7 @@ VS Codeはworkspaceの`.venv`を使用し、依存同期、format、現在のテ
 
 ## Roadmap
 
-historical reportの処理経路が`0.1.0`の基準です。外部data sourceと個人向け配信channelは後続milestoneです。順序は[Roadmap](docs/roadmap.md)、制約は[正式設計](docs/design/README.md)を参照してください。
+次の0.2段階では、section統合、valuation、risk、compare、決定論的reportを完成させます。検証済み情報を説明するAgentは0.3で追加します。順序は[Roadmap](docs/roadmap.md)、制約は[正式設計](docs/design/README.md)を参照してください。
 
 ## ライセンス
 

@@ -24,11 +24,13 @@ class FinancialPeriod(StrEnum):
 class Consolidation(StrEnum):
     CONSOLIDATED = "consolidated"
     NON_CONSOLIDATED = "non_consolidated"
+    UNKNOWN = "unknown"
 
 
 class Revision(StrEnum):
     REPORTED = "reported"
     RESTATED = "restated"
+    UNKNOWN = "unknown"
 
 
 class CorporateEventType(StrEnum):
@@ -84,7 +86,7 @@ class FinancialFact:
     accounting_standard: str | None
     period: FinancialPeriod
     provider_period: str
-    fiscal_period_start: date
+    fiscal_period_start: date | None
     fiscal_period_end: date
     published_at: datetime | None
     available_at: datetime
@@ -96,8 +98,10 @@ class FinancialFact:
     value: Decimal
 
     def __post_init__(self) -> None:
-        if type(self.fiscal_period_start) is not date or type(self.fiscal_period_end) is not date:
-            raise TypeError("financial fact fiscal boundaries must be dates")
+        if self.fiscal_period_start is not None and type(self.fiscal_period_start) is not date:
+            raise TypeError("financial fact fiscal period start must be a date or None")
+        if type(self.fiscal_period_end) is not date:
+            raise TypeError("financial fact fiscal period end must be a date")
         if not isinstance(self.value, Decimal):
             raise TypeError("financial fact value must use decimal.Decimal")
         if not isinstance(self.period, FinancialPeriod) or not isinstance(
@@ -120,7 +124,10 @@ class FinancialFact:
             or not self.currency
         ):
             raise ValueError("financial fact identity must not be empty")
-        if self.fiscal_period_start > self.fiscal_period_end:
+        if (
+            self.fiscal_period_start is not None
+            and self.fiscal_period_start > self.fiscal_period_end
+        ):
             raise ValueError("financial fact period must be ascending")
         if self.published_at is not None and (
             self.published_at.tzinfo is None or self.published_at.utcoffset() is None

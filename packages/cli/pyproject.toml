@@ -20,6 +20,7 @@ dependencies = [
 all-sources = [
     "marketsieve-source-csv==0.1.0",
     "marketsieve-source-jquants==0.1.0",
+    "marketsieve-source-alphavantage==0.1.0",
 ]
 
 [project.scripts]
@@ -45,3 +46,4 @@ marketsieve = { workspace = true }
 marketsieve-extension-api = { workspace = true }
 marketsieve-source-csv = { workspace = true }
 marketsieve-source-jquants = { workspace = true }
+marketsieve-source-alphavantage = { workspace = true }
