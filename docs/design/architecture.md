@@ -49,9 +49,9 @@ composition root and emit records only at an application boundary. The bootstrap
 configuration and output destinations; command interfaces keep results on stdout and logs on
 stderr.
 
-## Approved Offline Analysis Preview
+## Offline Analysis Preview
 
-The preview adds a vertical path in dependency order:
+The current preview implements this vertical path in dependency order:
 
 ```text
 Offline demo
@@ -62,9 +62,9 @@ Offline demo
     -> evidence-backed result
 ```
 
-The daily-data boundary is a small, data-kind-specific structural protocol. Its capability model
-describes whether a request is supported before retrieval. The protocol and capability model become
-public only in the same change as the synthetic implementation and contract tests.
+The daily-data boundary is the small `DailyBarSource` structural protocol. Its capability model
+describes whether an exact request is supported before retrieval. The protocol is public together
+with the synthetic implementation and contract tests.
 
 A single source abstraction covering daily bars, intraday bars, quotes, fundamentals, corporate
 actions, and instrument search is prohibited. Each future data kind earns a separate boundary from
@@ -73,6 +73,8 @@ a working use case.
 ## Source extension policy
 
 Synthetic data is dependency-free and belongs with the SDK testing and demonstration support.
+Analysis and synthetic modules do not reference one another; the application combines them through
+the daily-source contract.
 Sources that perform file or network I/O are separate adapters and, when published, separate
 distributions. CSV, J-Quants, and Alpha Vantage are roadmap candidates rather than current
 components.

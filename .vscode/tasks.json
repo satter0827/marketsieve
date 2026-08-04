@@ -44,6 +44,18 @@
       "type": "shell",
       "command": "make doctor",
       "problemMatcher": []
+    },
+    {
+      "label": "App: Demo Text",
+      "type": "shell",
+      "command": "make demo",
+      "problemMatcher": []
+    },
+    {
+      "label": "App: Demo JSON",
+      "type": "shell",
+      "command": "make demo-json",
+      "problemMatcher": []
     }
   ]
 }

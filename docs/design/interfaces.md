@@ -19,10 +19,16 @@ requested, below `.marketsieve/logs/`.
 
 The repository-local CLI is not included in the public `marketsieve` wheel.
 
-## Approved offline demo
+## Current offline demo
 
-The Offline Analysis Preview adds one repository-local `demo` command. It uses only bundled
-synthetic fixtures and accepts no provider credentials. Its result contains:
+The repository-local command is:
+
+```shell
+uv run marketsieve demo --market {jp,us,all} --format {text,json}
+```
+
+Both options default to `all` and `text`. The command uses only bundled synthetic fixtures and
+accepts no provider credentials. `all` always returns JP before US. Its result contains:
 
 - exchange-qualified instrument identity and market;
 - analysis date and input date range;
@@ -35,6 +41,7 @@ The command returns a non-zero exit status for invalid configuration, invalid fi
 internal contract violation. A valid no-signal or insufficient-history analysis is a successful
 domain result and is not converted into a command failure.
 
-Exact option names, serialized shapes, and public Python signatures are defined only with the
-working implementation and its tests. Provider selection, fallback, live data, and output delivery
-are not part of this interface.
+JSON output conforms to `schemas/demo-result/v1/schema.json`; Decimal values are strings and
+timestamps include an offset. Valid no-signal and insufficient-history results exit 0, contract or
+fixture failures exit 1, and invalid Click arguments exit 2. Provider selection, fallback, live
+data, and output delivery are not part of this interface.

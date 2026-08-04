@@ -16,7 +16,7 @@ from jsonschema import Draft202012Validator
 
 ROOT = Path(__file__).parents[1]
 STATE_ROOT = ROOT / ".marketsieve"
-SCHEMA_VERSION = "1.0.0"
+SCHEMA_VERSION = "1.1.0"
 
 
 def capture(*command: str) -> str:
@@ -78,6 +78,12 @@ def tool_version(*command: str) -> str:
 def render_summary(report: dict[str, Any]) -> str:
     failures = [item for item in report["checks"] if item["status"] != "passed"]
     findings = report["findings"]
+    demo_results = report.get("cli", {}).get("demo", {}).get("results", [])
+    cli_lines = [
+        f"- {item['market'].upper()}: status={item['analysis']['status']}, "
+        f"transition={item['analysis']['transition'] or 'none'}, evidence={item['evidence_id']}"
+        for item in demo_results
+    ]
     lines = [
         "# Review Summary",
         "",
@@ -106,7 +112,7 @@ def render_summary(report: dict[str, Any]) -> str:
         "",
         "## CLI Verification",
         "",
-        "See `evidence/smoke.json`.",
+        "\n".join(cli_lines) if cli_lines else "See `evidence/smoke.json`.",
         "",
         "## Decisions Required",
         "",
@@ -145,6 +151,7 @@ def create(base_value: str, head_value: str, evidence: Path, output: Path) -> No
     (resolved / "changes.patch").write_text(patch + ("\n" if patch else ""), encoding="utf-8")
 
     tests, branch_coverage = load_metrics(evidence_output)
+    smoke = json.loads((evidence_output / "smoke.json").read_text(encoding="utf-8"))
     media_types = {
         "changes.patch": "text/x-diff",
         "evidence/junit.xml": "application/xml",
@@ -175,6 +182,7 @@ def create(base_value: str, head_value: str, evidence: Path, output: Path) -> No
         "changes": changed_files(base, head),
         "checks": [{"name": "Develop Gate", "status": "passed", "evidence": "evidence/"}],
         "metrics": {"tests": tests, "branch_coverage": branch_coverage},
+        "cli": smoke,
         "artifacts": artifacts,
         "findings": [],
     }

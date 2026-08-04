@@ -29,6 +29,11 @@ commits so the promotion boundary remains visible.
 bundle. CI retains the bundle for 30 days. The machine-readable `review.json` is authoritative;
 `summary.md` is a deterministic projection for reviewers.
 
+Before opening a pull request, finish focused checks, run `make review`, and inspect the resulting
+bundle once against the final diff. Open the pull request only after deterministic findings are
+resolved. CI then verifies the same contracts; post-CI review addresses only new evidence or human
+judgment so an unchanged concern is not recycled through repeated repair loops.
+
 ## Change expectations
 
 - Keep each pull request focused on one behavior or repository concern.

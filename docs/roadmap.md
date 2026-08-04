@@ -10,7 +10,7 @@ behavior; current and approved near-term constraints live in the [formal design]
 - Enforce dependency and distribution boundaries in local and CI gates.
 - Establish the `develop -> main` release-review path.
 
-## Offline Analysis Preview — next
+## Offline Analysis Preview — complete
 
 - Define exchange-aware instruments, currencies, sessions, and timezone-aware observations.
 - Reject ambiguous symbols and naive timestamps at public boundaries.
@@ -20,7 +20,7 @@ behavior; current and approved near-term constraints live in the [formal design]
 - Expose the complete synthetic-data-to-evidence path through an offline demo command.
 
 The preview validates the first data-kind-specific source contract with its synthetic implementation
-and tests. It does not publish file or network adapters.
+and tests. It publishes no file or network adapters.
 
 ## 0.1.0 candidate
 

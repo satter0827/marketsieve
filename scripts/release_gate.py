@@ -126,7 +126,13 @@ def verify(version: str, commit: str, dist_dir: Path) -> None:
         isolated = python_in_venv(venv)
         run((str(isolated), "-m", "pip", "install", "--no-deps", str(wheel)))
         installed = capture(
-            (str(isolated), "-c", "import marketsieve; print(marketsieve.__version__)")
+            (
+                str(isolated),
+                "-c",
+                "import marketsieve; import marketsieve.analysis.sma20; "
+                "import marketsieve.data.daily; import marketsieve.domain; "
+                "import marketsieve.synthetic.daily; print(marketsieve.__version__)",
+            )
         )
     if installed != version:
         raise RuntimeError("isolated installation version does not match the request")

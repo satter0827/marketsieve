@@ -15,7 +15,7 @@ import zipfile
 from collections.abc import Sequence
 from pathlib import Path
 
-from jsonschema import Draft202012Validator
+from jsonschema import Draft202012Validator, FormatChecker
 
 ROOT = Path(__file__).parents[1]
 STATE_ROOT = ROOT / ".marketsieve"
@@ -105,21 +105,39 @@ def check_smoke(path: Path) -> None:
     version = capture(("uv", "run", "marketsieve", "--version"))
     doctor = capture(("uv", "run", "marketsieve", "--log-level", "INFO", "doctor"))
     module = capture(("uv", "run", "python", "-m", "marketsieve_app", "doctor"))
+    demo_first = capture(
+        ("uv", "run", "marketsieve", "--log-level", "INFO", "demo", "--format", "json")
+    )
+    demo_second = capture(("uv", "run", "marketsieve", "demo", "--format", "json"))
+    if demo_first.stdout != demo_second.stdout:
+        raise RuntimeError("offline demo JSON is not reproducible")
+    demo_document = json.loads(demo_first.stdout)
+    demo_schema = json.loads(
+        (ROOT / "schemas/demo-result/v1/schema.json").read_text(encoding="utf-8")
+    )
+    Draft202012Validator(demo_schema, format_checker=FormatChecker()).validate(demo_document)
     smoke = {
         "version": {"exit_code": version.returncode, "stdout": version.stdout},
         "doctor": {"exit_code": doctor.returncode, "stdout": doctor.stdout},
         "module_doctor": {"exit_code": module.returncode, "stdout": module.stdout},
+        "demo": {
+            "exit_code": demo_first.returncode,
+            "schema_valid": True,
+            "reproducible": True,
+            "results": demo_document["results"],
+        },
     }
     (path / "smoke.json").write_text(
         json.dumps(smoke, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
-    (path / "logs.jsonl").write_text(doctor.stderr, encoding="utf-8")
+    logs = doctor.stderr + demo_first.stderr
+    (path / "logs.jsonl").write_text(logs, encoding="utf-8")
 
     log_schema = json.loads(
         (ROOT / "schemas/log-record/v1/schema.json").read_text(encoding="utf-8")
     )
     validator = Draft202012Validator(log_schema)
-    for line in doctor.stderr.splitlines():
+    for line in logs.splitlines():
         validator.validate(json.loads(line))
 
 
@@ -176,7 +194,13 @@ def check_package(path: Path) -> None:
         isolated = python_in_venv(venv)
         run((str(isolated), "-m", "pip", "install", "--no-deps", str(wheels[0])))
         installed = capture(
-            (str(isolated), "-c", "import marketsieve; print(marketsieve.__version__)")
+            (
+                str(isolated),
+                "-c",
+                "import marketsieve; import marketsieve.analysis.sma20; "
+                "import marketsieve.data.daily; import marketsieve.domain; "
+                "import marketsieve.synthetic.daily; print(marketsieve.__version__)",
+            )
         ).stdout.strip()
 
     package = {
