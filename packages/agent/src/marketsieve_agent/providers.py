@@ -16,6 +16,7 @@ MAX_RESPONSE_BYTES = 1_048_576
 AUTHORIZATION_HEADER = "Authorization"
 BEARER_SCHEME = "Bearer"
 API_KEY_HEADER = "x-api-key"
+GOOGLE_API_KEY_HEADER = "x-goog-api-key"
 
 
 @dataclass(frozen=True, slots=True)
@@ -288,6 +289,76 @@ class AnthropicModel:
         if len(texts) != 1 or not texts[0]:
             raise RuntimeError("Anthropic returned no single text response")
         return texts[0]
+
+
+class GoogleModel:
+    """One-attempt Gemini Interactions adapter with mandatory cloud consent."""
+
+    provider = "google"
+    endpoint = "https://generativelanguage.googleapis.com/v1beta/interactions"
+
+    def __init__(
+        self,
+        *,
+        model: str,
+        api_key: str,
+        allow_cloud: bool,
+        transport: HttpTransport | None = None,
+        timeout: float = DEFAULT_TIMEOUT_SECONDS,
+        max_output_tokens: int = DEFAULT_MAX_OUTPUT_TOKENS,
+    ) -> None:
+        if not allow_cloud:
+            raise ValueError("Google requires explicit cloud consent")
+        if not model.strip():
+            raise ValueError("Google model must be configured")
+        if not api_key:
+            raise ValueError("Google credential is required")
+        if timeout <= 0 or max_output_tokens <= 0:
+            raise ValueError("Google request limits must be positive")
+        self.model = model
+        self._api_key = api_key
+        self._transport = transport or UrlLibTransport()
+        self._timeout = timeout
+        self._max_output_tokens = max_output_tokens
+
+    def invoke(self, prompt: str) -> str:
+        payload = {
+            "model": self.model,
+            "system_instruction": "Return one JSON object only. Do not call tools or add facts.",
+            "input": prompt,
+            "tools": [],
+            "stream": False,
+            "store": False,
+            "background": False,
+            "generation_config": {
+                "temperature": 0,
+                "max_output_tokens": self._max_output_tokens,
+            },
+            "response_format": {
+                "type": "text",
+                "mime_type": "application/json",
+            },
+        }
+        response = self._transport.post(
+            self.endpoint,
+            headers={
+                "Content-Type": "application/json",
+                GOOGLE_API_KEY_HEADER: self._api_key,
+            },
+            body=json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode(),
+            timeout=self._timeout,
+        )
+        if response.status < 200 or response.status >= 300:
+            raise RuntimeError(f"Google request failed with HTTP {response.status}")
+        try:
+            document = json.loads(response.body)
+            status = document["status"]
+            output_text = document["output_text"]
+        except (KeyError, TypeError, json.JSONDecodeError) as error:
+            raise RuntimeError("Google returned an invalid response") from error
+        if status != "completed" or not isinstance(output_text, str) or not output_text:
+            raise RuntimeError("Google returned no completed text response")
+        return output_text
 
 
 def _validated_endpoint(endpoint: str, *, allow_remote: bool) -> str:
