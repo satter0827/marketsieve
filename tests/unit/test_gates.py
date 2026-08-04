@@ -14,6 +14,7 @@ from scripts.github_repository import repository_name
 from scripts.governance_gate import normalized_ruleset
 from scripts.release_gate import validate_inputs, validate_source_release
 from scripts.review_gate import SCHEMA_VERSION, render_summary, validate
+from scripts.runtime_wheelhouse import SUPPORTED_PYTHON_VERSIONS, download_command
 
 
 def test_release_inputs_require_pep440_version_and_complete_commit() -> None:
@@ -47,6 +48,18 @@ def test_release_artifacts_are_secret_scanned(
             str(paths[1]),
         )
     ]
+
+
+def test_runtime_wheelhouse_downloads_every_supported_python_version(tmp_path: Path) -> None:
+    assert SUPPORTED_PYTHON_VERSIONS == ("3.12", "3.13", "3.14")
+    command = download_command(
+        tmp_path / "python", tmp_path / "requirements.txt", tmp_path / "wheels", "3.12"
+    )
+
+    assert command[0] == str(tmp_path / "python")
+    assert command[command.index("--python-version") + 1] == "3.12"
+    assert "--only-binary=:all:" in command
+    assert "--require-hashes" in command
 
 
 def test_governance_ruleset_comparison_ignores_github_metadata() -> None:

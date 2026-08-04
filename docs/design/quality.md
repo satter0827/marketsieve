@@ -66,8 +66,10 @@ After semantic review succeeds, `make review-attest REVIEWED_SHA=<full-commit-sh
 matching local evidence and clean HEAD before publishing the `Pre-PR Review` commit status. The
 develop ruleset requires that status for the current head; a later commit cannot inherit it.
 
-The Release Gate builds the SDK, extension API, CLI, and CSV source distributions once and verifies
-the same artifact set on every supported Python version. It admits only a same-repository
+The Release Gate builds all seven public distributions and the locked multi-Python runtime
+wheelhouse once, then verifies and installs the same checksummed artifact set on every supported
+Python version. Compatibility jobs do not compare against runner-local regenerated dependencies.
+It admits only a same-repository
 `develop -> main` pull request. Tags, GitHub Releases, and package publication remain separate
 human-authorized operations.
 

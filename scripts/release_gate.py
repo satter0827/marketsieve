@@ -306,7 +306,6 @@ def verify(version: str, commit: str, dist_dir: Path) -> None:
     if any(metadata_version(wheel) != version for wheel in wheels):
         raise RuntimeError("wheel metadata versions do not match the request")
     verify_contents(wheels, sdists)
-    verify_runtime_wheels(dist_dir)
     verify_wheelhouse_assets(dist_dir, version)
     verify_secrets((*wheels, *sdists, *(dist_dir / name for name in GENERATED_ASSETS)))
     with tempfile.TemporaryDirectory(prefix="marketsieve-release-") as temp_dir:
