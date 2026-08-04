@@ -106,14 +106,27 @@ def verify_secrets(dist_dir: Path) -> None:
     run((sys.executable, str(ROOT / "scripts" / "secret_gate.py"), "--path", str(dist_dir)))
 
 
+def prepare_dist_dir(dist_dir: Path) -> None:
+    if dist_dir.exists():
+        entries = tuple(dist_dir.iterdir())
+        retry_markers = tuple(
+            path
+            for path in entries
+            if path.name == ".gitignore" and path.read_text(encoding="utf-8") == "*"
+        )
+        if len(retry_markers) != len(entries):
+            raise RuntimeError("release directory must be empty")
+        for marker in retry_markers:
+            marker.unlink()
+    dist_dir.mkdir(parents=True, exist_ok=True)
+
+
 def build(version: str, commit: str, dist_dir: Path) -> None:
     validate_inputs(version, commit)
     validate_source_release(version)
     if capture(("git", "rev-parse", "HEAD")) != commit:
         raise RuntimeError("commit does not match the checked-out HEAD")
-    if dist_dir.exists() and any(dist_dir.iterdir()):
-        raise RuntimeError("release directory must be empty")
-    dist_dir.mkdir(parents=True, exist_ok=True)
+    prepare_dist_dir(dist_dir)
     for package in PUBLIC_PACKAGES:
         run(("uv", "build", "--package", package, "--out-dir", str(dist_dir)))
     runtime_wheels = tuple(sorted(RUNTIME_WHEELHOUSE.glob("*.whl")))
