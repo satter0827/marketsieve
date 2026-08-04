@@ -15,6 +15,7 @@ DEFAULT_MAX_OUTPUT_TOKENS = 1200
 MAX_RESPONSE_BYTES = 1_048_576
 AUTHORIZATION_HEADER = "Authorization"
 BEARER_SCHEME = "Bearer"
+API_KEY_HEADER = "x-api-key"
 
 
 @dataclass(frozen=True, slots=True)
@@ -216,6 +217,76 @@ class OpenAIModel:
                     texts.append(text)
         if len(texts) != 1 or not texts[0]:
             raise RuntimeError("OpenAI returned no single text response")
+        return texts[0]
+
+
+class AnthropicModel:
+    """One-attempt Anthropic Messages API adapter with mandatory cloud consent."""
+
+    provider = "anthropic"
+    endpoint = "https://api.anthropic.com/v1/messages"
+    api_version = "2023-06-01"
+
+    def __init__(
+        self,
+        *,
+        model: str,
+        api_key: str,
+        allow_cloud: bool,
+        transport: HttpTransport | None = None,
+        timeout: float = DEFAULT_TIMEOUT_SECONDS,
+        max_output_tokens: int = DEFAULT_MAX_OUTPUT_TOKENS,
+    ) -> None:
+        if not allow_cloud:
+            raise ValueError("Anthropic requires explicit cloud consent")
+        if not model.strip():
+            raise ValueError("Anthropic model must be configured")
+        if not api_key:
+            raise ValueError("Anthropic credential is required")
+        if timeout <= 0 or max_output_tokens <= 0:
+            raise ValueError("Anthropic request limits must be positive")
+        self.model = model
+        self._api_key = api_key
+        self._transport = transport or UrlLibTransport()
+        self._timeout = timeout
+        self._max_output_tokens = max_output_tokens
+
+    def invoke(self, prompt: str) -> str:
+        payload = {
+            "model": self.model,
+            "system": "Return one JSON object only. Do not call tools or add facts.",
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0,
+            "max_tokens": self._max_output_tokens,
+        }
+        response = self._transport.post(
+            self.endpoint,
+            headers={
+                "Content-Type": "application/json",
+                API_KEY_HEADER: self._api_key,
+                "anthropic-version": self.api_version,
+            },
+            body=json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode(),
+            timeout=self._timeout,
+        )
+        if response.status < 200 or response.status >= 300:
+            raise RuntimeError(f"Anthropic request failed with HTTP {response.status}")
+        try:
+            document = json.loads(response.body)
+            content = document["content"]
+        except (KeyError, TypeError, json.JSONDecodeError) as error:
+            raise RuntimeError("Anthropic returned an invalid response") from error
+        if not isinstance(content, list):
+            raise RuntimeError("Anthropic returned an invalid response")
+        texts: list[str] = []
+        for item in content:
+            if not isinstance(item, dict) or item.get("type") != "text":
+                continue
+            text = item.get("text")
+            if isinstance(text, str):
+                texts.append(text)
+        if len(texts) != 1 or not texts[0]:
+            raise RuntimeError("Anthropic returned no single text response")
         return texts[0]
 
 
