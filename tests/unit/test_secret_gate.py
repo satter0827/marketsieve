@@ -232,6 +232,17 @@ def test_secret_scan_rejects_python_literal_api_key_header(tmp_path: Path) -> No
     assert [finding.kind for finding in scan_paths((path,))] == ["api_key_header"]
 
 
+@pytest.mark.parametrize("call", ("logger.info", "RuntimeError"))
+def test_secret_scan_rejects_credentials_in_python_string_literals(
+    tmp_path: Path, call: str
+) -> None:
+    key = "OPENAI_" + "API_KEY"
+    source = f'{call}("{key}=opaque-production-credential")\n'
+    path = write(tmp_path / "provider.py", source)
+
+    assert [finding.kind for finding in scan_paths((path,))] == ["credential_assignment"]
+
+
 @pytest.mark.parametrize("separator", ("_", "-"))
 def test_secret_scan_rejects_dotted_configuration_keys(tmp_path: Path, separator: str) -> None:
     key = "providers.openai.api" + separator + "key"

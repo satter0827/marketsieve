@@ -31,7 +31,7 @@ REFERENCE_VALUE = re.compile(
     r"\$\{?[A-Z0-9_]+}?|%[A-Z0-9_]+%|"
     r"(?:os\.)?(?:environ(?:\[[^]]+]|\.get\([^)]*\))|getenv\([^)]*\))|"
     r"(?:config|settings|secret|secrets)\.[A-Z_][A-Z0-9_.]*|"
-    r"[A-Z_][A-Z0-9_]*\[[^]]+])$",
+    r"[A-Z_][A-Z0-9_]*\[[^]]+]|%(?:s|r))$",
     re.IGNORECASE,
 )
 URL_CREDENTIAL = re.compile(
@@ -203,6 +203,14 @@ def _header_credential_kind(name: str, value: str) -> str | None:
     return {"bearer": "bearer_token", "basic": "basic_auth"}.get(scheme.lower())
 
 
+def _is_python_output_sink(node: ast.expr) -> bool:
+    if isinstance(node, ast.Attribute):
+        return node.attr in {"critical", "debug", "error", "exception", "info", "warning"}
+    if not isinstance(node, ast.Name):
+        return False
+    return node.id == "print" or node.id.endswith(("Error", "Exception"))
+
+
 def _scan_python_assignments(label: str, text: str) -> list[Finding]:
     try:
         tree = ast.parse(text)
@@ -273,6 +281,18 @@ def _scan_python_assignments(label: str, text: str) -> list[Finding]:
                     and _is_literal_credential(f'"{value_literal}"')
                 ):
                     findings.append(Finding(label, node.lineno, "credential_assignment"))
+        if isinstance(node, ast.Call) and _is_python_output_sink(node.func):
+            output_values = (*node.args, *(keyword.value for keyword in node.keywords))
+            for output_value in output_values:
+                output_literal = _python_literal(output_value)
+                if output_literal is None:
+                    continue
+                findings.extend(
+                    Finding(label, output_value.lineno, finding.kind)
+                    for finding in _scan_text(
+                        "output-literal.txt", output_literal, scan_assignments=True
+                    )
+                )
         if isinstance(node, (ast.Assign, ast.AnnAssign, ast.NamedExpr)):
             for target in targets:
                 header_name = (
@@ -286,7 +306,7 @@ def _scan_python_assignments(label: str, text: str) -> list[Finding]:
                 )
                 if header_kind is not None:
                     findings.append(Finding(label, getattr(node, "lineno", 0), header_kind))
-    return findings
+    return list(dict.fromkeys(findings))
 
 
 def _scan_text(label: str, text: str, *, scan_assignments: bool = True) -> list[Finding]:
