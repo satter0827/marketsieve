@@ -16,6 +16,15 @@ The Offline Analysis Preview tests:
 - stable evidence and results for identical inputs;
 - the source contract against its first synthetic implementation.
 
+The historical-report candidate additionally tests:
+
+- independent source retrieval at every replay instant and rejection of invalid schedules;
+- stable replay, report, and evidence identities for identical inputs;
+- latest-state and transition-only report projection, including insufficient history;
+- Rich, text, and schema-valid JSON projections across TTY and non-TTY output;
+- capability metadata against the actual command and option definitions;
+- user output, errors, and opt-in structured logs on their defined streams.
+
 Tests cover unit behavior, application integration, CLI execution, and structural boundaries. No
 test depends on network access, provider credentials, local portfolio data, or wall-clock timing.
 

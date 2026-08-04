@@ -17,12 +17,12 @@ behavior; current and approved near-term constraints live in the [formal design]
 - Document adjustment and as-of semantics before accepting historical data.
 - Add licensed-for-repository synthetic daily fixtures for Japanese and U.S. equities.
 - Implement SMA20 and an explainable close-versus-SMA20 state-change signal.
-- Expose the complete synthetic-data-to-evidence path through an offline demo command.
+- Demonstrate the complete synthetic-data-to-evidence path through an offline command.
 
 The preview validates the first data-kind-specific source contract with its synthetic implementation
 and tests. It publishes no file or network adapters.
 
-## 0.1.0 candidate
+## 0.1.0 candidate — complete
 
 - Add historical replay that prevents future-information leakage.
 - Generate channel-neutral template reports with evidence references.

@@ -93,7 +93,7 @@ def check_tests(path: Path) -> None:
 
 
 def validate_schemas() -> None:
-    schemas = sorted((ROOT / "schemas").glob("*/v1/schema.json"))
+    schemas = sorted((ROOT / "schemas").glob("*/v*/schema.json"))
     if not schemas:
         raise RuntimeError("at least one versioned schema is required")
     for path in schemas:
@@ -103,34 +103,44 @@ def validate_schemas() -> None:
 
 def check_smoke(path: Path) -> None:
     version = capture(("uv", "run", "marketsieve", "--version"))
-    doctor = capture(("uv", "run", "marketsieve", "--log-level", "INFO", "doctor"))
-    module = capture(("uv", "run", "python", "-m", "marketsieve_app", "doctor"))
-    demo_first = capture(
-        ("uv", "run", "marketsieve", "--log-level", "INFO", "demo", "--format", "json")
+    doctor = capture(
+        ("uv", "run", "marketsieve", "--log-level", "INFO", "doctor", "--output", "json")
     )
-    demo_second = capture(("uv", "run", "marketsieve", "demo", "--format", "json"))
-    if demo_first.stdout != demo_second.stdout:
-        raise RuntimeError("offline demo JSON is not reproducible")
-    demo_document = json.loads(demo_first.stdout)
-    demo_schema = json.loads(
-        (ROOT / "schemas/demo-result/v1/schema.json").read_text(encoding="utf-8")
+    module = capture(("uv", "run", "python", "-m", "marketsieve_app", "doctor", "--output", "json"))
+    capabilities = capture(("uv", "run", "marketsieve", "capabilities", "--output", "json"))
+    report_first = capture(
+        ("uv", "run", "marketsieve", "--log-level", "INFO", "report", "--output", "json")
     )
-    Draft202012Validator(demo_schema, format_checker=FormatChecker()).validate(demo_document)
+    report_second = capture(("uv", "run", "marketsieve", "report", "--output", "json"))
+    if report_first.stdout != report_second.stdout:
+        raise RuntimeError("historical report JSON is not reproducible")
+    documents = {
+        "doctor-result": json.loads(doctor.stdout),
+        "capabilities-result": json.loads(capabilities.stdout),
+        "report-result": json.loads(report_first.stdout),
+    }
+    for name, document in documents.items():
+        schema = json.loads((ROOT / f"schemas/{name}/v1/schema.json").read_text(encoding="utf-8"))
+        Draft202012Validator(schema, format_checker=FormatChecker()).validate(document)
     smoke = {
         "version": {"exit_code": version.returncode, "stdout": version.stdout},
-        "doctor": {"exit_code": doctor.returncode, "stdout": doctor.stdout},
-        "module_doctor": {"exit_code": module.returncode, "stdout": module.stdout},
-        "demo": {
-            "exit_code": demo_first.returncode,
+        "doctor": {"exit_code": doctor.returncode, "result": documents["doctor-result"]},
+        "module_doctor": {"exit_code": module.returncode, "result": json.loads(module.stdout)},
+        "capabilities": {
+            "exit_code": capabilities.returncode,
+            "result": documents["capabilities-result"],
+        },
+        "report": {
+            "exit_code": report_first.returncode,
             "schema_valid": True,
             "reproducible": True,
-            "results": demo_document["results"],
+            "reports": documents["report-result"]["reports"],
         },
     }
     (path / "smoke.json").write_text(
         json.dumps(smoke, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
-    logs = doctor.stderr + demo_first.stderr
+    logs = doctor.stderr + report_first.stderr
     (path / "logs.jsonl").write_text(logs, encoding="utf-8")
 
     log_schema = json.loads(
@@ -198,7 +208,8 @@ def check_package(path: Path) -> None:
                 str(isolated),
                 "-c",
                 "import marketsieve; import marketsieve.analysis.sma20; "
-                "import marketsieve.data.daily; import marketsieve.domain; "
+                "import marketsieve.analysis.replay; import marketsieve.data.daily; "
+                "import marketsieve.domain; import marketsieve.reporting.sma20; "
                 "import marketsieve.synthetic.daily; print(marketsieve.__version__)",
             )
         ).stdout.strip()

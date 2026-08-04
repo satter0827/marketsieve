@@ -32,9 +32,20 @@ report generation infrastructure, and delivery channels.
 - **OAP-07:** A repository-local offline command demonstrates the complete path from synthetic data
   through validated analysis to an evidence-backed result.
 
-## Exclusions from the current preview
+## Current historical-report candidate
 
-The preview does not include investment recommendations, live data, CSV ingestion, persistence,
-scheduling, email or LINE delivery, LLM reporting, portfolio management, automatic provider
+- **HRC-01:** Historical replay reloads the exact source request at each explicit as-of instant so
+  later observations or revisions cannot determine an earlier result.
+- **HRC-02:** A channel-neutral report contains the latest SMA20 state, observed state changes,
+  provenance, and evidence references without expressing an investment recommendation.
+- **HRC-03:** The repository-local CLI presents the same report as terminal-rich, plain-text, or
+  versioned JSON output.
+- **HRC-04:** AI clients can discover commands, options, schemas, exit codes, and side effects from
+  a deterministic capabilities command.
+
+## Exclusions from the current candidate
+
+The current candidate does not include investment recommendations, live data, CSV ingestion,
+persistence, scheduling, email or LINE delivery, LLM reporting, portfolio management, automatic provider
 discovery, or automatic merging of provider data. These capabilities require later roadmap
 decisions and implementation evidence.

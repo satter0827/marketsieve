@@ -11,14 +11,18 @@ network clients, databases, delivery providers, or LLM providers.
 The `marketsieve` distribution is the only public artifact currently built by this repository. It
 contains package metadata and the typed-package marker.
 
-The `marketsieve_app` package is repository-local. It owns the command-line interface and offline
-diagnostics and depends on the public SDK. It is not included in public SDK artifacts.
+The `marketsieve_app` package is repository-local. It owns the command-line interface, offline
+diagnostics, use-case orchestration, and console presentation and depends on the public SDK. It is
+not included in public SDK artifacts.
 
 ```text
 Interface
     |
     v
-Application service <--- Adapter
+Bootstrap ---> Console adapter
+    |               |
+    v               v
+Application service
     |
     v
 marketsieve SDK
@@ -43,28 +47,34 @@ AST structure tests separately protect the SDK from I/O dependencies and protect
 distribution boundary. New layers or public ports are added only with a working use case and tests;
 empty adapter, repository, or base-class packages are prohibited.
 
-The core returns typed results and evidence and does not depend on logging, clocks, handlers,
+The core returns typed results, replay, reports, and evidence and does not depend on logging, clocks, handlers,
 files, or environment variables. Application services accept a standard-library `Logger` from the
 composition root and emit records only at an application boundary. The bootstrap owns logging
 configuration and output destinations; command interfaces keep results on stdout and logs on
 stderr.
 
-## Offline Analysis Preview
+## Historical report path
 
-The current preview implements this vertical path in dependency order:
+The current application implements this vertical path in dependency order:
 
 ```text
-Offline demo
+Historical report command
     -> application orchestration
     -> synthetic daily-bar source
-    -> validated market observations
-    -> deterministic SMA20 state-change analysis
-    -> evidence-backed result
+    -> independently loaded as-of snapshots
+    -> deterministic SMA20 replay
+    -> channel-neutral report
+    -> Rich, text, or JSON console output
 ```
 
-The daily-data boundary is the small `DailyBarSource` structural protocol. Its capability model
+The daily-data boundary remains the small `DailyBarSource` structural protocol. Its capability model
 describes whether an exact request is supported before retrieval. The protocol is public together
 with the synthetic implementation and contract tests.
+
+A replay accepts its evaluation schedule explicitly and reloads the source at every instant. The
+application selects the synthetic schedule; the SDK validates and executes it. The console adapter
+implements a private application output port. No public delivery port is introduced from one
+console implementation.
 
 A single source abstraction covering daily bars, intraday bars, quotes, fundamentals, corporate
 actions, and instrument search is prohibited. Each future data kind earns a separate boundary from

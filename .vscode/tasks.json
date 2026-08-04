@@ -46,15 +46,21 @@
       "problemMatcher": []
     },
     {
-      "label": "App: Demo Text",
+      "label": "App: Report",
       "type": "shell",
-      "command": "make demo",
+      "command": "make report",
       "problemMatcher": []
     },
     {
-      "label": "App: Demo JSON",
+      "label": "App: Report JSON",
       "type": "shell",
-      "command": "make demo-json",
+      "command": "make report-json",
+      "problemMatcher": []
+    },
+    {
+      "label": "App: Capabilities JSON",
+      "type": "shell",
+      "command": "make capabilities-json",
       "problemMatcher": []
     }
   ]

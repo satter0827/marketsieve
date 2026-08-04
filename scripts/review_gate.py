@@ -16,7 +16,8 @@ from jsonschema import Draft202012Validator
 
 ROOT = Path(__file__).parents[1]
 STATE_ROOT = ROOT / ".marketsieve"
-SCHEMA_VERSION = "1.1.0"
+SCHEMA_VERSION = "2.0.0"
+SCHEMA_PATH = ROOT / "schemas/review-report/v2/schema.json"
 
 
 def capture(*command: str) -> str:
@@ -78,11 +79,11 @@ def tool_version(*command: str) -> str:
 def render_summary(report: dict[str, Any]) -> str:
     failures = [item for item in report["checks"] if item["status"] != "passed"]
     findings = report["findings"]
-    demo_results = report.get("cli", {}).get("demo", {}).get("results", [])
+    report_results = report.get("cli", {}).get("report", {}).get("reports", [])
     cli_lines = [
-        f"- {item['market'].upper()}: status={item['analysis']['status']}, "
-        f"transition={item['analysis']['transition'] or 'none'}, evidence={item['evidence_id']}"
-        for item in demo_results
+        f"- {item['market'].upper()}: status={item['latest']['status']}, "
+        f"transitions={len(item['transitions'])}, report={item['report_id']}"
+        for item in report_results
     ]
     lines = [
         "# Review Summary",
@@ -186,7 +187,7 @@ def create(base_value: str, head_value: str, evidence: Path, output: Path) -> No
         "artifacts": artifacts,
         "findings": [],
     }
-    schema = json.loads((ROOT / "schemas/review-report/v1/schema.json").read_text(encoding="utf-8"))
+    schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
     Draft202012Validator(schema).validate(report)
     (resolved / "review.json").write_text(
         json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
@@ -201,7 +202,7 @@ def create(base_value: str, head_value: str, evidence: Path, output: Path) -> No
 def validate(bundle: Path) -> None:
     bundle = bundle.resolve()
     report = json.loads((bundle / "review.json").read_text(encoding="utf-8"))
-    schema = json.loads((ROOT / "schemas/review-report/v1/schema.json").read_text(encoding="utf-8"))
+    schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
     Draft202012Validator(schema).validate(report)
     if resolve_commit(report["base_sha"]) != report["base_sha"]:
         raise RuntimeError("base_sha is not an available commit")

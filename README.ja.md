@@ -13,7 +13,7 @@ MarketSieveは、検証済みの市場情報から再現可能な分析、過去
 
 ## 現在の状態
 
-Offline Analysis Previewは完成しています。公開`marketsieve` packageは、取引所を明示した銘柄、日足contract、決定論的な日米Synthetic source、SMA20状態変化分析を提供します。リポジトリ内の運用アプリケーションから全経路をoffline demoとして実行できます。この結果は投資推奨ではありません。
+`0.1.0` candidateの処理経路は完成しています。公開`marketsieve` packageは、取引所を明示した銘柄、日足contract、決定論的な日米Synthetic source、SMA20状態変化分析、未来情報を排除したhistorical replay、channel-neutral reportを提供します。リポジトリ内のCLIは、人とmachine clientへ同じ根拠付きreportを提示します。この結果は投資推奨ではありません。
 
 ## インストール
 
@@ -36,11 +36,20 @@ CLIはリポジトリ内の運用アプリケーションに属し、公開SDK w
 ```shell
 uv run marketsieve --version
 make doctor
-make demo
-make demo-json
+make report
+make report-json
+make capabilities-json
 ```
 
-`make demo`はJP、USの順に人間向け結果を表示します。`make demo-json`は入力期間、観測数、状態、遷移、provenance、evidence IDを含むversion付きmachine contractを出力します。
+`make report`は利用可能なterminalではRich表示を使用し、redirect時はANSIを含まないtextへ切り替えます。`make report-json`はversion付きreport contractを出力します。`make capabilities-json`はAI client向けにcommand、option、schema、exit code、stream、副作用を説明します。
+
+各output modeは直接指定できます。
+
+```shell
+uv run marketsieve doctor --output json
+uv run marketsieve report --market all --output rich
+uv run marketsieve capabilities --output json
+```
 
 ## アーキテクチャ
 
@@ -64,7 +73,7 @@ VS Codeはworkspaceの`.venv`を使用し、依存同期、format、現在のテ
 
 ## Roadmap
 
-次のマイルストーンでは、完成したPreviewへhistorical replayとchannel-neutral reportを追加し、`0.1.0` candidateとします。順序は[Roadmap](docs/roadmap.md)、制約は[正式設計](docs/design/README.md)を参照してください。
+historical reportの処理経路が最初の`0.1.0` candidateです。`develop`から`main`への昇格は人が判断します。外部data sourceと個人向け配信channelは後続milestoneです。順序は[Roadmap](docs/roadmap.md)、制約は[正式設計](docs/design/README.md)を参照してください。
 
 ## ライセンス
 

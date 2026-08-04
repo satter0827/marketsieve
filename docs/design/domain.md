@@ -1,8 +1,8 @@
 # Domain
 
-This document defines the current semantics of the Offline Analysis Preview. The public types live
-in `marketsieve.domain`, `marketsieve.data.daily`, `marketsieve.analysis.sma20`, and
-`marketsieve.synthetic.daily`.
+This document defines the current market-data, analysis, replay, and report semantics. The public
+types live below `marketsieve.domain`, `marketsieve.data`, `marketsieve.analysis`,
+`marketsieve.reporting`, and `marketsieve.synthetic`.
 
 ## Instrument identity
 
@@ -57,3 +57,21 @@ condition, not a buy, sell, suitability, or risk recommendation.
 Evidence identifies the validated inputs, date range, indicator definition, computed value, and
 decision rule used for a result. The same inputs and analysis definition produce the same evidence
 identity and result.
+
+## Historical replay
+
+A replay evaluates one exact daily-bar request at a non-empty, strictly increasing sequence of
+timezone-aware as-of instants. The source is loaded independently at every instant. A replay does
+not derive earlier results by truncating the final dataset because that dataset may contain values
+revised after an earlier evaluation instant.
+
+Each replay point retains its as-of instant, analysis result, provenance, and evidence identity.
+Insufficient history is a successful replay point. Identical requests, evaluation instants, source
+responses, and analysis definitions produce the same replay identity.
+
+## Historical report
+
+The SMA20 replay report contains the latest evaluated state and only the points where the state
+changed. It references the replay, provenance, and analysis evidence without changing calculated
+facts. The report is channel-neutral and contains no recommendation, forecast, or suitability
+decision. Its identity is derived from normalized report content rather than rendered text.

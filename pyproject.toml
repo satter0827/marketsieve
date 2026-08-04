@@ -91,6 +91,7 @@ type = "layers"
 layers = [
     "marketsieve_app.interfaces",
     "marketsieve_app.bootstrap",
+    "marketsieve_app.adapters",
     "marketsieve_app.application",
     "marketsieve",
 ]

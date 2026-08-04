@@ -18,10 +18,11 @@ the SDK depend on email, LINE, an LLM provider, or a database.
 
 ## Current status
 
-The Offline Analysis Preview is complete. The public `marketsieve` package exposes validated
+The `0.1.0` candidate path is complete. The public `marketsieve` package exposes validated
 exchange-qualified instruments, daily-bar contracts, deterministic Japanese and U.S. synthetic
-sources, and SMA20 state-change analysis. The repository-local application exposes the full path as
-an offline demo; it is not an investment recommendation.
+sources, SMA20 state-change analysis, time-correct historical replay, and channel-neutral reports.
+The repository-local CLI presents the same evidence-backed report for people and machine clients;
+it is not an investment recommendation.
 
 ## Installation
 
@@ -46,12 +47,22 @@ Its current commands perform no network requests and require no secrets.
 ```shell
 uv run marketsieve --version
 make doctor
-make demo
-make demo-json
+make report
+make report-json
+make capabilities-json
 ```
 
-`make demo` prints the fixed JP-then-US human view. `make demo-json` emits the versioned machine
-contract with input range, observation counts, state, transition, provenance, and evidence ID.
+`make report` uses a Rich terminal view when available and falls back to ANSI-free text when output
+is redirected. `make report-json` emits the versioned report contract. `make capabilities-json`
+describes commands, options, schemas, exit codes, streams, and side effects for AI clients.
+
+The direct commands expose all output modes:
+
+```shell
+uv run marketsieve doctor --output json
+uv run marketsieve report --market all --output rich
+uv run marketsieve capabilities --output json
+```
 
 ## Architecture
 
@@ -86,9 +97,9 @@ request is the release boundary. See [Contributing](CONTRIBUTING.md) for the wor
 
 ## Roadmap
 
-The next milestone turns the completed preview into a `0.1.0` candidate with historical replay and
-channel-neutral reporting. See the [Roadmap](docs/roadmap.md) and the
-[formal design](docs/design/README.md).
+The historical-report path is the first `0.1.0` candidate. Promotion from `develop` to `main`
+remains a human release decision. External data sources and personal delivery channels remain later
+milestones. See the [Roadmap](docs/roadmap.md) and the [formal design](docs/design/README.md).
 
 ## License
 

@@ -21,8 +21,9 @@ def test_readmes_show_the_same_commands() -> None:
         "make test",
         "make check",
         "make build",
-        "make demo",
-        "make demo-json",
+        "make report",
+        "make report-json",
+        "make capabilities-json",
     )
     readmes = (
         (ROOT / "README.md").read_text(encoding="utf-8"),
@@ -76,8 +77,9 @@ def test_shared_vscode_tasks_use_make_targets() -> None:
         "make test TEST=${relativeFile}",
         "make review",
         "make review-validate",
-        "make demo",
-        "make demo-json",
+        "make report",
+        "make report-json",
+        "make capabilities-json",
     }
 
 
@@ -93,8 +95,9 @@ def test_makefile_exposes_stable_entry_points() -> None:
         "test",
         "check",
         "doctor",
-        "demo",
-        "demo-json",
+        "report",
+        "report-json",
+        "capabilities-json",
         "build",
         "clean-generated",
         "review",
