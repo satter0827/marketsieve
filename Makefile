@@ -65,11 +65,11 @@ build: ## Build the public SDK into the generated-artifact directory.
 evidence: check evidence-bundle ## Run the development gate and create a review bundle.
 
 evidence-bundle: ## Create a review bundle from existing development evidence.
-	uv run python scripts/review_gate.py create --base-sha "$(BASE_SHA)" --head-sha "$(HEAD_SHA)" --evidence-dir "$(EVIDENCE_DIR)" --output-dir "$(REVIEW_DIR)"
+	uv run python -m scripts.review_gate create --base-sha "$(BASE_SHA)" --head-sha "$(HEAD_SHA)" --evidence-dir "$(EVIDENCE_DIR)" --output-dir "$(REVIEW_DIR)"
 
 evidence-validate: ## Validate BUNDLE=<review-bundle-directory>.
 	@test -n "$(BUNDLE)" || { echo "BUNDLE is required" >&2; exit 2; }
-	uv run python scripts/review_gate.py validate "$(BUNDLE)"
+	uv run python -m scripts.review_gate validate "$(BUNDLE)"
 
 review-attest: ## Publish the reviewed HEAD status for REVIEWED_SHA=<full-commit-sha>.
 	@test -n "$(REVIEWED_SHA)" || { echo "REVIEWED_SHA is required" >&2; exit 2; }
