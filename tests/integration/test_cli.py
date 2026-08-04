@@ -138,6 +138,13 @@ def test_capabilities_match_click_commands_and_validate_schema() -> None:
     document = json.loads(result.stdout)
     validate("capabilities-result", document)
     assert [item["name"] for item in document["commands"]] == [
+        "analyze atr",
+        "analyze ema",
+        "analyze macd",
+        "analyze maximum-drawdown",
+        "analyze period-return",
+        "analyze rsi",
+        "analyze sma",
         "capabilities",
         "doctor",
         "inspect",
@@ -247,6 +254,20 @@ def test_csv_import_snapshot_and_price_inspect_are_one_offline_path(tmp_path: Pa
                 "json",
             ],
         )
+        analyzed = runner.invoke(
+            main,
+            [
+                "analyze",
+                "sma",
+                "XTKS:7203",
+                "--period",
+                "2",
+                "--source-profile",
+                "offline-jp",
+                "--output",
+                "json",
+            ],
+        )
 
     assert sources.exit_code == imported.exit_code == 0
     source_document = json.loads(sources.stdout)
@@ -262,7 +283,12 @@ def test_csv_import_snapshot_and_price_inspect_are_one_offline_path(tmp_path: Pa
     inspection = json.loads(inspected.stdout)
     validate("inspect-result", inspection)
     assert inspection["sections"]["price"]["values"]["close"] == "112"
+    assert inspection["sections"]["technical"]["status"] == "partial"
     assert inspection["sections"]["financial"]["missing_reasons"] == ["not_present_in_snapshot"]
+    assert analyzed.exit_code == 0
+    analysis = json.loads(analyzed.stdout)
+    validate("indicator-result", analysis)
+    assert analysis["indicator"]["values"] == {"sma": "108.5"}
 
 
 def test_inspect_never_fetches_and_explains_missing_snapshot() -> None:

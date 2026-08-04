@@ -36,6 +36,11 @@ retrieval availability, path containment, deterministic object identity, idempot
 normalized-content tamper detection, interrupted-write exclusion, explicit plugin metadata, and
 the offline import-to-inspect CLI path.
 
+Indicator acceptance uses fixed reference vectors for all seven definitions, exact warm-up
+boundaries, invalid parameter checks, stable evidence, canonical decimals, and an ambient Decimal
+context changed to two digits. CLI tests validate schema-conforming analysis from a stored CSV
+snapshot and explicit technical-section incompleteness.
+
 ## Repository acceptance
 
 The SDK must not import the application, configuration, logging, network, database, delivery, or

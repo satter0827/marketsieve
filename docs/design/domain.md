@@ -109,9 +109,9 @@ reported or restated status, currency, scale, and provenance. Derived growth, ma
 leverage, and valuation values are calculated only from compatible inputs. Provider-reported and
 MarketSieve-derived ratios remain distinguishable.
 
-## Approved 0.2 indicator semantics
+## Indicator semantics
 
-The target indicator catalog contains SMA, EMA, RSI, MACD, ATR, period return, and maximum drawdown.
+The implemented indicator catalog contains SMA, EMA, RSI, MACD, ATR, period return, and maximum drawdown.
 Every result records its parameters, definition version, observation count, status, numeric policy,
 and evidence identity. The numeric policy uses a local decimal context with 34 digits and
 round-half-even. SMA aggregates exact fractions before one decimal conversion; recursive indicators
@@ -120,6 +120,18 @@ warm-up, seed, recurrence, intermediate precision, and output normalization rule
 
 Insufficient history is a non-signal result. NaN, infinity, invalid parameters, zero denominators,
 and incompatible currencies or accounting periods are never silently coerced into a value.
+
+The v1 definitions use close as the input for SMA, EMA, RSI, MACD, period return, and drawdown. EMA
+uses an SMA seed and alpha `2 / (period + 1)`. RSI and ATR use Wilder recurrence after an SMA seed;
+a completely flat RSI seed is 50. ATR true range includes the previous close after the first bar.
+MACD uses independently seeded fast and slow EMAs, then an SMA-seeded EMA for its signal. Period
+return is `latest / close[period ago] - 1`. Maximum drawdown is the minimum peak-relative return in
+the selected trailing window and is zero or negative.
+
+Outputs are canonical non-exponent decimal strings with redundant trailing zeros removed. Invalid
+or extra parameters are errors. Insufficient history returns no numeric values but retains the
+input count, definition, policy, as-of instant, and evidence. Reference vectors in
+`tests/unit/test_indicators.py` are the executable authority for all seven definitions.
 
 ## Approved 0.2 section semantics
 

@@ -9,9 +9,12 @@ import re
 import shutil
 import tempfile
 from dataclasses import dataclass
+from datetime import date, datetime
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
+from marketsieve.data.daily import Adjustment, DailyBar, Provenance
 from marketsieve_extension_api import ImportedDailyBars
 
 SNAPSHOT_SCHEMA = "marketsieve-snapshot/v1"
@@ -217,6 +220,30 @@ class SnapshotStore:
         if not isinstance(document, dict):
             raise ValueError("normalized snapshot document must be an object")
         return document
+
+    def daily_bars(self, object_id: str) -> tuple[DailyBar, ...]:
+        """Rebuild validated SDK values from one verified normalized object."""
+
+        document = self.normalized(object_id)
+        adjustment = Adjustment(document["adjustment"])
+        return tuple(
+            DailyBar(
+                trading_date=date.fromisoformat(item["trading_date"]),
+                open=Decimal(item["open"]),
+                high=Decimal(item["high"]),
+                low=Decimal(item["low"]),
+                close=Decimal(item["close"]),
+                volume=item["volume"],
+                adjustment=adjustment,
+                available_at=datetime.fromisoformat(item["available_at"]),
+                provenance=Provenance(
+                    item["provenance"]["source"],
+                    item["provenance"]["dataset"],
+                    item["provenance"]["version"],
+                ),
+            )
+            for item in document["bars"]
+        )
 
     def _read_manifest(self, object_id: str) -> StoredSnapshot:
         directory = self._objects / object_id

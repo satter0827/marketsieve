@@ -24,9 +24,9 @@
       "type": "object",
       "required": ["status", "completeness", "values", "warnings", "missing_reasons", "provenance", "evidence_id"],
       "properties": {
-        "status": {"enum": ["available", "unavailable"]},
+        "status": {"enum": ["available", "partial", "unavailable"]},
         "as_of": {"type": "string", "format": "date-time"},
-        "completeness": {"type": "string", "pattern": "^(0|1)$"},
+        "completeness": {"type": "string", "pattern": "^(0(\\.[0-9]+)?|1)$"},
         "values": {"type": "object"},
         "warnings": {"type": "array", "items": {"type": "string"}},
         "missing_reasons": {"type": "array", "items": {"type": "string"}},

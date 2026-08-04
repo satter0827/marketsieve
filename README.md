@@ -67,6 +67,7 @@ uv run marketsieve source list --output json
 uv run marketsieve source import ./example-bundle --output json
 uv run marketsieve snapshot verify SNAPSHOT_ID --output json
 uv run marketsieve inspect XTKS:7203 --source-profile offline-jp --output json
+uv run marketsieve analyze rsi XTKS:7203 --period 14 --source-profile offline-jp --output json
 ```
 
 ## Architecture
