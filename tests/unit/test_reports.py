@@ -70,6 +70,7 @@ def _decision(
         Decimal("0.03"),
         Decimal("1000000"),
         (("per", "14.2"),),
+        (("latest_filing", "fixture-2026"),),
         ("close_below_sma60",),
         "次の終値で傾向を確認する",
         "balanced_medium_term",

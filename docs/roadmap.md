@@ -8,12 +8,6 @@ design and release history, not in this file.
 1. Add a Rakuten importer based on anonymized real fixtures and map it to the implemented canonical
    portfolio model.
 
-## 0.5.0 Official Fundamentals
-
-1. Add company-history valuation comparisons without cross-industry fixed thresholds.
-2. Present filing revisions and period-to-period financial changes explicitly in daily and weekly
-   reports without coupling reports to a provider.
-
 ## 0.6.0 Strategy Lab
 
 1. Add immutable experiment specifications and replay windows that reuse decision policies.

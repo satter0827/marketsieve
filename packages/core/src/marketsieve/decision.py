@@ -110,6 +110,7 @@ class AnalysisContext:
     eps_growth: Decimal | None = None
     free_cash_flow: Decimal | None = None
     valuation: tuple[tuple[str, str], ...] = ()
+    fundamentals: tuple[tuple[str, str], ...] = ()
     input_evidence_ids: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
@@ -144,13 +145,8 @@ class AnalysisContext:
                 raise ValueError(f"{name} must be a finite Decimal when present")
         if self.next_earnings_date is not None and type(self.next_earnings_date) is not date:
             raise TypeError("next earnings date must be datetime.date")
-        valuation_names = tuple(name for name, _ in self.valuation)
-        if (
-            valuation_names != tuple(sorted(valuation_names))
-            or len(valuation_names) != len(set(valuation_names))
-            or any(not name or not value for name, value in self.valuation)
-        ):
-            raise ValueError("valuation values must have unique sorted non-empty names")
+        _validate_pairs(self.valuation, "valuation")
+        _validate_pairs(self.fundamentals, "fundamental")
         if any(not value for value in self.input_evidence_ids) or len(
             set(self.input_evidence_ids)
         ) != len(self.input_evidence_ids):
@@ -169,6 +165,7 @@ class InstrumentDecision:
     eps_growth: Decimal | None
     free_cash_flow: Decimal | None
     valuation: tuple[tuple[str, str], ...]
+    fundamentals: tuple[tuple[str, str], ...]
     invalidation_conditions: tuple[str, ...]
     next_action: str
     policy_name: str
@@ -204,13 +201,8 @@ class InstrumentDecision:
             or any(not name or not value for name, value in self.policy_settings)
         ):
             raise ValueError("policy settings must be unique and sorted")
-        valuation_names = tuple(name for name, _ in self.valuation)
-        if (
-            valuation_names != tuple(sorted(valuation_names))
-            or len(valuation_names) != len(set(valuation_names))
-            or any(not name or not value for name, value in self.valuation)
-        ):
-            raise ValueError("decision valuation values must be unique and sorted")
+        _validate_pairs(self.valuation, "decision valuation")
+        _validate_pairs(self.fundamentals, "decision fundamental")
 
 
 @dataclass(frozen=True, slots=True)
@@ -493,6 +485,7 @@ class BalancedMediumTermPolicy:
             context.eps_growth,
             context.free_cash_flow,
             context.valuation,
+            context.fundamentals,
             invalidation_conditions,
             next_action,
             self.name,
@@ -639,3 +632,13 @@ def _bounded_decimal(value: Decimal, name: str, *, minimum: Decimal, maximum: De
         raise TypeError(f"{name} must use decimal.Decimal")
     if not value.is_finite() or not minimum <= value <= maximum:
         raise ValueError(f"{name} must be between {minimum} and {maximum}")
+
+
+def _validate_pairs(values: tuple[tuple[str, str], ...], name: str) -> None:
+    names = tuple(key for key, _ in values)
+    if (
+        names != tuple(sorted(names))
+        or len(names) != len(set(names))
+        or any(not key or not value for key, value in values)
+    ):
+        raise ValueError(f"{name} values must be unique and sorted")

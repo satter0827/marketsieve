@@ -112,6 +112,7 @@ def _decision_document(decision: InstrumentDecision) -> dict[str, object]:
         if decision.free_cash_flow is not None
         else None,
         "valuation": dict(decision.valuation),
+        "fundamentals": dict(decision.fundamentals),
         "invalidation_conditions": list(decision.invalidation_conditions),
         "next_action": decision.next_action,
         "policy": {
@@ -275,6 +276,8 @@ def render_markdown(report: DecisionReport, previous_report: DecisionReport | No
                 "",
                 f"- 判断: {ACTION_LABELS[decision.action]}",
                 f"- 確信度: {CONFIDENCE_LABELS[decision.confidence]}",
+                *_context_lines("財務", decision.fundamentals),
+                *_context_lines("評価", decision.valuation),
                 *(f"- 根拠: {item.code}" for item in decision.evidence),
                 "",
             )
@@ -360,6 +363,10 @@ def _decision_lines(decisions: tuple[InstrumentDecision, ...], *, empty: str) ->
 
 def _instrument_key(instrument: Instrument) -> str:
     return f"{instrument.mic}:{instrument.symbol}"
+
+
+def _context_lines(label: str, values: tuple[tuple[str, str], ...]) -> tuple[str, ...]:
+    return tuple(f"- {label}: {name}={value}" for name, value in values)
 
 
 class ReportStore:
@@ -568,6 +575,7 @@ def _parse_decision(value: dict[str, Any]) -> InstrumentDecision:
         _optional_decimal(value["eps_growth"]),
         _optional_decimal(value["free_cash_flow"]),
         _pairs(value["valuation"]),
+        _pairs(value["fundamentals"]),
         tuple(value["invalidation_conditions"]),
         value["next_action"],
         policy["name"],

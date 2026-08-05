@@ -17,6 +17,8 @@ will follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   provenance for official financial sources.
 - An independently installable SEC source for filing histories and standard XBRL company facts.
 - An independently installable EDINET source for filing lists and standard XBRL-derived facts.
+- Daily Close Brief integration for knowledge-time-correct financial trends, known earnings dates,
+  filing amendments, and company-relative valuation ranges.
 
 ## [0.3.0] - 2026-08-05
 

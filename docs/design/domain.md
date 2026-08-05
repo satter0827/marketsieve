@@ -188,9 +188,9 @@ A decision is a policy result, not an order. Held instruments use `keep`, `watch
 `wait_for_earnings`, `pass`, or `indeterminate`. Human projections translate these stable values.
 
 Each decision records confidence, supporting evidence, opposing evidence, invalidation conditions,
-the next review action, policy identity, policy settings, and input evidence. Missing essential
-price history produces an indeterminate decision. Missing non-essential facts lower confidence and
-remain visible.
+the next review action, policy identity, policy settings, input evidence, financial disclosure
+context, and company-relative valuation context. Missing essential price history produces an
+indeterminate decision. Missing non-essential facts lower confidence and remain visible.
 
 The balanced medium-term policy uses SMA 20 and 60, RSI 14, MACD 12/26/9, ATR 14, 20-day return,
 and 252-day maximum drawdown. Its defaults are RSI 70/30, ATR-to-close warning at 4 percent,
@@ -214,7 +214,13 @@ produces `wait_for_pullback`; all other cases produce `pass`.
 
 Financial deterioration means at least two negative values among revenue growth, EPS growth, and
 free cash flow. Valuation values are retained as display evidence and do not reverse a 1.0.0 policy
-decision. The policy never converts an action into an order.
+decision. Company-relative valuation uses only explicitly acquired observations for the same
+exchange-qualified instrument. It shows the current value and observation count, and adds minimum,
+median, and maximum when at least two observations exist. It does not compare industries or create
+an aggregate score. Filing context identifies the latest known filing, its publication time, and
+explicit amendment linkage. When both linked filings contain the same concept, changed concepts
+are listed without interpreting their materiality. The policy never converts an action into an
+order.
 
 A decision report is an immutable composition of one market session, one portfolio snapshot, the
 selected policy, per-instrument decisions, input diagnostics, and an optional previous-report
