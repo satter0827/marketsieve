@@ -7,7 +7,16 @@ from pathlib import Path
 
 import pytest
 
-from marketsieve import DecisionAction, Holding, MarketSession, PortfolioSnapshot, WatchItem
+from marketsieve import (
+    DecisionAction,
+    FinancialObservation,
+    FinancialTrendReport,
+    Holding,
+    MarketSession,
+    PortfolioSnapshot,
+    WatchItem,
+    analyze_financial_history,
+)
 from marketsieve.data.daily import DailyBar
 from marketsieve.domain import Instrument
 from marketsieve.synthetic.daily import JP_INSTRUMENT, US_INSTRUMENT, fixture_bars
@@ -33,6 +42,8 @@ class DataService:
     values: dict[str, tuple[DailyBar, ...]]
     failures: set[str] = field(default_factory=set)
     fetches: list[str] = field(default_factory=list)
+    trends: dict[str, FinancialTrendReport] = field(default_factory=dict)
+    earnings: dict[str, date] = field(default_factory=dict)
 
     def fetch(
         self,
@@ -43,9 +54,9 @@ class DataService:
         adjustment: str,
         kind: str = "daily_bars",
     ) -> dict[str, object]:
-        del start, end, adjustment, kind
-        self.fetches.append(f"{profile_name}:{instrument_key}")
-        if instrument_key in self.failures:
+        del start, end, adjustment
+        self.fetches.append(f"{profile_name}:{instrument_key}:{kind}")
+        if kind == "daily_bars" and instrument_key in self.failures:
             raise RuntimeError("provider secret must not enter diagnostics")
         return {}
 
@@ -53,10 +64,21 @@ class DataService:
         del profile
         return self.values[instrument]
 
+    def financial_trend(
+        self, profile: str, instrument: str, as_of: datetime
+    ) -> FinancialTrendReport:
+        del profile
+        value = self.trends.get(instrument)
+        return value if value is not None else analyze_financial_history((), as_of)
+
+    def next_earnings_date(self, profile: str, instrument: str, as_of: datetime) -> date | None:
+        del profile, as_of
+        return self.earnings.get(instrument)
+
 
 class Configuration:
-    def daily_profile(self, market: str) -> tuple[str, int]:
-        return f"{market}-profile", 400
+    def daily_profile(self, market: str) -> tuple[str, int, int]:
+        return f"{market}-profile", 400, 1500
 
     def weekly_max_age_days(self) -> int:
         return 7
@@ -85,7 +107,11 @@ def test_daily_acquires_only_selected_market_and_stores_report(tmp_path: Path) -
 
     report = service.run("jp", as_of=bars[-1].available_at)
 
-    assert data.fetches == ["jp-profile:XTKS:7203"]
+    assert data.fetches == [
+        "jp-profile:XTKS:7203:daily_bars",
+        "jp-profile:XTKS:7203:financials",
+        "jp-profile:XTKS:7203:events",
+    ]
     assert report.session.value == "jp_close"
     assert report.decisions[0].action is not DecisionAction.INDETERMINATE
     assert reports.latest(report.session) == report
@@ -115,6 +141,58 @@ def test_daily_partial_failure_is_indeterminate_without_losing_success(tmp_path:
         DecisionAction.REDUCE_REVIEW,
     ]
     assert report.diagnostics == ("XTKS:6758: price acquisition failed (RuntimeError)",)
+
+
+def test_daily_passes_known_financial_trends_and_earnings_to_policy(tmp_path: Path) -> None:
+    bars = _bars()
+    available = bars[-1].available_at
+    observations = []
+    for year, revenue, eps in ((2024, "100", "10"), (2025, "120", "12")):
+        for concept, value in (
+            ("revenue", revenue),
+            ("eps", eps),
+            ("operating_cash_flow", "30"),
+            ("capital_expenditure", "10"),
+        ):
+            observations.append(
+                FinancialObservation(
+                    concept,
+                    Decimal(value),
+                    1,
+                    "annual",
+                    date(year, 1, 1),
+                    date(year, 12, 31),
+                    "ifrs",
+                    "consolidated",
+                    "reported",
+                    "JPY",
+                    available.replace(year=year + 1, month=2, day=1),
+                    f"{year}:{concept}",
+                )
+            )
+    trend = analyze_financial_history(observations, available)
+    earnings = available.astimezone(JP_INSTRUMENT.exchange_timezone).date() + timedelta(days=5)
+    data = DataService(
+        {"XTKS:7203": bars},
+        trends={"XTKS:7203": trend},
+        earnings={"XTKS:7203": earnings},
+    )
+    service = DailyBriefService(
+        PortfolioReader(_portfolio(available)),
+        data,
+        ReportStore(tmp_path / "reports"),
+        Configuration(),
+        create_report,
+    )
+
+    report = service.run("jp", as_of=available)
+    decision = report.decisions[0]
+
+    assert decision.revenue_growth == Decimal("0.2")
+    assert decision.eps_growth == Decimal("0.2")
+    assert decision.free_cash_flow == Decimal("20")
+    assert decision.next_earnings_date == earnings
+    assert any(trend.evidence_id in item.evidence_ids for item in decision.evidence)
 
 
 def test_all_indeterminate_report_is_retained_without_latest_reference(tmp_path: Path) -> None:

@@ -25,8 +25,10 @@ snapshots; price,
 financial, and event inspection; seven deterministic technical indicators; and an explanation-only
 Agent. Configured `daily jp` and `daily us` commands explicitly acquire portfolio instruments and
 write immutable Close Brief reports. `weekly` combines eligible daily reports offline as the
-weekend briefing. The Agent reads only an immutable decision report and requires an explicit LM Studio,
-OpenAI, Anthropic, or Google provider. Its output is stored separately and cannot change a report.
+weekend briefing. Daily reports use knowledge-time-correct financial trends and known earnings
+dates when those optional source capabilities are configured. The Agent reads only an immutable
+decision report and requires an explicit LM Studio, OpenAI, Anthropic, or Google provider. Its
+output is stored separately and cannot change a report.
 
 ## Installation
 

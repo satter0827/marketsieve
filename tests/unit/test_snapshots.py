@@ -5,10 +5,12 @@ from dataclasses import replace
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
 
 from marketsieve_cli.adapters.snapshots import SnapshotStore
+from marketsieve_cli.application.snapshots import SnapshotService
 from marketsieve_extension_api import (
     AvailabilityBasis,
     Consolidation,
@@ -150,7 +152,7 @@ def test_financial_and_event_snapshots_have_independent_kind_references(tmp_path
             FinancialFact(
                 "revenue",
                 "Sales",
-                None,
+                "J-GAAP",
                 FinancialPeriod.ANNUAL,
                 "FY",
                 date(2025, 4, 1),
@@ -182,7 +184,7 @@ def test_financial_and_event_snapshots_have_independent_kind_references(tmp_path
                 date(2026, 7, 31),
                 date(2026, 7, 31),
                 None,
-                datetime(2026, 8, 1, tzinfo=UTC),
+                datetime(2026, 7, 20, tzinfo=UTC),
                 AvailabilityBasis.RETRIEVAL,
                 (("quarter", "1Q"),),
             ),
@@ -211,6 +213,12 @@ def test_financial_and_event_snapshots_have_independent_kind_references(tmp_path
     assert stored_filing["filing_id"] == filing.filing_id
     assert stored_filing["published_at"] == published_at.isoformat()
     assert store.normalized(event_stored.object_id)["missing_reasons"] == ["split_not_available"]
+    service = SnapshotService(cast(Any, None), store, cast(Any, None))
+    trend = service.financial_trend("offline-jp", "XTKS:7203", datetime(2026, 8, 2, tzinfo=UTC))
+    assert dict(trend.periods[0].values)["revenue"] == Decimal("1000")
+    assert service.next_earnings_date(
+        "offline-jp", "XTKS:7203", datetime(2026, 7, 25, tzinfo=UTC)
+    ) == date(2026, 7, 31)
 
 
 def test_pending_directory_is_not_a_snapshot(tmp_path: Path) -> None:
