@@ -135,7 +135,7 @@ Missing facts include machine-readable reasons. Comparison uses a common knowled
 does not rank incompatible periods, accounting bases, consolidation bases, or absolute values in
 different currencies.
 
-## 0.4.0 portfolio and decision target
+## Portfolio and decision semantics
 
 A portfolio snapshot is an immutable, brokerage-neutral observation of holdings and watch items at
 one aware instant. A holding identifies an instrument, quantity, average acquisition price,
@@ -159,6 +159,25 @@ The balanced medium-term policy uses SMA 20 and 60, RSI 14, MACD 12/26/9, ATR 14
 and 252-day maximum drawdown. Its defaults are RSI 70/30, ATR-to-close warning at 4 percent,
 drawdown warning at -20 percent, earnings wait at seven calendar days, and position concentration
 warning above 20 percent. Policy settings are explicit values included in evidence identity.
+
+SMA 20 and 60, RSI, MACD, ATR, and 20-day return are essential price inputs. Missing history for
+one of them produces `indeterminate`. The 252-day drawdown and financial inputs are optional;
+their absence lowers confidence and remains explicit. Confidence is high when drawdown and all
+three financial inputs are present, medium when drawdown or at least two financial inputs are
+present, and low otherwise.
+
+Held decisions apply rules in this order: financial deterioration with a bearish trend produces
+`sell_review`; financial deterioration, concentration, or a bearish high-volatility combination
+produces `reduce_review`; a bearish trend, high volatility, deep drawdown, or overbought RSI
+produces `watch`; otherwise the result is `keep`. Unheld decisions first wait for an earnings date
+within seven local calendar days. Financial deterioration, a bearish trend, high volatility, or a
+deep drawdown then produces `pass`. A bullish trend that is not overbought produces
+`buy_candidate`; an overbought or temporarily weakened long trend, or an oversold neutral trend,
+produces `wait_for_pullback`; all other cases produce `pass`.
+
+Financial deterioration means at least two negative values among revenue growth, EPS growth, and
+free cash flow. Valuation values are retained as display evidence and do not reverse a 1.0.0 policy
+decision. The policy never converts an action into an order.
 
 A decision report is an immutable composition of one market session, one portfolio snapshot, the
 selected policy, per-instrument decisions, input diagnostics, and previous-report changes. Its

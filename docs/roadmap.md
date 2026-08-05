@@ -5,16 +5,13 @@ design and release history, not in this file.
 
 ## 0.4.0 Personal Close Brief
 
-1. Replace report-shaped dictionaries with typed portfolio, decision, evidence, and report values.
-2. Add the configurable balanced medium-term policy and its complete decision table.
-3. Persist canonical decision-report JSON, deterministic Markdown, and atomic latest references.
-4. Add minimal portfolio input and a Rakuten importer based on anonymized real fixtures.
-5. Add FRED economic-series acquisition through a separately installable adapter.
-6. Add one-command Japanese close, U.S. close, and weekly report workflows.
-7. Replace generic JSON-shaped terminal output with conclusion-first Close Brief projections.
-8. Make model explanation an optional consumer of a static report and remove FakeListLLM from
+1. Persist canonical decision-report JSON, deterministic Markdown, and atomic latest references.
+2. Add minimal portfolio input and a Rakuten importer based on anonymized real fixtures.
+3. Add FRED economic-series acquisition through a separately installable adapter.
+4. Add one-command Japanese close, U.S. close, and weekly report workflows.
+5. Replace generic JSON-shaped terminal output with conclusion-first Close Brief projections.
+6. Make model explanation an optional consumer of a static report and remove FakeListLLM from
    production behavior.
-9. Centralize the public-package catalog and verify external adapter development from wheels.
 
 ## 0.5.0 Official Fundamentals
 
