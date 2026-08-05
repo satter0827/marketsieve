@@ -8,7 +8,8 @@ network clients, databases, delivery providers, or LLM providers.
 
 ## Current components
 
-The repository builds seven public distributions at the same version. `marketsieve` contains the
+The root workspace catalog declares every public distribution, and all entries share one version.
+`marketsieve` contains the
 I/O-independent SDK. `marketsieve-extension-api` defines the implemented daily-bar import contract,
 `marketsieve-source-csv` implements local import, `marketsieve-source-jquants` implements explicit
 J-Quants API V2 acquisition, `marketsieve-source-alphavantage` implements explicit Alpha Vantage
@@ -189,8 +190,8 @@ and provider-symbol mapping belong to the application or adapter packages. A sou
 
 ## Packaging boundary
 
-The supported build produces independent SDK, extension API, CLI, CSV source, J-Quants source, and
-Alpha Vantage source wheels and source distributions. Explicit build allowlists prevent sibling
+The supported build produces an independent wheel and source distribution for every public-package
+catalog entry. Explicit package manifests prevent sibling
 package code, tests, local configuration, caches, notes, and generated reports from crossing
 artifact boundaries. The complete wheel set is installed offline in an isolated environment.
 Source dependencies do not expand the core SDK.
