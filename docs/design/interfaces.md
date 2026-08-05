@@ -102,6 +102,9 @@ explicit.
 are implemented for daily-bar CSV snapshots. Import is the only CSV command that writes market-data
 state. `inspect` composes price, technical, financial, valuation, risk, event, and data-quality
 sections. Missing values remain unavailable and are never represented as zero values.
+The financial section includes the selected current and preceding compatible annual periods under
+`history` and deterministic derived metrics under `derived`. Its explicit `as_of` is the knowledge
+instant; observations available later are excluded.
 
 ### Implemented indicator commands
 

@@ -9,8 +9,8 @@ network clients, databases, delivery providers, or LLM providers.
 ## Current components
 
 The root workspace catalog declares every public distribution, and all entries share one version.
-`marketsieve` contains the
-I/O-independent SDK. `marketsieve-extension-api` defines the implemented daily-bar import contract,
+`marketsieve` contains the I/O-independent SDK, including knowledge-time-correct financial-history
+calculations. `marketsieve-extension-api` defines the implemented daily-bar import contract,
 `marketsieve-source-csv` implements local import, `marketsieve-source-jquants` implements explicit
 J-Quants API V2 acquisition, `marketsieve-source-alphavantage` implements explicit Alpha Vantage
 acquisition, `marketsieve-source-fred` implements explicit FRED economic-series acquisition,

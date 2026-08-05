@@ -11,8 +11,9 @@ design and release history, not in this file.
 
 ## 0.5.0 Official Fundamentals
 
-1. Add knowledge-as-of financial trends and company-history valuation comparisons.
-2. Integrate filing changes into daily and weekly reports without coupling reports to a provider.
+1. Add company-history valuation comparisons without cross-industry fixed thresholds.
+2. Integrate filing changes and typed financial trends into daily and weekly reports without
+   coupling reports to a provider.
 
 ## 0.6.0 Strategy Lab
 

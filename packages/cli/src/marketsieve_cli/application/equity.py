@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections import defaultdict
+from datetime import date, datetime
 from decimal import ROUND_HALF_EVEN, Context, Decimal, InvalidOperation, localcontext
 from typing import Any
 
 from marketsieve.analysis.indicators import IndicatorResult, IndicatorStatus
+from marketsieve.financial import FinancialObservation, analyze_financial_history
 
 NUMERIC_CONTEXT = Context(prec=34, rounding=ROUND_HALF_EVEN)
 BASE_FINANCIAL_CONCEPTS = frozenset(
@@ -120,15 +121,51 @@ def indicator_document(result: IndicatorResult) -> dict[str, Any]:
     }
 
 
-def financial_section(section: dict[str, Any]) -> dict[str, Any]:
+def financial_section(
+    section: dict[str, Any], *, knowledge_at: datetime | None = None
+) -> dict[str, Any]:
     if section["status"] in {"unavailable", "invalid"}:
         return section
     facts = section["values"]["facts"]
-    derived, reasons = _derived_financials(facts)
+    if knowledge_at is None:
+        knowledge_at = datetime.fromisoformat(section["as_of"])
+    pairs = tuple((fact, _financial_observation(fact)) for fact in facts)
+    observations = tuple(observation for _, observation in pairs)
+    known_facts = [fact for fact, observation in pairs if observation.available_at <= knowledge_at]
+    trend = analyze_financial_history(observations, knowledge_at)
+    derived = {
+        metric.name: {
+            "value": metric.canonical_value,
+            "origin": "marketsieve",
+            "definition_version": metric.definition_version,
+            "inputs": list(metric.inputs),
+            "period_end": metric.fiscal_period_end.isoformat(),
+            "accounting_standard": metric.accounting_standard,
+            "consolidation": metric.consolidation,
+            "revision": metric.revision,
+            "currency": metric.currency,
+            "evidence_ids": list(metric.evidence_ids),
+        }
+        for metric in trend.metrics
+    }
+    history = [
+        {
+            "fiscal_period_start": period.fiscal_period_start.isoformat(),
+            "fiscal_period_end": period.fiscal_period_end.isoformat(),
+            "accounting_standard": period.accounting_standard,
+            "consolidation": period.consolidation,
+            "currency": period.currency,
+            "values": {name: canonical(value) for name, value in period.values},
+            "evidence_ids": list(period.evidence_ids),
+        }
+        for period in trend.periods
+    ]
     present = {
-        item["concept"] for item in facts if isinstance(item, dict) and item.get("concept")
+        str(fact["concept"])
+        for fact in known_facts
+        if isinstance(fact, dict) and fact.get("concept") in BASE_FINANCIAL_CONCEPTS
     } | set(derived)
-    missing = list(dict.fromkeys([*section["missing_reasons"], *reasons]))
+    missing = list(dict.fromkeys([*section["missing_reasons"], *trend.missing_reasons]))
     total = len(BASE_FINANCIAL_CONCEPTS | DERIVED_FINANCIAL_CONCEPTS)
     section = {
         **section,
@@ -141,134 +178,47 @@ def financial_section(section: dict[str, Any]) -> dict[str, Any]:
         "completeness": completeness(
             len(present & (BASE_FINANCIAL_CONCEPTS | DERIVED_FINANCIAL_CONCEPTS)), total
         ),
-        "values": {"facts": facts, "derived": derived},
+        "values": {"facts": known_facts, "history": history, "derived": derived},
         "missing_reasons": missing,
     }
     section["evidence_id"] = digest(
-        {"input": section["evidence_id"], "derived": derived, "missing": missing}
+        {"input": section["evidence_id"], "trend": trend.evidence_id, "missing": missing}
     )
     return section
 
 
-def _derived_financials(
-    facts: list[dict[str, Any]],
-) -> tuple[dict[str, dict[str, Any]], list[str]]:
-    groups: dict[tuple[object, ...], dict[str, dict[str, Any]]] = defaultdict(dict)
-    for fact in facts:
-        if not isinstance(fact, dict) or fact.get("period") != "annual":
-            continue
-        key = (
-            fact.get("fiscal_period_start"),
-            fact.get("fiscal_period_end"),
-            fact.get("accounting_standard"),
-            fact.get("consolidation"),
-            fact.get("revision"),
-            fact.get("currency"),
-        )
-        groups[key][str(fact.get("concept"))] = fact
-    eligible = [
-        (key, values)
-        for key, values in groups.items()
-        if key[0] is not None and key[2] is not None and key[3] != "unknown" and key[4] != "unknown"
-    ]
-    eligible.sort(key=lambda item: str(item[0][1]), reverse=True)
-    if not eligible:
-        return {}, ["compatible_annual_financial_period_not_available"]
-    selected_key, current = eligible[0]
-    previous = next(
-        (
-            values
-            for candidate, values in eligible[1:]
-            if candidate[2:6] == selected_key[2:6]
-            and candidate[0] is not None
-            and str(candidate[1]) < str(selected_key[0])
-        ),
-        {},
-    )
-    derived: dict[str, dict[str, Any]] = {}
-
-    def amount(values: dict[str, dict[str, Any]], concept: str) -> Decimal | None:
-        fact = values.get(concept)
-        if fact is None:
-            return None
-        value = Decimal(str(fact["value"]))
-        scale = Decimal(int(fact["scale"]))
-        with localcontext(NUMERIC_CONTEXT):
-            return +(value * scale)
-
-    def add(name: str, value: Decimal | None, inputs: tuple[str, ...]) -> None:
-        if value is None or not value.is_finite():
-            return
-        derived[name] = {
-            "value": canonical(value),
-            "origin": "marketsieve",
-            "definition_version": f"{name}-v1",
-            "inputs": list(inputs),
-            "period_end": selected_key[1],
-            "accounting_standard": selected_key[2],
-            "consolidation": selected_key[3],
-            "revision": selected_key[4],
-            "currency": (
-                None
-                if name.endswith(("margin", "growth", "ratio"))
-                or name in {"roe", "roa", "debt_to_equity"}
-                else selected_key[5]
-            ),
+def _financial_observation(fact: dict[str, Any]) -> FinancialObservation:
+    available_at = datetime.fromisoformat(str(fact["available_at"]))
+    start = fact.get("fiscal_period_start")
+    evidence_id = digest(
+        {
+            key: fact.get(key)
+            for key in (
+                "concept",
+                "provider_fact",
+                "fiscal_period_start",
+                "fiscal_period_end",
+                "published_at",
+                "available_at",
+                "filing_id",
+                "provenance",
+            )
         }
-
-    revenue = amount(current, "revenue")
-    operating_income = amount(current, "operating_income")
-    net_income = amount(current, "net_income")
-    eps = amount(current, "eps")
-    operating_cash_flow = amount(current, "operating_cash_flow")
-    capital_expenditure = amount(current, "capital_expenditure")
-    assets = amount(current, "assets")
-    equity = amount(current, "equity")
-    debt = amount(current, "interest_bearing_debt")
-    if operating_cash_flow is not None and capital_expenditure is not None:
-        with localcontext(NUMERIC_CONTEXT):
-            add(
-                "free_cash_flow",
-                +(operating_cash_flow - abs(capital_expenditure)),
-                ("operating_cash_flow", "capital_expenditure"),
-            )
-    ratio_specs = (
-        ("operating_margin", operating_income, revenue, ("operating_income", "revenue")),
-        ("net_margin", net_income, revenue, ("net_income", "revenue")),
-        ("roe", net_income, equity, ("net_income", "equity")),
-        ("roa", net_income, assets, ("net_income", "assets")),
-        ("equity_ratio", equity, assets, ("equity", "assets")),
-        ("debt_to_equity", debt, equity, ("interest_bearing_debt", "equity")),
     )
-    for name, numerator, denominator, inputs in ratio_specs:
-        add(
-            name,
-            ratio(numerator, denominator)
-            if numerator is not None and denominator is not None
-            else None,
-            inputs,
-        )
-    previous_revenue = amount(previous, "revenue")
-    previous_eps = amount(previous, "eps")
-    if revenue is not None and previous_revenue is not None:
-        with localcontext(NUMERIC_CONTEXT):
-            add(
-                "revenue_growth",
-                ratio(+(revenue - previous_revenue), previous_revenue),
-                ("revenue", "previous_revenue"),
-            )
-    if eps is not None and previous_eps is not None:
-        with localcontext(NUMERIC_CONTEXT):
-            add(
-                "eps_growth",
-                ratio(+(eps - previous_eps), abs(previous_eps)),
-                ("eps", "previous_eps"),
-            )
-    reasons = [
-        f"{name}_inputs_not_compatible_or_missing"
-        for name in sorted(DERIVED_FINANCIAL_CONCEPTS - set(derived))
-    ]
-    return derived, reasons
+    return FinancialObservation(
+        str(fact["concept"]),
+        Decimal(str(fact["value"])),
+        int(fact["scale"]),
+        str(fact["period"]),
+        date.fromisoformat(str(start)) if start is not None else None,
+        date.fromisoformat(str(fact["fiscal_period_end"])),
+        str(fact["accounting_standard"]) if fact.get("accounting_standard") is not None else None,
+        str(fact["consolidation"]),
+        str(fact["revision"]),
+        str(fact["currency"]),
+        available_at,
+        evidence_id,
+    )
 
 
 def valuation_section(
