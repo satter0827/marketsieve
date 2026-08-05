@@ -121,3 +121,21 @@ Secret acceptance scans tracked files, the reviewed diff, generated evidence, di
 release assets without printing matched values. CI also scans repository history. Tests ensure
 credentials are removed from URLs, headers, exceptions, logs, subprocess environments, and stored
 request metadata.
+
+## 0.4.0 acceptance target
+
+Personal Close Brief acceptance adds:
+
+- complete reference cases for every held and unheld decision branch;
+- stable policy, decision, report, JSON, and Markdown identities for identical inputs;
+- explicit confidence reduction and indeterminate results for missing evidence;
+- partial-instrument success, all-instrument failure, and atomic latest-reference behavior;
+- Japanese, U.S., daylight-saving, non-trading-day, stale-data, and future-data cases;
+- portfolio normalization without retained source files or personal identifiers;
+- FRED pagination, missing observations, revision bounds, rate limits, and injected transport;
+- conclusion-first Japanese and English Rich, text, quiet, JSON, and Markdown projections;
+- proof that model success or failure cannot alter a static report;
+- wheel-installed external adapter discovery and public conformance tests.
+
+User-facing FakeListLLM acceptance is removed when the target ships. Test doubles continue to prove
+bounded agent behavior without entering production provider selection.

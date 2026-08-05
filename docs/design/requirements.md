@@ -2,76 +2,72 @@
 
 ## Product objective
 
-MarketSieve provides reproducible analysis of Japanese and U.S. equities. It separates reusable
-market semantics and deterministic calculations from provider access, operational configuration,
-report generation infrastructure, and delivery channels.
+MarketSieve helps a full-time worker operate a small personal portfolio of Japanese and U.S.
+equities without turning routine analysis into another full-time job. It converts explicit market,
+portfolio, and policy inputs into reproducible close-of-market and weekly decisions.
 
-## Current foundation
+The product optimizes for short, evidence-backed review sessions. It may conclude that no action is
+needed. It does not place orders, automate a brokerage session, run continuously, or deliver
+notifications.
 
-- **FND-01:** The `marketsieve` distribution builds and installs as a typed public SDK.
-- **FND-02:** The public CLI distribution exposes version and offline diagnostic commands.
-- **FND-03:** The public SDK remains independent from the application, configuration, logging,
-  network clients, databases, delivery providers, and LLM providers.
-- **FND-04:** Local and CI gates verify code quality, tests, and public distribution isolation.
-- **FND-05:** Normal changes enter `develop`; a human-reviewed `develop -> main` promotion remains
-  the release boundary.
+## Implemented foundation
 
-## Current Data Workbench
+- **FND-01:** `marketsieve` is a typed, I/O-independent public SDK.
+- **FND-02:** Market identity, time, daily bars, financial facts, events, indicators, provenance,
+  and evidence use deterministic public semantics.
+- **FND-03:** CSV, J-Quants, and Alpha Vantage are explicit acquisition paths with no implicit
+  fallback or provider merging.
+- **FND-04:** Verified immutable snapshots support offline inspection, analysis, comparison, and
+  reporting.
+- **FND-05:** The optional agent can explain a bounded fact catalog through explicitly selected
+  local or cloud models.
+- **FND-06:** Local and CI gates verify tests, dependency direction, distributions, and isolated
+  installation on supported Python versions.
 
-- **OAP-01:** The system represents exchange-qualified Japanese and U.S. equity instruments and
-  validated daily OHLCV observations without ambiguous symbols or times.
-- **OAP-02:** CSV, J-Quants, and Alpha Vantage provide explicit acquisition paths; tests use only
-  synthetic fixtures and injected transports.
-- **OAP-03:** Seven deterministic indicators and sectioned equity views expose facts without a
-  score or recommendation.
-- **OAP-04:** Repeating the same analysis with the same inputs produces the same result and evidence.
-- **OAP-05:** Results identify the instrument, source profile, as-of time, completeness, values,
-  missing reasons, provenance, and evidence identity.
-- **OAP-06:** Insufficient history, invalid observations, unsupported requests, and incomplete data
-  are explicit outcomes; the system does not silently weaken a request.
-- **OAP-07:** Offline `inspect`, `analyze`, `compare`, and `report` demonstrate the complete path
-  from immutable snapshots to evidence-backed projections.
+## 0.4.0 Personal Close Brief target
 
-## Data Workbench requirements
+- **PCB-01:** A portfolio snapshot represents holdings and watch items without brokerage-specific
+  types in the SDK.
+- **PCB-02:** A versioned decision policy produces an explicit held or unheld decision, confidence,
+  supporting evidence, opposing evidence, invalidation conditions, and next action.
+- **PCB-03:** `daily jp`, `daily us`, and `weekly` create immutable static reports from explicit
+  inputs and never require an LLM.
+- **PCB-04:** The same inputs, policy, configuration, and as-of instant produce the same decision,
+  report identity, JSON, and Markdown.
+- **PCB-05:** A partial run retains failed instruments as indeterminate. A run with no analyzable
+  instrument does not update a latest-report reference.
+- **PCB-06:** Human output leads with the conclusion, items needing attention, changes, and the next
+  action. No-action days are successful outcomes.
+- **PCB-07:** A Rakuten importer normalizes only formats established by anonymized real fixtures and
+  stores neither the source CSV nor personal identifiers.
+- **PCB-08:** FRED supplies explicit economic-series observations with observation, retrieval, and
+  revision time semantics.
+- **PCB-09:** An agent explanation consumes an immutable decision report and cannot alter its
+  decisions, values, evidence, or identity.
+- **PCB-10:** External adapters can be independently developed and installed against a versioned
+  extension API with public conformance tests.
 
-- **DWB-01:** A separately installable CLI reads immutable local snapshots and does not perform
-  network access during inspection, analysis, comparison, or report rendering.
-- **DWB-02:** CSV, J-Quants, and Alpha Vantage integrations remain separate distributions and are
-  selected explicitly by a named source profile without automatic fallback or provider merging.
-- **DWB-03:** Acquisition distinguishes the market observation date, provider publication time,
-  local retrieval time, and the basis used to decide when a fact became available.
-- **DWB-04:** A content-addressed snapshot retains normalized facts, provenance, completeness, and
-  permitted raw-response evidence without retaining credentials or recipient or portfolio data.
-- **DWB-05:** Inspection presents independent price, technical, financial, valuation, risk, event,
-  and data-quality sections. One unavailable section does not invalidate the others.
-- **DWB-06:** SMA, EMA, RSI, MACD, ATR, period return, and maximum drawdown use versioned,
-  deterministic definitions and do not depend on process-wide decimal settings.
-- **DWB-07:** Financial facts retain accounting period, standard, consolidation, currency, scale,
-  publication, revision, and provenance semantics before a derived ratio is calculated.
-- **DWB-08:** Comparison identifies incompatible periods, accounting bases, and currencies rather
-  than ranking or converting incomparable values.
-- **DWB-09:** Japanese and English human output project the same versioned English-keyed machine
-  contracts. Partial results expose completeness and missing reasons.
-- **DWB-10:** The CLI, extension contract, and provider integrations build as isolated artifacts and
-  are distributed together through a checksummed GitHub Release wheelhouse.
+## Product constraints
 
-## Approved 0.3 Report Agent target
+- Japanese and U.S. instruments remain exchange-qualified. Symbols alone are not identities.
+- Acquisition is explicit. Read-only analysis never silently performs network access.
+- Missing, stale, incompatible, or unavailable data remains visible and cannot be converted to a
+  neutral value.
+- Thresholds and periods are named policy settings and are recorded in report evidence.
+- Provider credentials, account identifiers, source portfolio files, local state, and generated
+  reports are never tracked or distributed.
+- SDK code remains independent from the CLI, configuration, logging, network clients, persistence,
+  delivery, broker adapters, and LLM providers.
+- New public capability contracts require a working implementation and executable conformance
+  tests in the same change.
 
-- **RAG-01:** The report agent receives only a validated fact catalog derived from the same sections
-  used by deterministic CLI projections.
-- **RAG-02:** The model selects fact identifiers, section order, and non-numeric connective text. A
-  deterministic renderer owns numbers, dates, instruments, evidence, and disclaimers.
-- **RAG-03:** FakeListLLM is the default test model. LM Studio, OpenAI, Anthropic, and Google remain
-  explicit provider choices with no local-to-cloud or cloud-to-cloud fallback.
-- **RAG-04:** A cloud request requires an explicit per-invocation opt-in and offers a dry-run view of
-  the outgoing payload without credentials.
-- **RAG-05:** Invalid, ungrounded, unsafe, or unavailable model output is discarded and replaced by
-  a deterministic template derived from the same facts.
-- **RAG-06:** The agent cannot fetch sources, recalculate facts, call tools, access files, place
-  orders, rank investments, or produce buy, hold, or sell recommendations.
+## Exclusions through 0.7.0
 
-## Exclusions from 0.2 and 0.3
-
-The approved targets exclude news, screening, portfolio management, scheduling, delivery channels,
-databases, foreign-exchange conversion, automatic provider discovery and execution, automatic
-fallback, automatic provider merging, investment scores, recommendations, and trading operations.
+- Order placement and brokerage automation
+- Browser automation and session handling
+- Background scheduling and always-on services
+- LINE, email, and other delivery channels
+- Implicit provider fallback or provider merging
+- Opaque investment scores
+- Arbitrary Python expressions or `eval` in screening rules
+- Redistribution of provider market data or live personal portfolio data

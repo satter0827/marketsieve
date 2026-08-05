@@ -162,3 +162,24 @@ model = "explicit-cloud-model"
 Cloud credentials are read from `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, or `GOOGLE_API_KEY` only
 after a non-dry-run invocation selects that provider. `LMSTUDIO_API_TOKEN` is optional. Dry-run and
 doctor perform no model request and do not read a cloud credential.
+
+## 0.4.0 personal operation target
+
+The normal schedule is one Japanese close report after Tokyo trading, one U.S. close report after
+New York trading, and one combined report on the weekend. MarketSieve provides one-shot commands;
+the user owns invocation timing. A market session records its explicit as-of instant and never
+assumes that a wall-clock time proves market closure.
+
+Shareable source and policy settings remain in `marketsieve.toml`. Normalized portfolio snapshots,
+reports, rendered Markdown, and mutable latest references remain below `.marketsieve` and are
+ignored by version control. Source brokerage files are read once and not copied into local state.
+
+Routine output is optimized for a short review. A successful report may state that no action is
+needed. Warnings identify a concrete missing, stale, incompatible, or failed input and name the
+next command when recovery is possible. General legal disclaimers do not replace data-quality
+information.
+
+FRED credentials enter through `FRED_API_KEY`. Rakuten import uses a local file and no credential.
+The importer accepts only fixture-proven formats, drops account identifiers, and records the input
+digest without retaining the file contents. Live portfolio data and generated reports never enter
+tests, evidence bundles, distributions, or logs.

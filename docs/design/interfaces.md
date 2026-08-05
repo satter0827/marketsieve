@@ -172,3 +172,37 @@ changes the selected destination.
 `agent doctor PROVIDER` validates configuration without contacting a model. LM Studio endpoints are
 loopback-only unless `--allow-remote` is explicit. Provider model names and the optional LM Studio
 endpoint are read from `[agent.providers.NAME]`; credentials are never valid TOML settings.
+
+## 0.4.0 routine CLI target
+
+Routine operation uses the following commands:
+
+```shell
+marketsieve init
+marketsieve portfolio import --broker rakuten PATH
+marketsieve portfolio show
+marketsieve daily {jp,us}
+marketsieve weekly
+marketsieve report list
+marketsieve report show {ID,latest}
+marketsieve report export {ID,latest} --format markdown
+marketsieve report explain {ID,latest} --provider PROVIDER
+```
+
+`daily` explicitly acquires through configured profiles, validates snapshots, evaluates every held
+or watched instrument in the selected market, stores one immutable report, and renders it. An
+instrument failure becomes an indeterminate entry. If every instrument is indeterminate, the
+command fails and does not update the latest reference.
+
+`weekly` reads the latest eligible Japanese and U.S. reports and performs no network access. A
+missing or stale input names the daily command required to recover. `report show` and `report
+export` are read-only. `report explain` contacts only the explicitly selected model and stores an
+explanation separately from the report.
+
+Human output presents conclusion, attention items, changes, unchanged items, next action, data
+limitations, and detailed evidence in that order. `--quiet` retains the conclusion, attention
+items, and next action. JSON returns the canonical English-keyed decision-report contract without
+localized decorative prose.
+
+Advanced acquisition and inspection commands move below `marketsieve data`. Their semantics remain
+available, but the old top-level command paths are not preserved.

@@ -63,3 +63,12 @@ note so that it cannot become a competing authority.
 Provider code never decides to weaken a request, switch destination, merge values, or retain raw
 responses beyond its approved policy. A source or model change returns through the same focused
 checks, full gate, evidence, semantic review, and commit-bound attestation sequence as core changes.
+
+## 0.4.0 through 0.7.0 integration sequence
+
+Each focused branch starts from the latest `develop`, passes local evidence and commit-bound review,
+and enters `develop` through a squash pull request. The 0.4.0, 0.5.0, and 0.6.0 versions are
+integration milestones and are not promoted to `main`, tagged, or published. After 0.7.0 is
+complete, one `develop -> main` release pull request runs the Release Gate and stops for human
+review. Automation does not merge that pull request, create the tag, publish a GitHub Release, or
+publish to PyPI.

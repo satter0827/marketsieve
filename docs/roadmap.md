@@ -1,48 +1,50 @@
 # Roadmap
 
-The roadmap orders planned outcomes by dependency and evidence. It is not a description of current
-behavior; current and approved near-term constraints live in the [formal design](design/README.md).
+The roadmap orders independently testable outcomes. Implemented behavior belongs in the formal
+design and release history, not in this file.
 
-## Foundation and 0.1.0 — complete
+## 0.4.0 Personal Close Brief
 
-- Publish the typed, I/O-independent `marketsieve` SDK.
-- Validate exchange-qualified daily bars with deterministic Japanese and U.S. synthetic data.
-- Prove deterministic evidence with the initial SMA20 preview.
-- Establish reproducible local, review, develop, and release gates.
+1. Replace report-shaped dictionaries with typed portfolio, decision, evidence, and report values.
+2. Add the configurable balanced medium-term policy and its complete decision table.
+3. Persist canonical decision-report JSON, deterministic Markdown, and atomic latest references.
+4. Add minimal portfolio input and a Rakuten importer based on anonymized real fixtures.
+5. Add FRED economic-series acquisition through a separately installable adapter.
+6. Add one-command Japanese close, U.S. close, and weekly report workflows.
+7. Replace generic JSON-shaped terminal output with conclusion-first Close Brief projections.
+8. Make model explanation an optional consumer of a static report and remove FakeListLLM from
+   production behavior.
+9. Centralize the public-package catalog and verify external adapter development from wheels.
 
-## 0.2.0 Data Workbench — approved
+## 0.5.0 Official Fundamentals
 
-Each milestone must remain usable without later milestones.
+1. Add SEC submission and XBRL acquisition with publication-time semantics.
+2. Add EDINET document and XBRL acquisition with the same normalized financial contract.
+3. Preserve corrections, accounting basis, fiscal period, consolidation, currency, and provenance.
+4. Add knowledge-as-of financial trends and company-history valuation comparisons.
+5. Integrate filing changes into daily and weekly reports without coupling reports to a provider.
 
-1. ~~Establish the target design, repository secret controls, and redacted evidence policy.~~
-2. ~~Publish an independently installable CLI and build a checksummed multi-package wheelhouse.~~
-3. ~~Prove the extension contract with CSV import, immutable daily-bar snapshots, and price inspection.~~
-4. ~~Replace SMA20-specific analysis with SMA, EMA, RSI, MACD, ATR, return, and drawdown results.~~
-5. ~~Add J-Quants API V2 price and instrument profile acquisition with explicit profile selection.~~
-6. ~~Add J-Quants financial and event facts with explicit availability.~~
-   - ~~Normalize financial summaries, explicitly selected dividends, and earnings schedules.~~
-   - ~~Keep J-Quants split events missing rather than relabeling a price adjustment factor as a
-     confirmed split.~~
-7. ~~Add Alpha Vantage capabilities without weakening raw, adjusted, range, or plan requests.~~
-8. ~~Complete financial, valuation, risk, comparison, and deterministic report projections.~~
-9. ~~Verify the same GitHub Release wheelhouse on every supported Python version before a human
-   `develop -> main` promotion.~~
+## 0.6.0 Strategy Lab
 
-## 0.3.0 Grounded Report Agent — approved
+1. Add immutable experiment specifications and replay windows that reuse decision policies.
+2. Replay only facts available at each historical as-of instant.
+3. Measure coverage, decision activity, churn, holding period, drawdown, and forward return.
+4. Persist reproducible experiment runs and comparisons.
+5. Compare prompts and models without allowing an LLM to own calculations or decisions.
 
-1. ~~Build a fact-selection pipeline with FakeListLLM and deterministic template fallback.~~
-2. ~~Add loopback-only-by-default LM Studio through its OpenAI-compatible endpoint.~~
-3. ~~Add explicit, separately tested OpenAI, Anthropic, and Google integrations.~~
-4. ~~Reject ungrounded, numeric, unsafe, or recommendation-like model content before rendering.~~
-5. ~~Require per-invocation cloud consent and expose credential-free payload dry runs.~~
-6. ~~Verify the multi-package artifacts before a human `develop -> main` promotion.~~
+## 0.7.0 Screening Workbench
+
+1. Add explicit Japanese and U.S. instrument-universe import and acquisition capabilities.
+2. Add a typed balanced candidate screen without arbitrary expression evaluation.
+3. Enforce configured acquisition and processing budgets without silently changing the universe.
+4. Persist deterministic screening reports with stable, explainable ordering.
+5. Integrate screening candidates into the weekly report without changing held-instrument decisions.
+6. Prepare verified GitHub Release and PyPI Trusted Publishing paths for all public distributions.
 
 ## Later outcomes
 
-- Add screening only after an instrument-universe contract and bounded expression language exist.
-- Add news only after licensing, deduplication, reliability, and prompt-injection rules are approved.
-- Add persistent operational state only when scheduling or delivery provides a working use case.
-- Add SMTP and LINE delivery only after receipts, retries, idempotency, and recipient protection.
-
-Automatic provider fallback, provider merging, foreign-exchange conversion, investment scoring,
-recommendations, portfolio management, and trading operations are not planned outcomes.
+- Add delivery only when a working channel defines receipts, retries, idempotency, and recipient
+  protection.
+- Add scheduling only when one-shot commands and persisted reports have proved operationally
+  reliable.
+- Add news only after licensing, deduplication, reliability, and prompt-injection rules are defined.

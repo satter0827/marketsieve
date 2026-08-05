@@ -246,3 +246,36 @@ FakeListLLM validates the application pipeline but does not claim behavioral equ
 providers. Each real provider has separate mocked-transport contract tests. LM Studio is local and
 loopback-only by default. Cloud use requires an explicit invocation flag and never becomes a
 fallback for a failed local or cloud provider.
+
+## 0.4.0 Personal Close Brief target architecture
+
+The report becomes the application boundary for routine use:
+
+```text
+Explicit acquisition or import
+    -> verified immutable data snapshots
+    -> brokerage-neutral portfolio snapshot
+    -> typed analysis context
+    -> deterministic decision policy
+    -> immutable decision report
+    -> Rich, text, JSON, Markdown, or optional model explanation
+```
+
+The SDK owns portfolio, policy, decision, evidence, and report semantics without owning a clock,
+configuration, persistence, provider, renderer, or LLM. The extension API adds portfolio-import and
+economic-series capabilities only with the working Rakuten and FRED packages. The CLI owns source
+selection, report orchestration, content-addressed storage, latest references, and presentation.
+
+Application use cases replace the growing snapshot-service orchestration surface. Acquisition,
+portfolio import, daily reporting, weekly reporting, report lookup, and model explanation have
+separate inputs and results. A small application-local content-addressed store may share atomic
+write and checksum mechanics across data, portfolio, and report repositories; their normalized
+schemas and validation remain separate.
+
+The production agent consumes a validated decision report. It cannot fetch data, read portfolio
+files, recalculate a decision, or replace a failed explanation with a different report. Fake model
+behavior belongs to tests only.
+
+The root workspace package catalog is the authority for public distribution names, paths, import
+packages, build order, and isolation checks. Build scripts and tests derive their package sets from
+that catalog instead of maintaining independent lists.
