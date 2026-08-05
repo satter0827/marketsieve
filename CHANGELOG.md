@@ -7,6 +7,8 @@ will follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-08-06
+
 ### Added
 
 - Strict broker-neutral portfolio CSV import, content-addressed normalized storage, and offline
@@ -33,10 +35,14 @@ will follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   diagnostics, and held-instrument separation.
 - Offline weekly reports include fresh stored screening candidates and source report IDs in a
   separate `残った候補` section without changing portfolio decisions or acquiring new data.
+- A manual, environment-protected Trusted Publishing workflow reuses the checksum-verified main CI
+  artifact for both PyPI and a recoverable GitHub Release.
 
 ### Changed
 
 - Equity symbols now preserve uppercase dots and hyphens needed by U.S. class-share identifiers.
+- Public packages share version 0.7.0 and accept dependencies from the compatible 0.7 minor series
+  so adapters can be developed and installed outside this workspace.
 
 ## [0.3.0] - 2026-08-05
 

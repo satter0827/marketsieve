@@ -6,3 +6,8 @@ facts, corporate events, and economic series without owning snapshot storage or 
 Financial acquisitions can retain provider filing identity, publication time, amendment linkage,
 fiscal period, accounting standard, consolidation basis, and currency. Knowledge-time helpers
 exclude filings and facts that were not yet public or available.
+
+External packages should depend on `marketsieve-extension-api>=0.7,<0.8` and the matching SDK minor
+series. The public `verify_instrument_universe_importer` function executes the universe-import
+contract against a caller-supplied fixture. The repository's
+`examples/instrument-universe-plugin` project shows an independently buildable entry point.

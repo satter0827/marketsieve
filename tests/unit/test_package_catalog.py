@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 import scripts.package_catalog as package_catalog
-from scripts.package_catalog import PackageSpec, build_all, load_package_catalog
+from scripts.package_catalog import PackageSpec, build_all, compatible_range, load_package_catalog
 
 
 def test_workspace_catalog_has_unique_buildable_public_packages() -> None:
@@ -14,7 +14,31 @@ def test_workspace_catalog_has_unique_buildable_public_packages() -> None:
     assert {spec.role for spec in catalog} >= {"sdk", "extension-api", "cli", "adapter"}
     assert len({spec.distribution for spec in catalog}) == len(catalog)
     assert all(spec.pyproject.is_file() for spec in catalog)
-    assert all(spec.project_version == "0.3.0" for spec in catalog)
+    assert all(spec.project_version == "0.7.0" for spec in catalog)
+
+
+def test_workspace_dependencies_allow_external_minor_compatible_plugins() -> None:
+    catalog = load_package_catalog()
+    public_names = {spec.distribution for spec in catalog}
+
+    for spec in catalog:
+        expected_range = compatible_range(spec.project_version)
+        for requirement in spec.project_dependencies:
+            if any(requirement.startswith(name) for name in public_names):
+                assert requirement.endswith(expected_range)
+
+
+def test_publish_workflow_reuses_one_verified_main_artifact() -> None:
+    workflow = (package_catalog.ROOT / ".github/workflows/publish.yml").read_text(encoding="utf-8")
+
+    assert "workflow_dispatch:" in workflow
+    assert "environment:\n      name: pypi" in workflow
+    assert "id-token: write" in workflow
+    assert "run-id: ${{ inputs.ci_run_id }}" in workflow
+    assert "python3 -m scripts.release_gate export-pypi" in workflow
+    assert "gh release create" in workflow and "--draft" in workflow
+    assert 'gh release edit "$TAG" --draft=false' in workflow
+    assert "uv build" not in workflow
 
 
 def test_package_spec_resolves_normalized_artifact_names(tmp_path: Path) -> None:

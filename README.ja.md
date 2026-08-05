@@ -13,7 +13,7 @@ MarketSieveは、検証済みの市場情報から再現可能な分析、過去
 
 ## 現在の状態
 
-`develop`では0.3.0の基盤をPersonal Close Briefへ拡張しています。CSV、J-Quants、Alpha Vantage、FRED、SEC、EDINETを独立した配布物として扱い、変更不能な検証済みスナップショット、価格・テクニカル・財務・valuation・risk・event・data qualityの総合確認、比較、レポート、説明専用Agentを提供します。設定済みの`daily jp`と`daily us`は、ポートフォリオ銘柄を明示的に取得し、変更不能なClose Briefを保存します。`weekly`は有効な日米レポートと期限内の候補をオフラインで週末作戦会議へまとめ、保有判断と`残った候補`を分けて表示します。日米の銘柄集合は上限を指定して明示的に更新し、検証済みのローカル価格からオフラインで候補を抽出できます。候補の順序は根拠を確認でき、不透明な総合点を使いません。Agentは変更不能な判断レポートだけを読み、LM Studio、OpenAI、Anthropic、Googleのいずれかを明示した場合だけ動作します。説明は別成果物として保存され、レポートを変更しません。
+`develop`には0.7.0のリリース候補があります。CSV、J-Quants、Alpha Vantage、FRED、SEC、EDINETを独立した配布物として扱い、変更不能な検証済みスナップショット、価格・テクニカル・財務・valuation・risk・event・data qualityの総合確認、比較、レポート、説明専用Agentを提供します。設定済みの`daily jp`と`daily us`は、ポートフォリオ銘柄を明示的に取得し、変更不能なClose Briefを保存します。`weekly`は有効な日米レポートと期限内の候補をオフラインで週末作戦会議へまとめ、保有判断と`残った候補`を分けて表示します。日米の銘柄集合は上限を指定して明示的に更新し、検証済みのローカル価格からオフラインで候補を抽出できます。候補の順序は根拠を確認でき、不透明な総合点を使いません。Agentは変更不能な判断レポートだけを読み、LM Studio、OpenAI、Anthropic、Googleのいずれかを明示した場合だけ動作します。説明は別成果物として保存され、レポートを変更しません。
 
 ## インストール
 
@@ -29,8 +29,15 @@ SDK、extension API、CLI、Agent、CSV source、J-Quants source、Alpha Vantage
 make build
 ```
 
-公開releaseはPyPIではなく、checksum付きGitHub Release wheelhouseを使用します。assetを
-`release.json`で検証してwheelhouse ZIPを展開した後、offlineでinstallします。
+公開時は、独立した配布物をPyPIへ送り、同じ成果物をchecksum付きGitHub Release
+wheelhouseとして残します。通常はPyPIからinstallします。
+
+```shell
+python -m pip install "marketsieve-cli[all-sources]>=0.7,<0.8"
+```
+
+offlineで使用する場合は、assetを`release.json`で検証してwheelhouse ZIPを展開した後、
+indexを使わずにinstallします。
 
 ```shell
 python -m pip install --no-index --find-links ./marketsieve-wheelhouse \
@@ -108,9 +115,16 @@ VS Codeはworkspaceの`.venv`を使用し、依存同期、format、現在のテ
 
 変更は短命ブランチから`develop`へ統合します。人間が確認する`develop -> main` Pull Requestをリリース境界とします。手順は[Contributing](CONTRIBUTING.md)を参照してください。
 
+## プラグイン開発
+
+provider packageはCLI内部ではなく、データ種別ごとに小さく分けたextension APIへ依存します。
+[外部universe pluginの例](examples/instrument-universe-plugin/README.md)はworkspace catalogの外にあり、
+`marketsieve-extension-api>=0.7,<0.8`、entry point、公開conformance checkを示します。完全Gateは
+このwheelをbuildし、公開wheel一式と隔離環境へinstallします。
+
 ## Roadmap
 
-0.2 workbenchと0.3 grounded explanation Agentはdevelop上で完成しています。順序は[Roadmap](docs/roadmap.md)、制約は[正式設計](docs/design/README.md)を参照してください。
+今後の順序は[Roadmap](docs/roadmap.md)、制約は[正式設計](docs/design/README.md)を参照してください。
 
 ## ライセンス
 

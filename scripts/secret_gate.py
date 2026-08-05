@@ -92,7 +92,7 @@ ASSIGNMENT = re.compile(
     r"([A-Z0-9_.-]*(?:API[-_]?KEY|ACCESS[-_]?KEY|SECRET[-_]?KEY|PRIVATE[-_]?KEY|"
     r"ACCESS[-_]?TOKEN|AUTH[-_]?TOKEN|REFRESH[-_]?TOKEN|TOKEN|CLIENT[-_]?SECRET|"
     r"SECRET|PASSWORD))[\"']?"
-    r"\s*(?:=|:)\s*(\"[^\"\n]*\"|'[^'\n]*'|[^,}\s]+)"
+    r"\s*(?:=|:)\s*(\$\{\{[^}\n]+}}|\"[^\"\n]*\"|'[^'\n]*'|[^,}\s]+)"
 )
 CREDENTIAL_NAME = re.compile(
     r"(?i)(?:^|[_.-])(?:API[-_]?KEY|ACCESS[-_]?KEY|SECRET[-_]?KEY|PRIVATE[-_]?KEY|"
@@ -176,6 +176,21 @@ def _is_literal_credential(value: str) -> bool:
 
 def _python_label(label: str) -> bool:
     return label.rsplit("!", maxsplit=1)[-1].rsplit(":", maxsplit=1)[-1].endswith(".py")
+
+
+def _safe_github_workflow_assignment(label: str, name: str, value: str) -> bool:
+    normalized_label = label.rsplit("!", maxsplit=1)[-1].rsplit(":", maxsplit=1)[-1]
+    if ".github/workflows/" not in normalized_label or not normalized_label.endswith(
+        (".yml", ".yaml")
+    ):
+        return False
+    normalized_name = name.lower().replace("_", "-")
+    normalized_value = value.strip().strip("\"'")
+    if normalized_name == "id-token" and normalized_value in {"read", "write", "none"}:
+        return True
+    return normalized_name in {"gh-token", "github-token"} and normalized_value == (
+        "${{ github.token }}"
+    )
 
 
 def _python_target_name(node: ast.expr) -> str | None:
@@ -358,7 +373,11 @@ def _scan_text(label: str, text: str, *, scan_assignments: bool = True) -> list[
     for line_number, line in enumerate(text.splitlines(), start=1):
         if scan_assignments and not python_source:
             for assignment in ASSIGNMENT.finditer(line):
-                if _is_literal_credential(assignment.group(2)):
+                if _is_literal_credential(assignment.group(2)) and not (
+                    _safe_github_workflow_assignment(
+                        label, assignment.group(1), assignment.group(2)
+                    )
+                ):
                     findings.append(Finding(label, line_number, "credential_assignment"))
         for match in (*URL_CREDENTIAL.finditer(line), *URL_USERINFO_CREDENTIAL.finditer(line)):
             if _is_literal_credential(match.group(1)):

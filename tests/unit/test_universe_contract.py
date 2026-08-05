@@ -2,12 +2,17 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any, cast
 
 import pytest
 
 from marketsieve.domain import Instrument
-from marketsieve_extension_api import ImportedInstrumentUniverse, UniverseRequest
+from marketsieve_extension_api import (
+    ImportedInstrumentUniverse,
+    UniverseRequest,
+    verify_instrument_universe_importer,
+)
 
 
 def instrument(symbol: str = "MSFT") -> Instrument:
@@ -35,6 +40,57 @@ def imported() -> ImportedInstrumentUniverse:
         1,
         False,
     )
+
+
+class ConformingImporter:
+    def import_universe(
+        self, path: Path, universe_request: UniverseRequest
+    ) -> ImportedInstrumentUniverse:
+        assert path.name == "universe.csv"
+        return replace(imported(), request=universe_request)
+
+
+class WrongResultImporter:
+    def import_universe(self, path: Path, universe_request: UniverseRequest) -> object:
+        return path, universe_request
+
+
+class WrongRequestImporter:
+    def import_universe(
+        self, path: Path, universe_request: UniverseRequest
+    ) -> ImportedInstrumentUniverse:
+        return imported()
+
+
+def test_public_importer_conformance_check_executes_and_preserves_request(
+    tmp_path: Path,
+) -> None:
+    universe_request = request()
+
+    result = verify_instrument_universe_importer(
+        ConformingImporter(), tmp_path / "universe.csv", universe_request
+    )
+
+    assert result.request == universe_request
+
+
+def test_public_importer_conformance_check_rejects_wrong_capability(tmp_path: Path) -> None:
+    with pytest.raises(TypeError, match="does not implement"):
+        verify_instrument_universe_importer(object(), tmp_path / "universe.csv", request())
+
+
+def test_public_importer_conformance_check_rejects_wrong_result(tmp_path: Path) -> None:
+    with pytest.raises(TypeError, match="non-conforming"):
+        verify_instrument_universe_importer(
+            WrongResultImporter(), tmp_path / "universe.csv", request()
+        )
+
+
+def test_public_importer_conformance_check_rejects_changed_request(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="exact universe request"):
+        verify_instrument_universe_importer(
+            WrongRequestImporter(), tmp_path / "universe.csv", UniverseRequest("other", "us", 2, {})
+        )
 
 
 @pytest.mark.parametrize(

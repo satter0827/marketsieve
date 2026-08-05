@@ -81,6 +81,11 @@ It admits only a same-repository
 `develop -> main` pull request. Tags, GitHub Releases, and package publication remain separate
 human-authorized operations.
 
+The manual publish workflow accepts only an existing stable tag and a successful `main` push CI run
+for the same commit. It downloads that run's retained release artifact, repeats the checksum,
+content, secret, metadata, and isolated-install verification, and stages only catalog-owned wheels
+and source distributions for PyPI. It never rebuilds a distribution.
+
 Repository-owned machine contracts use JSON Schema Draft 2020-12. Each schema has a stable
 identifier and a SemVer payload version: breaking changes increment major, compatible field
 additions increment minor, and clarifications that preserve constraints increment patch. Consumers

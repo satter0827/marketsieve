@@ -36,6 +36,15 @@ class PackageSpec:
         project = tomllib.loads(self.pyproject.read_text(encoding="utf-8"))["project"]
         return str(project["version"])
 
+    @property
+    def project_dependencies(self) -> tuple[str, ...]:
+        project = tomllib.loads(self.pyproject.read_text(encoding="utf-8"))["project"]
+        dependencies = project.get("dependencies", ())
+        optional = project.get("optional-dependencies", {})
+        return tuple(dependencies) + tuple(
+            dependency for group in optional.values() for dependency in group
+        )
+
     def wheel(self, dist_dir: Path) -> Path:
         return _one_artifact(dist_dir, f"{self.artifact_stem}-*.whl")
 
@@ -48,6 +57,16 @@ def _one_artifact(dist_dir: Path, pattern: str) -> Path:
     if len(matches) != 1:
         raise RuntimeError(f"expected one artifact matching {pattern}, found {len(matches)}")
     return matches[0]
+
+
+def compatible_range(version: str) -> str:
+    """Return the supported minor-series range for one public package version."""
+
+    match = re.fullmatch(r"([0-9]+)\.([0-9]+)\.[0-9]+", version)
+    if match is None:
+        raise RuntimeError(f"public package version must use X.Y.Z: {version}")
+    major, minor = (int(value) for value in match.groups())
+    return f">={major}.{minor},<{major}.{minor + 1}"
 
 
 def load_package_catalog(root: Path = ROOT) -> tuple[PackageSpec, ...]:
@@ -93,6 +112,16 @@ def load_package_catalog(root: Path = ROOT) -> tuple[PackageSpec, ...]:
     for required_role in ("sdk", "extension-api", "cli"):
         if sum(spec.role == required_role for spec in specs) != 1:
             raise RuntimeError(f"public package catalog requires exactly one {required_role}")
+    distributions = {spec.distribution: spec for spec in specs}
+    for spec in specs:
+        for requirement in spec.project_dependencies:
+            name = re.split(r"[<>=!~ ;\[]", requirement, maxsplit=1)[0]
+            dependency = distributions.get(name)
+            if dependency is None:
+                continue
+            expected = f"{name}{compatible_range(spec.project_version)}"
+            if requirement != expected:
+                raise RuntimeError(f"{spec.distribution} must depend on {name} through {expected}")
     return tuple(specs)
 
 

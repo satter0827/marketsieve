@@ -1,6 +1,6 @@
 [project]
 name = "marketsieve-cli"
-version = "0.3.0"
+version = "0.7.0"
 description = "Public command-line workbench for MarketSieve."
 readme = "README.md"
 requires-python = ">=3.12,<3.15"
@@ -11,31 +11,31 @@ authors = [
 ]
 dependencies = [
     "click>=8.1,<9",
-    "marketsieve==0.3.0",
-    "marketsieve-extension-api==0.3.0",
+    "marketsieve>=0.7,<0.8",
+    "marketsieve-extension-api>=0.7,<0.8",
     "rich>=14,<15",
 ]
 
 [project.optional-dependencies]
 agent = [
-    "marketsieve-agent==0.3.0",
+    "marketsieve-agent>=0.7,<0.8",
 ]
 all-sources = [
-    "marketsieve-source-csv==0.3.0",
-    "marketsieve-source-jquants==0.3.0",
-    "marketsieve-source-alphavantage==0.3.0",
-    "marketsieve-source-fred==0.3.0",
-    "marketsieve-source-sec==0.3.0",
-    "marketsieve-source-edinet==0.3.0",
+    "marketsieve-source-csv>=0.7,<0.8",
+    "marketsieve-source-jquants>=0.7,<0.8",
+    "marketsieve-source-alphavantage>=0.7,<0.8",
+    "marketsieve-source-fred>=0.7,<0.8",
+    "marketsieve-source-sec>=0.7,<0.8",
+    "marketsieve-source-edinet>=0.7,<0.8",
 ]
 all = [
-    "marketsieve-agent==0.3.0",
-    "marketsieve-source-csv==0.3.0",
-    "marketsieve-source-jquants==0.3.0",
-    "marketsieve-source-alphavantage==0.3.0",
-    "marketsieve-source-fred==0.3.0",
-    "marketsieve-source-sec==0.3.0",
-    "marketsieve-source-edinet==0.3.0",
+    "marketsieve-agent>=0.7,<0.8",
+    "marketsieve-source-csv>=0.7,<0.8",
+    "marketsieve-source-jquants>=0.7,<0.8",
+    "marketsieve-source-alphavantage>=0.7,<0.8",
+    "marketsieve-source-fred>=0.7,<0.8",
+    "marketsieve-source-sec>=0.7,<0.8",
+    "marketsieve-source-edinet>=0.7,<0.8",
 ]
 
 [project.scripts]

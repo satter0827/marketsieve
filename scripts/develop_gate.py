@@ -22,6 +22,7 @@ from scripts.package_catalog import PackageSpec, load_package_catalog
 ROOT = Path(__file__).parents[1]
 STATE_ROOT = ROOT / ".marketsieve"
 RUNTIME_WHEELHOUSE = STATE_ROOT / "cache" / "runtime-wheelhouse"
+EXTERNAL_PLUGIN_EXAMPLE = ROOT / "examples" / "instrument-universe-plugin"
 
 
 def run(command: Sequence[str], *, cwd: Path = ROOT) -> None:
@@ -282,6 +283,12 @@ def check_package(path: Path) -> None:
         spec.distribution: verify_catalog_wheel(spec, spec.wheel(dist), catalog) for spec in catalog
     }
     sdist_files = {spec.distribution: verify_catalog_sdist(spec.sdist(dist)) for spec in catalog}
+    external_dist = (path / "external-plugin").resolve()
+    external_dist.mkdir()
+    run(("uv", "build", str(EXTERNAL_PLUGIN_EXAMPLE), "--out-dir", str(external_dist)))
+    external_wheels = tuple(external_dist.glob("*.whl"))
+    if len(external_wheels) != 1:
+        raise RuntimeError("external plugin example must build exactly one wheel")
 
     with tempfile.TemporaryDirectory(prefix="marketsieve-install-") as temp_dir:
         temporary_root = Path(temp_dir)
@@ -321,6 +328,19 @@ def check_package(path: Path) -> None:
         ).stdout.strip()
         cli_module = next(spec.module for spec in catalog if spec.role == "cli")
         run((str(isolated), "-m", cli_module, "doctor", "--output", "json"))
+        verify_isolated_target(
+            temporary_root,
+            target=external_wheels[0],
+            dist=dist,
+            import_statement=(
+                "from importlib.metadata import entry_points; "
+                "from marketsieve_extension_api import InstrumentUniverseImporter; "
+                "items=entry_points(group='marketsieve.sources.instrument_universe.importers'); "
+                "selected=[item for item in items if item.name == 'example-universe']; "
+                "assert len(selected) == 1; assert isinstance(selected[0].load()(), "
+                "InstrumentUniverseImporter)"
+            ),
+        )
 
     package = {
         "version": installed,
@@ -330,6 +350,10 @@ def check_package(path: Path) -> None:
         ],
         "wheel_files": wheel_files,
         "sdist_files": sdist_files,
+        "external_plugin": {
+            "name": external_wheels[0].name,
+            "sha256": sha256(external_wheels[0]),
+        },
     }
     (path / "package.json").write_text(
         json.dumps(package, indent=2, sort_keys=True) + "\n", encoding="utf-8"

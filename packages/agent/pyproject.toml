@@ -1,6 +1,6 @@
 [project]
 name = "marketsieve-agent"
-version = "0.3.0"
+version = "0.7.0"
 description = "Grounded explanation pipeline for MarketSieve."
 readme = "README.md"
 requires-python = ">=3.12,<3.15"
@@ -10,7 +10,7 @@ authors = [
     { name = "MarketSieve contributors" },
 ]
 dependencies = [
-    "marketsieve==0.3.0",
+    "marketsieve>=0.7,<0.8",
 ]
 
 [tool.uv.sources]

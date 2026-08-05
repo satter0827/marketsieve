@@ -59,6 +59,8 @@ note so that it cannot become a competing authority.
 | Send facts to a cloud model | Human decision | The user supplies `--allow-cloud` after reviewing the dry-run payload |
 | Change an indicator definition | Human decision | A new definition version and migration impact are approved |
 | Publish a GitHub Release | Human decision | Human-approved main commit and verified wheelhouse evidence are retained |
+| Configure PyPI Trusted Publishers | Manual procedure | Every catalog distribution trusts the repository workflow and protected `pypi` environment |
+| Publish catalog distributions | Human decision | Existing tag, successful matching main CI run, environment approval, PyPI OIDC records, and GitHub Release |
 
 Provider code never decides to weaken a request, switch destination, merge values, or retain raw
 responses beyond its approved policy. A source or model change returns through the same focused
@@ -72,3 +74,9 @@ integration milestones and are not promoted to `main`, tagged, or published. Aft
 complete, one `develop -> main` release pull request runs the Release Gate and stops for human
 review. Automation does not merge that pull request, create the tag, publish a GitHub Release, or
 publish to PyPI.
+
+After a human merges the release pull request, the `main` push CI must succeed before a stable tag
+is created at that exact commit. A maintainer then manually dispatches `publish.yml` with the tag
+and the successful CI run ID. The protected `pypi` environment supplies approval, while PyPI trusts
+that workflow and environment through OIDC. No repository or environment stores a long-lived PyPI
+token.
