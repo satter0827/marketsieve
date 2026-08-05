@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from datetime import datetime
 from pathlib import Path
 from typing import Any, TextIO
 
@@ -11,6 +12,11 @@ from marketsieve_cli.adapters.config import Configuration
 from marketsieve_cli.adapters.console import ConsoleOutput, OutputMode
 from marketsieve_cli.adapters.explanations import ExplanationStore
 from marketsieve_cli.adapters.plugins import SourcePluginRegistry
+from marketsieve_cli.adapters.portfolios import (
+    PortfolioStore,
+    import_canonical_csv,
+    portfolio_document,
+)
 from marketsieve_cli.adapters.reports import ReportStore, render_markdown, report_document
 from marketsieve_cli.adapters.snapshots import SnapshotStore
 from marketsieve_cli.application.diagnostics import DiagnosticsService
@@ -53,6 +59,31 @@ def build_report_store() -> ReportStore:
     """Build the canonical decision-report repository."""
 
     return ReportStore(Path(".marketsieve/reports"))
+
+
+def build_portfolio_store() -> PortfolioStore:
+    """Build the canonical local portfolio repository."""
+
+    return PortfolioStore(Path(".marketsieve/portfolio"))
+
+
+def import_portfolio(path: Path, *, broker: str, as_of: str) -> dict[str, object]:
+    """Import one explicit broker-neutral portfolio file."""
+
+    if broker != "canonical":
+        raise ValueError("unsupported portfolio broker")
+    snapshot, source_hash = import_canonical_csv(
+        path.read_bytes(), as_of=datetime.fromisoformat(as_of)
+    )
+    object_id = build_portfolio_store().put(snapshot, source_hash=source_hash)
+    return portfolio_document(snapshot, source_hash=source_hash, object_id=object_id)
+
+
+def read_portfolio() -> dict[str, object]:
+    """Read and validate the latest normalized portfolio."""
+
+    object_id, snapshot, source_hash = build_portfolio_store().latest()
+    return portfolio_document(snapshot, source_hash=source_hash, object_id=object_id)
 
 
 def list_decision_reports() -> dict[str, Any]:

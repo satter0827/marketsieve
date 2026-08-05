@@ -16,9 +16,11 @@ from marketsieve_cli.bootstrap import (
     build_console_output,
     build_diagnostics_service,
     build_snapshot_service,
+    import_portfolio,
     list_decision_reports,
     project_decision_report,
     read_decision_report,
+    read_portfolio,
     render_decision_report,
     sdk_version,
 )
@@ -56,6 +58,14 @@ COMMAND_METADATA: dict[str, dict[str, Any]] = {
     },
     "report export": {
         "output_schema": None,
+        "effects": {"network": False, "secrets": False, "optional_writes": []},
+    },
+    "portfolio import": {
+        "output_schema": "urn:marketsieve:schema:portfolio-result:1.0.0",
+        "effects": {"network": False, "secrets": False, "optional_writes": ["portfolio"]},
+    },
+    "portfolio show": {
+        "output_schema": "urn:marketsieve:schema:portfolio-result:1.0.0",
         "effects": {"network": False, "secrets": False, "optional_writes": []},
     },
     "compare": {
@@ -193,6 +203,46 @@ def doctor(context: click.Context, output_mode: str) -> None:
     console.emit_doctor(checks)
     if not service.succeeded(checks):
         raise click.exceptions.Exit(1)
+
+
+@main.group()
+def portfolio() -> None:
+    """Import and inspect the local brokerage-neutral portfolio."""
+
+
+@portfolio.command("import")
+@click.argument("path", type=click.Path(path_type=Path, dir_okay=False, exists=True))
+@click.option("--broker", type=click.Choice(("canonical",)), required=True)
+@click.option("--as-of", required=True, help="Use an ISO 8601 timestamp with a UTC offset.")
+@output_option
+@click.pass_context
+def portfolio_import(
+    context: click.Context, path: Path, broker: str, as_of: str, output_mode: str
+) -> None:
+    """Import a strict UTF-8 canonical CSV without retaining the source file."""
+
+    console = _console(context, output_mode)
+    try:
+        document = import_portfolio(path, broker=broker, as_of=as_of)
+    except (OSError, TypeError, ValueError) as error:
+        console.emit_error("portfolio_import_failed", str(error))
+        raise click.exceptions.Exit(1) from None
+    console.emit_document(document, title="Portfolio")
+
+
+@portfolio.command("show")
+@output_option
+@click.pass_context
+def portfolio_show(context: click.Context, output_mode: str) -> None:
+    """Show the verified latest normalized portfolio without network access."""
+
+    console = _console(context, output_mode)
+    try:
+        document = read_portfolio()
+    except (LookupError, OSError, TypeError, ValueError) as error:
+        console.emit_error("portfolio_show_failed", str(error))
+        raise click.exceptions.Exit(1) from None
+    console.emit_document(document, title="Portfolio")
 
 
 @main.command("equity-report")

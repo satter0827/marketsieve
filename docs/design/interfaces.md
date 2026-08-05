@@ -216,6 +216,19 @@ marketsieve report export {ID,latest} --format markdown
 marketsieve report explain {ID,latest} --provider PROVIDER
 ```
 
+The implemented broker-neutral path is:
+
+```shell
+marketsieve portfolio import --broker canonical --as-of TIMESTAMP PATH
+marketsieve portfolio show
+```
+
+Canonical CSV uses the exact header
+`kind,mic,symbol,currency,timezone,quantity,average_acquisition_price,account_type`.
+`holding` rows require positive quantity, acquisition price, and a non-empty account type. `watch`
+rows require those three fields to be empty. Instruments are equities identified by MIC, symbol,
+currency, and IANA timezone. Input order does not affect the normalized portfolio identity.
+
 `daily` explicitly acquires through configured profiles, validates snapshots, evaluates every held
 or watched instrument in the selected market, stores one immutable report, and renders it. An
 instrument failure becomes an indeterminate entry. If every instrument is indeterminate, the

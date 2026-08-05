@@ -5,7 +5,8 @@ design and release history, not in this file.
 
 ## 0.4.0 Personal Close Brief
 
-1. Add minimal portfolio input and a Rakuten importer based on anonymized real fixtures.
+1. Add a Rakuten importer based on anonymized real fixtures and map it to the implemented canonical
+   portfolio model.
 2. Add one-command Japanese close, U.S. close, and weekly report workflows.
 3. Replace generic JSON-shaped terminal output with conclusion-first Close Brief projections.
 
