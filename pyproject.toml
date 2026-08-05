@@ -125,6 +125,7 @@ testpaths = ["tests"]
 cache-dir = ".marketsieve/cache/ruff"
 line-length = 100
 src = [
+    "examples/instrument-universe-plugin/src",
     "packages/agent/src",
     "packages/cli/src",
     "packages/core/src",
@@ -149,6 +150,7 @@ quote-style = "double"
 [tool.mypy]
 cache_dir = ".marketsieve/cache/mypy"
 files = [
+    "examples/instrument-universe-plugin/src",
     "packages/agent/src",
     "packages/cli/src",
     "packages/core/src",

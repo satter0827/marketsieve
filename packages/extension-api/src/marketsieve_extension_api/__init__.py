@@ -1,5 +1,6 @@
 """Public source-extension contracts."""
 
+from marketsieve_extension_api.conformance import verify_instrument_universe_importer
 from marketsieve_extension_api.daily import (
     AvailabilityBasis,
     DailyBarBundleImporter,
@@ -68,4 +69,5 @@ __all__ = [
     "SourceConfiguration",
     "SourceDiagnostic",
     "UniverseRequest",
+    "verify_instrument_universe_importer",
 ]

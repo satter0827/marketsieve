@@ -1,0 +1,19 @@
+[project]
+name = "marketsieve-example-universe"
+version = "0.1.0"
+description = "Minimal external instrument-universe plugin for MarketSieve."
+requires-python = ">=3.12,<3.15"
+dependencies = [
+    "marketsieve>=0.7,<0.8",
+    "marketsieve-extension-api>=0.7,<0.8",
+]
+
+[project.entry-points."marketsieve.sources.instrument_universe.importers"]
+example-universe = "marketsieve_example_universe:ExampleUniverseImporter"
+
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/marketsieve_example_universe"]

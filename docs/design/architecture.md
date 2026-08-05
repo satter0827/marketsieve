@@ -274,6 +274,11 @@ package code, tests, local configuration, caches, notes, and generated reports f
 artifact boundaries. The complete wheel set is installed offline in an isolated environment.
 Source dependencies do not expand the core SDK.
 
+Public distributions in one release share a version. Dependencies between them accept only that
+minor release series, such as `marketsieve-extension-api>=0.7,<0.8`, so an adapter can be developed
+and installed outside this workspace without requiring an exact patch lock. The root catalog and
+package metadata are validated together; workspace-only source overrides do not enter a wheel.
+
 ## Approved 0.2 target architecture
 
 The workbench replaces the report-specific application path with acquisition, immutable storage,

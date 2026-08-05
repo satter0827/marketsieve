@@ -323,14 +323,28 @@ def verify(version: str, commit: str, dist_dir: Path) -> None:
         raise RuntimeError("isolated installation version does not match the request")
 
 
+def export_pypi(version: str, commit: str, dist_dir: Path, output_dir: Path) -> None:
+    """Stage only repository-owned distributions from one verified release artifact."""
+
+    verify(version, commit, dist_dir)
+    if output_dir.exists() and tuple(output_dir.iterdir()):
+        raise RuntimeError("PyPI staging directory must be empty")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    wheels, sdists = distributions(dist_dir)
+    for path in (*wheels, *sdists):
+        shutil.copy2(path, output_dir / path.name)
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
-    for command in ("build", "verify"):
+    for command in ("build", "verify", "export-pypi"):
         child = subparsers.add_parser(command)
         child.add_argument("--version", required=True)
         child.add_argument("--commit", required=True)
         child.add_argument("--dist-dir", required=True, type=Path)
+        if command == "export-pypi":
+            child.add_argument("--output-dir", required=True, type=Path)
     return parser.parse_args()
 
 
@@ -338,8 +352,10 @@ def main() -> None:
     args = parse_args()
     if args.command == "build":
         build(args.version, args.commit, args.dist_dir)
-    else:
+    elif args.command == "verify":
         verify(args.version, args.commit, args.dist_dir)
+    else:
+        export_pypi(args.version, args.commit, args.dist_dir, args.output_dir)
 
 
 if __name__ == "__main__":

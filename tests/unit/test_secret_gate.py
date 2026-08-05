@@ -117,6 +117,32 @@ def test_secret_scan_accepts_credential_references(tmp_path: Path, reference: st
     assert scan_paths((path,)) == []
 
 
+def test_secret_scan_accepts_github_builtin_tokens_and_oidc_permission(
+    tmp_path: Path,
+) -> None:
+    workflow = tmp_path / ".github" / "workflows" / "publish.yml"
+    workflow.parent.mkdir(parents=True)
+    write(
+        workflow,
+        "permissions:\n"
+        "  id-token: write\n"
+        "env:\n"
+        "  GH_TOKEN: ${{ github.token }}\n"
+        "with:\n"
+        "  github-token: ${{ github.token }}\n",
+    )
+
+    assert scan_paths((workflow,)) == []
+
+
+def test_secret_scan_rejects_literal_token_in_github_workflow(tmp_path: Path) -> None:
+    workflow = tmp_path / ".github" / "workflows" / "publish.yml"
+    workflow.parent.mkdir(parents=True)
+    write(workflow, "env:\n  GH_TOKEN: opaque-production-credential\n")
+
+    assert [finding.kind for finding in scan_paths((workflow,))] == ["credential_assignment"]
+
+
 @pytest.mark.parametrize("parameter", ("apikey", "api_key", "access_token"))
 def test_secret_scan_rejects_url_credentials(tmp_path: Path, parameter: str) -> None:
     value = "opaque-production-credential"

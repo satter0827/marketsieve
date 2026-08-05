@@ -221,12 +221,13 @@ renamed. Raw responses are retained only when the adapter's approved terms polic
 retention and its redaction step succeeds. Mutable references can be rebuilt from verified object
 manifests.
 
-GitHub Release is the approved distribution channel. Release evidence contains every wheel and
-source distribution, a wheelhouse archive, constraints, a SHA-256 manifest, and compatibility
-results. The build-once job includes locked runtime wheels for Python 3.12, 3.13, and 3.14 on the
-release runner platform; every compatibility job verifies and installs that same checksummed
-artifact without regenerating dependencies. PyPI publication remains disabled, so installation uses an unpacked wheelhouse with
-`pip --no-index --find-links`.
+Release evidence contains every wheel and source distribution, a wheelhouse archive, constraints,
+a SHA-256 manifest, and compatibility results. The build-once job includes locked runtime wheels
+for Python 3.12, 3.13, and 3.14 on the release runner platform; every compatibility job verifies
+and installs that same checksummed artifact without regenerating dependencies. The approved
+publish workflow creates a draft GitHub Release, uploads catalog-owned distributions through PyPI
+Trusted Publishing, and publishes the GitHub Release only after PyPI succeeds. A failure leaves a
+recoverable draft instead of presenting a partially completed release as final.
 
 ## Model operation
 

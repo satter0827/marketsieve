@@ -18,8 +18,7 @@ the SDK depend on email, LINE, an LLM provider, or a database.
 
 ## Current status
 
-`develop` extends the 0.3.0 foundation toward Personal Close Brief. It currently provides the data
-workbench:
+`develop` contains the 0.7.0 release candidate. It provides the data workbench:
 independent CSV, J-Quants, Alpha Vantage, FRED, SEC, and EDINET sources; immutable verified
 snapshots; price,
 financial, and event inspection; seven deterministic technical indicators; and an explanation-only
@@ -50,8 +49,15 @@ SEC source, and EDINET source build as independent artifacts:
 make build
 ```
 
-Published releases use a checksummed GitHub Release wheelhouse rather than PyPI. After verifying
-the assets against `release.json`, extract the wheelhouse ZIP and install offline:
+Release artifacts are published both as a checksummed GitHub Release wheelhouse and as independent
+PyPI distributions. Install the normal CLI and all source adapters from PyPI:
+
+```shell
+python -m pip install "marketsieve-cli[all-sources]>=0.7,<0.8"
+```
+
+For an offline installation, verify the GitHub Release assets against `release.json`, extract the
+wheelhouse ZIP, and install without an index:
 
 ```shell
 python -m pip install --no-index --find-links ./marketsieve-wheelhouse \
@@ -150,10 +156,17 @@ to also retain it under `.marketsieve/logs/`.
 Changes move through short-lived branches into `develop`. A human-reviewed `develop -> main` pull
 request is the release boundary. See [Contributing](CONTRIBUTING.md) for the workflow.
 
+## Plugin development
+
+Provider packages depend on the small, data-kind-specific extension API rather than CLI internals.
+The [external universe plugin example](examples/instrument-universe-plugin/README.md) is outside the
+workspace catalog, declares `marketsieve-extension-api>=0.7,<0.8`, registers one entry point, and
+uses the public conformance check. The complete gate builds its wheel and installs it against the
+public wheel set in an isolated environment.
+
 ## Roadmap
 
-The 0.2 workbench and 0.3 grounded explanation Agent are complete on `develop`. See the
-[Roadmap](docs/roadmap.md) and the [formal design](docs/design/README.md).
+See the [Roadmap](docs/roadmap.md) and the [formal design](docs/design/README.md).
 
 ## License
 
