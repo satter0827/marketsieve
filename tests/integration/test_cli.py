@@ -194,6 +194,8 @@ def test_capabilities_match_click_commands_and_validate_schema() -> None:
         "doctor",
         "equity-report",
         "inspect",
+        "portfolio import",
+        "portfolio show",
         "report explain",
         "report export",
         "report list",
@@ -225,6 +227,47 @@ def test_capabilities_match_click_commands_and_validate_schema() -> None:
         "optional_writes": ["explanation"],
         "secrets": True,
     }
+
+
+def test_canonical_portfolio_import_and_show_are_offline_and_deterministic() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        source = Path("portfolio.csv")
+        source.write_text(
+            "kind,mic,symbol,currency,timezone,quantity,average_acquisition_price,account_type\n"
+            "watch,XNAS,MSFT,USD,America/New_York,,,\n"
+            "holding,XTKS,7203,JPY,Asia/Tokyo,10,2500,NISA\n",
+            encoding="utf-8",
+        )
+        imported = runner.invoke(
+            main,
+            [
+                "portfolio",
+                "import",
+                str(source),
+                "--broker",
+                "canonical",
+                "--as-of",
+                "2026-08-06T20:00:00+09:00",
+                "--output",
+                "json",
+            ],
+        )
+        shown = runner.invoke(main, ["portfolio", "show", "--output", "json"])
+
+        assert imported.exit_code == shown.exit_code == 0
+        imported_document = json.loads(imported.stdout)
+        shown_document = json.loads(shown.stdout)
+        assert imported_document == shown_document
+        assert imported_document["holdings"][0]["instrument"]["symbol"] == "7203"
+        assert imported_document["watch_items"][0]["instrument"]["symbol"] == "MSFT"
+        assert not any(
+            path.read_bytes() == source.read_bytes()
+            for path in Path(".marketsieve/portfolio").rglob("*")
+            if path.is_file()
+        )
+    validate("portfolio-result", imported_document)
+    validate("portfolio-result", shown_document)
 
 
 def test_configuration_errors_do_not_block_commands_that_do_not_read_configuration() -> None:

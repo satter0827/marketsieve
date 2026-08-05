@@ -337,7 +337,10 @@ reference. Reads reconstruct and validate SDK values and reject non-canonical or
 
 ## Remaining 0.4.0 Personal Close Brief target architecture
 
-The extension API adds portfolio import only with a working Rakuten package. Its implemented
+The CLI currently imports one strict broker-neutral UTF-8 CSV into a brokerage-neutral portfolio
+snapshot and a content-addressed local store. It retains only normalized values and the source
+SHA-256 digest. The source file is never copied below `.marketsieve`. The extension API adds
+portfolio import only with a working Rakuten package. Its implemented
 economic-series capability is provided by the independently installable FRED package. The CLI owns
 source selection and report orchestration in addition to its implemented content-addressed storage
 and Markdown presentation.

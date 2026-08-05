@@ -9,6 +9,8 @@ will follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Strict broker-neutral portfolio CSV import, content-addressed normalized storage, and offline
+  `portfolio show` with no source-file retention.
 - Knowledge-time-correct annual financial trends and compatible derived metrics in the public SDK,
   with typed period views and deterministic evidence identity.
 - Filing identity, amendment linkage, publication-time filtering, and durable fact-to-filing

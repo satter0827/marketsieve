@@ -70,6 +70,19 @@ uv run marketsieve report export latest --format markdown
 uv run marketsieve --config marketsieve.toml report explain latest --provider openai --dry-run --output json
 ```
 
+canonical portfolio CSVのheaderは
+`kind,mic,symbol,currency,timezone,quantity,average_acquisition_price,account_type`です。
+`holding`は全項目を指定し、`watch`は末尾3項目を空にします。
+
+```shell
+uv run marketsieve portfolio import holdings.csv --broker canonical \
+  --as-of 2026-08-06T20:00:00+09:00
+uv run marketsieve portfolio show
+```
+
+保存するのは正規化結果と入力digestだけで、元CSVは保存しません。楽天CSVは列を推測せず、
+匿名化した実fixtureを根拠に追加します。
+
 ## アーキテクチャ
 
 公開SDKは`packages/core`、実装済みextension contractは`packages/extension-api`、プロバイダーadapterは`packages/source-*`、CLIは`packages/cli`に配置します。SDKはアプリケーションやインフラストラクチャ用ライブラリをimportできません。[文書索引](docs/README.md)と正式な[Architecture](docs/design/architecture.md)に依存規則を記載しています。

@@ -88,6 +88,19 @@ uv run marketsieve report export latest --format markdown
 uv run marketsieve --config marketsieve.toml report explain latest --provider openai --dry-run --output json
 ```
 
+The canonical portfolio CSV header is
+`kind,mic,symbol,currency,timezone,quantity,average_acquisition_price,account_type`.
+Use `holding` with all fields or `watch` with the final three fields empty:
+
+```shell
+uv run marketsieve portfolio import holdings.csv --broker canonical \
+  --as-of 2026-08-06T20:00:00+09:00
+uv run marketsieve portfolio show
+```
+
+MarketSieve stores normalized content and the input digest, not the source CSV. Rakuten CSV support
+will be based on an anonymized real fixture rather than guessed columns.
+
 ## Architecture
 
 The public SDK lives under `packages/core`, the implemented extension contract under

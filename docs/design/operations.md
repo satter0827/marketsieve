@@ -211,6 +211,9 @@ assumes that a wall-clock time proves market closure.
 Shareable source and policy settings remain in `marketsieve.toml`. Normalized portfolio snapshots,
 reports, rendered Markdown, and mutable latest references remain below `.marketsieve` and are
 ignored by version control. Source brokerage files are read once and not copied into local state.
+Portfolio objects live below `.marketsieve/portfolio/objects`; `refs/latest.json` is replaced
+atomically. The object contains normalized holdings and watch items plus the source digest, but no
+source path, original bytes, account number, or customer name.
 
 Routine output is optimized for a short review. A successful report may state that no action is
 needed. Warnings identify a concrete missing, stale, incompatible, or failed input and name the

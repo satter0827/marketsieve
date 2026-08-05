@@ -149,4 +149,8 @@ Personal Close Brief acceptance adds:
 - proof that model success or failure cannot alter a static report;
 - wheel-installed external adapter discovery and public conformance tests.
 
+The implemented canonical portfolio slice tests strict headers, row width, numeric and timezone
+validation, duplicate instruments, deterministic ordering and identity, source-byte non-retention,
+atomic latest replacement, tamper detection, symlink rejection, JSON Schema, and CLI round trips.
+
 Test doubles prove bounded agent behavior without entering production provider selection.
