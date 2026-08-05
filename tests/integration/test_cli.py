@@ -197,6 +197,7 @@ def test_capabilities_match_click_commands_and_validate_schema() -> None:
         "doctor",
         "equity-report",
         "experiment compare",
+        "experiment explain",
         "experiment run",
         "experiment show",
         "inspect",
@@ -256,6 +257,14 @@ def test_experiment_commands_project_service_documents(
         "right_run_id": right,
         "metric_deltas": {},
     }
+    explanation_document: dict[str, object] = {
+        "schema": "experiment-explanation/v1",
+        "explanation_id": "d" * 64,
+        "status": "model",
+        "provider": "lmstudio",
+        "model": "local-model",
+        "validation": {"status": "accepted", "reason": None},
+    }
 
     class StubExperimentService:
         def run(self, spec: Path) -> dict[str, object]:
@@ -270,22 +279,42 @@ def test_experiment_commands_project_service_documents(
             assert (left_run_id, right_run_id) == (left, right)
             return comparison_document
 
+    class StubExperimentAgentService:
+        def explain(
+            self, run_id: str, provider: str, locale: str, **options: bool
+        ) -> dict[str, object]:
+            assert (run_id, provider, locale) == (left, "lmstudio", "ja")
+            assert options == {"allow_cloud": False, "allow_remote": False}
+            return explanation_document
+
     strategy = tmp_path / "strategy.toml"
     strategy.write_text("[experiment]\n", encoding="utf-8")
     cli_module = importlib.import_module("marketsieve_cli.interfaces.cli.main")
     monkeypatch.setattr(cli_module, "build_experiment_service", StubExperimentService)
+    monkeypatch.setattr(
+        cli_module,
+        "build_experiment_agent_service",
+        lambda config_path: StubExperimentAgentService(),
+    )
     runner = CliRunner()
 
     results = (
         runner.invoke(main, ["experiment", "run", str(strategy), "--output", "json"]),
         runner.invoke(main, ["experiment", "show", left, "--output", "json"]),
         runner.invoke(main, ["experiment", "compare", left, right, "--output", "json"]),
+        runner.invoke(
+            main,
+            ["experiment", "explain", left, "--provider", "lmstudio", "--output", "json"],
+        ),
     )
 
-    assert all(result.exit_code == 0 for result in results)
+    assert all(result.exit_code == 0 for result in results), [
+        (result.output, result.exception) for result in results
+    ]
     assert json.loads(results[0].stdout) == run_document
     assert json.loads(results[1].stdout) == run_document
     assert json.loads(results[2].stdout) == comparison_document
+    assert json.loads(results[3].stdout) == explanation_document
 
 
 def test_experiment_commands_report_service_failures_without_tracebacks(
@@ -301,15 +330,28 @@ def test_experiment_commands_report_service_failures_without_tracebacks(
         def compare(self, left_run_id: str, right_run_id: str) -> dict[str, object]:
             raise ValueError(f"incompatible runs: {left_run_id}, {right_run_id}")
 
+    class FailedExperimentAgentService:
+        def explain(self, *args: object, **kwargs: object) -> dict[str, object]:
+            raise LookupError("missing experiment")
+
     strategy = tmp_path / "strategy.toml"
     strategy.write_text("[experiment]\n", encoding="utf-8")
     cli_module = importlib.import_module("marketsieve_cli.interfaces.cli.main")
     monkeypatch.setattr(cli_module, "build_experiment_service", FailedExperimentService)
+    monkeypatch.setattr(
+        cli_module,
+        "build_experiment_agent_service",
+        lambda config_path: FailedExperimentAgentService(),
+    )
     digest = "a" * 64
     results = (
         CliRunner().invoke(main, ["experiment", "run", str(strategy), "--output", "json"]),
         CliRunner().invoke(main, ["experiment", "show", digest, "--output", "json"]),
         CliRunner().invoke(main, ["experiment", "compare", digest, digest, "--output", "json"]),
+        CliRunner().invoke(
+            main,
+            ["experiment", "explain", digest, "--provider", "lmstudio", "--output", "json"],
+        ),
     )
 
     assert all(result.exit_code == 1 for result in results)
@@ -317,6 +359,7 @@ def test_experiment_commands_report_service_failures_without_tracebacks(
         "experiment_run_failed",
         "experiment_show_failed",
         "experiment_compare_failed",
+        "experiment_agent_failed",
     ]
     assert all("Traceback" not in result.output for result in results)
 

@@ -22,6 +22,8 @@ will follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Immutable experiment specifications, knowledge-time-correct policy replay, deterministic metrics,
   and run comparison in the public SDK.
 - Offline Strategy Lab run, show, and compare commands with content-addressed local artifacts.
+- Grounded experiment explanations record prompt, model settings, raw output, validation, and a
+  deterministic rendering without changing stored metrics or decisions.
 
 ## [0.3.0] - 2026-08-05
 

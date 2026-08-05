@@ -22,6 +22,7 @@ def test_schemas_are_draft_2020_12_and_semantically_versioned() -> None:
         "doctor-result",
         "decision-report",
         "experiment-comparison",
+        "experiment-explanation",
         "experiment-run",
         "inspect-result",
         "indicator-result",

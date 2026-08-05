@@ -267,9 +267,16 @@ Strategy Lab reads one explicit TOML specification and verified snapshot IDs:
 marketsieve experiment run strategy.toml
 marketsieve experiment show RUN_ID
 marketsieve experiment compare LEFT_RUN_ID RIGHT_RUN_ID
+marketsieve experiment explain RUN_ID --provider lmstudio
 ```
 
-All three commands are offline. `run` writes `experiment-run/v1` below
+The run, show, and compare commands are offline. `run` writes `experiment-run/v1` below
 `.marketsieve/experiments/objects`; identical specifications and snapshots produce the same run ID
 and bytes. `show` and `compare` do not recalculate a run. The output labels whether complete cost
 assumptions were supplied and never presents forward return as net profit.
+
+`experiment explain` contacts exactly one explicitly selected model under the same local and cloud
+consent rules as report explanation. The model selects stored fact IDs only. Prompt, provider,
+model, endpoint, locale, raw output, validation result, and deterministic rendering are stored as
+an immutable `experiment-explanation/v1` object below
+`.marketsieve/experiments/explanations/objects`. The experiment run remains unchanged.

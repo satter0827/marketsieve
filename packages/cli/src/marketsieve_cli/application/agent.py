@@ -107,39 +107,62 @@ class AgentService:
         return model, endpoint
 
     def _preview_details(self, provider: str, *, allow_remote: bool) -> tuple[str, str | None]:
-        settings = self._configuration.agent_provider(provider)
-        if provider == "lmstudio":
-            endpoint = settings.endpoint or "http://127.0.0.1:1234/v1"
-            LmStudioModel(model=settings.model, endpoint=endpoint, allow_remote=allow_remote)
-            return settings.model, endpoint
-        if provider not in {"openai", "anthropic", "google"}:
-            raise ValueError("agent provider is not supported")
-        if settings.endpoint is not None:
-            raise ValueError("cloud agent endpoints are fixed and cannot be configured")
-        endpoints = {
-            "openai": OpenAIModel.endpoint,
-            "anthropic": AnthropicModel.endpoint,
-            "google": GoogleModel.endpoint,
-        }
-        return settings.model, endpoints[provider]
+        return model_details(self._configuration, provider, allow_remote=allow_remote)
 
     def _model(self, provider: str, *, allow_cloud: bool, allow_remote: bool) -> Any:
-        settings = self._configuration.agent_provider(provider)
-        self._preview_details(provider, allow_remote=allow_remote)
-        if provider == "lmstudio":
-            return LmStudioModel(
-                model=settings.model,
-                endpoint=settings.endpoint or "http://127.0.0.1:1234/v1",
-                api_token=self._environment.get("LMSTUDIO_API_TOKEN"),
-                allow_remote=allow_remote,
-            )
-        credentials = {
-            "openai": "OPENAI_API_KEY",
-            "anthropic": "ANTHROPIC_API_KEY",
-            "google": "GOOGLE_API_KEY",
-        }
-        if provider not in credentials:
-            raise ValueError("agent provider is not supported")
-        key = self._environment.get(credentials[provider], "")
-        constructors = {"openai": OpenAIModel, "anthropic": AnthropicModel, "google": GoogleModel}
-        return constructors[provider](model=settings.model, api_key=key, allow_cloud=allow_cloud)
+        return select_model(
+            self._configuration,
+            self._environment,
+            provider,
+            allow_cloud=allow_cloud,
+            allow_remote=allow_remote,
+        )
+
+
+def model_details(
+    configuration: AgentConfiguration, provider: str, *, allow_remote: bool
+) -> tuple[str, str | None]:
+    settings = configuration.agent_provider(provider)
+    if provider == "lmstudio":
+        endpoint = settings.endpoint or "http://127.0.0.1:1234/v1"
+        LmStudioModel(model=settings.model, endpoint=endpoint, allow_remote=allow_remote)
+        return settings.model, endpoint
+    if provider not in {"openai", "anthropic", "google"}:
+        raise ValueError("agent provider is not supported")
+    if settings.endpoint is not None:
+        raise ValueError("cloud agent endpoints are fixed and cannot be configured")
+    endpoints = {
+        "openai": OpenAIModel.endpoint,
+        "anthropic": AnthropicModel.endpoint,
+        "google": GoogleModel.endpoint,
+    }
+    return settings.model, endpoints[provider]
+
+
+def select_model(
+    configuration: AgentConfiguration,
+    environment: Mapping[str, str],
+    provider: str,
+    *,
+    allow_cloud: bool,
+    allow_remote: bool,
+) -> Any:
+    settings = configuration.agent_provider(provider)
+    model_details(configuration, provider, allow_remote=allow_remote)
+    if provider == "lmstudio":
+        return LmStudioModel(
+            model=settings.model,
+            endpoint=settings.endpoint or "http://127.0.0.1:1234/v1",
+            api_token=environment.get("LMSTUDIO_API_TOKEN"),
+            allow_remote=allow_remote,
+        )
+    credentials = {
+        "openai": "OPENAI_API_KEY",
+        "anthropic": "ANTHROPIC_API_KEY",
+        "google": "GOOGLE_API_KEY",
+    }
+    if provider not in credentials:
+        raise ValueError("agent provider is not supported")
+    key = environment.get(credentials[provider], "")
+    constructors = {"openai": OpenAIModel, "anthropic": AnthropicModel, "google": GoogleModel}
+    return constructors[provider](model=settings.model, api_key=key, allow_cloud=allow_cloud)

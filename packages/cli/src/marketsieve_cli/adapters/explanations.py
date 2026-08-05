@@ -9,7 +9,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-EXPLANATION_SCHEMA = "report-explanation/v1"
+REPORT_EXPLANATION_SCHEMA = "report-explanation/v1"
 
 
 def _json_bytes(value: object) -> bytes:
@@ -22,14 +22,15 @@ def _json_bytes(value: object) -> bytes:
 class ExplanationStore:
     """Store model output separately from immutable decision-report objects."""
 
-    def __init__(self, root: Path) -> None:
+    def __init__(self, root: Path, *, schema: str = REPORT_EXPLANATION_SCHEMA) -> None:
         self._root = root
         self._objects = root / "objects"
+        self._schema = schema
 
     def put(self, value: dict[str, Any]) -> dict[str, Any]:
         if {"schema", "explanation_id"} & set(value):
             raise ValueError("explanation semantic content contains a reserved field")
-        semantic = {"schema": EXPLANATION_SCHEMA, **value}
+        semantic = {"schema": self._schema, **value}
         explanation_id = hashlib.sha256(_json_bytes(semantic)).hexdigest()
         document = {"explanation_id": explanation_id, **semantic}
         payload = _json_bytes(document)
@@ -50,7 +51,7 @@ class ExplanationStore:
         if path.is_symlink() or not path.is_file():
             raise LookupError(f"explanation {explanation_id} does not exist")
         document = json.loads(path.read_bytes())
-        if not isinstance(document, dict) or document.get("schema") != EXPLANATION_SCHEMA:
+        if not isinstance(document, dict) or document.get("schema") != self._schema:
             raise ValueError("stored explanation is invalid")
         stored_id = document.get("explanation_id")
         semantic = {key: value for key, value in document.items() if key != "explanation_id"}

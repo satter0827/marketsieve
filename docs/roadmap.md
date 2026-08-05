@@ -8,10 +8,6 @@ design and release history, not in this file.
 1. Add a Rakuten importer based on anonymized real fixtures and map it to the implemented canonical
    portfolio model.
 
-## 0.6.0 Strategy Lab
-
-1. Compare prompts and models without allowing an LLM to own calculations or decisions.
-
 ## 0.7.0 Screening Workbench
 
 1. Add explicit Japanese and U.S. instrument-universe import and acquisition capabilities.
