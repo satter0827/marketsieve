@@ -216,8 +216,15 @@ def report_document(report: DecisionReport) -> dict[str, object]:
     return {"report_id": report.report_id, **semantic}
 
 
-def render_markdown(report: DecisionReport) -> str:
+def render_markdown(report: DecisionReport, previous_report: DecisionReport | None = None) -> str:
     """Render one stable Japanese Close Brief projection."""
+
+    if report.previous_report_id is None and previous_report is not None:
+        raise ValueError("a first report must not receive a previous report")
+    if report.previous_report_id is not None and (
+        previous_report is None or previous_report.report_id != report.previous_report_id
+    ):
+        raise ValueError("the exact previous report is required for change projection")
 
     counts = {action: 0 for action in DecisionAction}
     for decision in report.decisions:
@@ -228,11 +235,7 @@ def render_markdown(report: DecisionReport) -> str:
         if item.action
         not in {DecisionAction.KEEP, DecisionAction.PASS, DecisionAction.INDETERMINATE}
     )
-    unchanged = tuple(
-        item
-        for item in report.decisions
-        if item.action in {DecisionAction.KEEP, DecisionAction.PASS}
-    )
+    changed, unchanged, removed = _decision_changes(report, previous_report)
     title = "週末作戦会議" if report.session is MarketSession.WEEKLY else "Close Brief"
     conclusion = _conclusion(counts)
     lines = [
@@ -248,7 +251,7 @@ def render_markdown(report: DecisionReport) -> str:
         "",
         "## 3. 前回からの変化",
         "",
-        f"比較元: {report.previous_report_id}" if report.previous_report_id else "初回レポート",
+        *_change_lines(changed, removed),
         "",
         "## 4. 変化なし",
         "",
@@ -277,6 +280,64 @@ def render_markdown(report: DecisionReport) -> str:
             )
         )
     return "\n".join(lines).rstrip() + "\n"
+
+
+def _decision_changes(
+    report: DecisionReport, previous: DecisionReport | None
+) -> tuple[
+    tuple[tuple[InstrumentDecision, InstrumentDecision | None], ...],
+    tuple[InstrumentDecision, ...],
+    tuple[InstrumentDecision, ...],
+]:
+    previous_by_instrument = (
+        {}
+        if previous is None
+        else {(item.instrument.mic, item.instrument.symbol): item for item in previous.decisions}
+    )
+    current_ids: set[tuple[str, str]] = set()
+    changed: list[tuple[InstrumentDecision, InstrumentDecision | None]] = []
+    unchanged: list[InstrumentDecision] = []
+    for current in report.decisions:
+        identity = (current.instrument.mic, current.instrument.symbol)
+        current_ids.add(identity)
+        old = previous_by_instrument.get(identity)
+        if old is not None and (old.action, old.confidence) == (
+            current.action,
+            current.confidence,
+        ):
+            unchanged.append(current)
+        else:
+            changed.append((current, old))
+    removed = tuple(
+        item
+        for identity, item in sorted(previous_by_instrument.items())
+        if identity not in current_ids
+    )
+    return tuple(changed), tuple(unchanged), removed
+
+
+def _change_lines(
+    changed: tuple[tuple[InstrumentDecision, InstrumentDecision | None], ...],
+    removed: tuple[InstrumentDecision, ...],
+) -> tuple[str, ...]:
+    lines: list[str] = []
+    for current, previous in changed:
+        if previous is None:
+            change = (
+                f"新規 → {ACTION_LABELS[current.action]}"
+                f" (確信度 {CONFIDENCE_LABELS[current.confidence]})"
+            )
+        else:
+            change = (
+                f"{ACTION_LABELS[previous.action]} ({CONFIDENCE_LABELS[previous.confidence]})"
+                f" → {ACTION_LABELS[current.action]} ({CONFIDENCE_LABELS[current.confidence]})"
+            )
+        lines.append(f"- {_instrument_key(current.instrument)}: {change}")
+    lines.extend(
+        f"- {_instrument_key(item.instrument)}: 対象外 (前回 {ACTION_LABELS[item.action]})"
+        for item in removed
+    )
+    return tuple(lines) or ("該当なし",)
 
 
 def _conclusion(counts: dict[DecisionAction, int]) -> str:
@@ -313,7 +374,8 @@ class ReportStore:
     def put(self, report: DecisionReport) -> DecisionReport:
         document = report_document(report)
         payload = _json_bytes(document)
-        markdown = render_markdown(report).encode("utf-8")
+        previous = self.show(report.previous_report_id) if report.previous_report_id else None
+        markdown = render_markdown(report, previous).encode("utf-8")
         for directory in (self._objects, self._rendered, self._refs):
             self._ensure_directory(directory)
         self._write_immutable(self._objects / f"{report.report_id}.json", payload)
@@ -381,7 +443,8 @@ class ReportStore:
         path = self._rendered / f"{report_id}.md"
         if path.is_symlink() or not path.is_file():
             raise LookupError(f"rendered report {report_id} does not exist")
-        expected = render_markdown(report)
+        previous = self.show(report.previous_report_id) if report.previous_report_id else None
+        expected = render_markdown(report, previous)
         if path.read_text(encoding="utf-8") != expected:
             raise ValueError("rendered report does not match canonical JSON")
         return expected

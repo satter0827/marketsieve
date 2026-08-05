@@ -341,6 +341,34 @@ def test_markdown_has_stable_conclusion_first_sections() -> None:
         "## 6. データ上の制約",
         "## 7. 詳細と根拠",
     ]
+    assert "新規 →" in markdown
+
+
+def test_markdown_projects_real_decision_changes_and_unchanged_items() -> None:
+    previous = _report()
+    current = _report(
+        action=DecisionAction.WATCH,
+        previous_report_id=previous.report_id,
+    )
+
+    markdown = render_markdown(current, previous)
+
+    assert "XTKS:7203: 保有継続 (中) → 警戒 (中)" in markdown
+    unchanged = markdown.split("## 4. 変化なし", maxsplit=1)[1].split("## 5. 次の一手", maxsplit=1)[
+        0
+    ]
+    assert "XNAS:AAPL: 買い候補" in unchanged
+    assert "XTKS:7203" not in unchanged
+
+
+def test_change_projection_requires_the_exact_previous_report() -> None:
+    previous = _report()
+    current = _report(previous_report_id=previous.report_id)
+
+    with pytest.raises(ValueError, match="exact previous"):
+        render_markdown(current)
+    with pytest.raises(ValueError, match="first report"):
+        render_markdown(previous, previous)
 
 
 def test_report_document_rejects_an_incorrect_identity() -> None:

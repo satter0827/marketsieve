@@ -20,7 +20,6 @@ from marketsieve_cli.adapters.portfolios import (
 from marketsieve_cli.adapters.reports import (
     ReportStore,
     create_report,
-    render_markdown,
     report_document,
 )
 from marketsieve_cli.adapters.snapshots import SnapshotStore
@@ -143,9 +142,9 @@ def render_decision_report(report_id: str) -> str:
 
 
 def project_decision_report(report_id: str) -> str:
-    """Render one report directly from its validated canonical model."""
+    """Read the verified canonical Markdown projection."""
 
-    return render_markdown(build_report_store().resolve(report_id))
+    return render_decision_report(report_id)
 
 
 def build_agent_service(config_path: Path | None = None) -> object:

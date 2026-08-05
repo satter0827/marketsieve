@@ -334,6 +334,10 @@ Markdown uses `rendered/<report_id>.md`, and session references use
 `refs/{jp-latest,us-latest,weekly-latest}.json`. Writes use a temporary sibling and atomic replace.
 A report containing only indeterminate decisions remains inspectable but does not advance a latest
 reference. Reads reconstruct and validate SDK values and reject non-canonical or modified content.
+When a report references a previous report, the store requires that exact immutable object before
+writing or verifying Markdown. The projection classifies a current decision as changed only when
+its action or confidence differs, classifies equal decisions as unchanged, and shows instruments
+entering or leaving the reviewed portfolio explicitly.
 
 ## Personal Close Brief application architecture
 
