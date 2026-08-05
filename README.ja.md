@@ -13,7 +13,7 @@ MarketSieveは、検証済みの市場情報から再現可能な分析、過去
 
 ## 現在の状態
 
-`develop`では0.3.0の基盤をPersonal Close Briefへ拡張しています。CSV、J-Quants、Alpha Vantage、FREDを独立した配布物として扱い、変更不能な検証済みスナップショット、価格・テクニカル・財務・valuation・risk・event・data qualityの総合確認、比較、レポート、説明専用Agentを提供します。Agentは変更不能な判断レポートだけを読み、LM Studio、OpenAI、Anthropic、Googleのいずれかを明示した場合だけ動作します。説明は別成果物として保存され、レポートを変更しません。
+`develop`では0.3.0の基盤をPersonal Close Briefへ拡張しています。CSV、J-Quants、Alpha Vantage、FRED、SECを独立した配布物として扱い、変更不能な検証済みスナップショット、価格・テクニカル・財務・valuation・risk・event・data qualityの総合確認、比較、レポート、説明専用Agentを提供します。Agentは変更不能な判断レポートだけを読み、LM Studio、OpenAI、Anthropic、Googleのいずれかを明示した場合だけ動作します。説明は別成果物として保存され、レポートを変更しません。
 
 ## インストール
 
@@ -23,7 +23,7 @@ Python 3.12から3.14をサポートします。開発にはPython 3.13と[uv](h
 make sync
 ```
 
-SDK、extension API、CLI、Agent、CSV source、J-Quants source、Alpha Vantage source、FRED sourceは独立した配布物としてビルドできます。
+SDK、extension API、CLI、Agent、CSV source、J-Quants source、Alpha Vantage source、FRED source、SEC sourceは独立した配布物としてビルドできます。
 
 ```shell
 make build

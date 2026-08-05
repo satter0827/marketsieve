@@ -20,7 +20,7 @@ the SDK depend on email, LINE, an LLM provider, or a database.
 
 `develop` extends the 0.3.0 foundation toward Personal Close Brief. It currently provides the data
 workbench:
-independent CSV, J-Quants, Alpha Vantage, and FRED sources; immutable verified snapshots; price,
+independent CSV, J-Quants, Alpha Vantage, FRED, and SEC sources; immutable verified snapshots; price,
 financial, and event inspection; seven deterministic technical indicators; and an explanation-only
 Agent. The Agent reads only an immutable decision report and requires an explicit LM Studio,
 OpenAI, Anthropic, or Google provider. Its output is stored separately and cannot change a report.
@@ -34,8 +34,8 @@ Python 3.12 through 3.14 is supported. Development uses Python 3.13 and
 make sync
 ```
 
-The SDK, extension API, CLI, Agent, CSV source, J-Quants source, Alpha Vantage source, and FRED
-source build as independent artifacts:
+The SDK, extension API, CLI, Agent, CSV source, J-Quants source, Alpha Vantage source, FRED source,
+and SEC source build as independent artifacts:
 
 ```shell
 make build

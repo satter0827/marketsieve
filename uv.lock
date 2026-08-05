@@ -12,6 +12,7 @@ members = [
     "marketsieve-source-csv",
     "marketsieve-source-fred",
     "marketsieve-source-jquants",
+    "marketsieve-source-sec",
     "marketsieve-workspace",
 ]
 
@@ -601,12 +602,14 @@ all = [
     { name = "marketsieve-source-csv" },
     { name = "marketsieve-source-fred" },
     { name = "marketsieve-source-jquants" },
+    { name = "marketsieve-source-sec" },
 ]
 all-sources = [
     { name = "marketsieve-source-alphavantage" },
     { name = "marketsieve-source-csv" },
     { name = "marketsieve-source-fred" },
     { name = "marketsieve-source-jquants" },
+    { name = "marketsieve-source-sec" },
 ]
 
 [package.metadata]
@@ -624,6 +627,8 @@ requires-dist = [
     { name = "marketsieve-source-fred", marker = "extra == 'all-sources'", editable = "packages/source-fred" },
     { name = "marketsieve-source-jquants", marker = "extra == 'all'", editable = "packages/source-jquants" },
     { name = "marketsieve-source-jquants", marker = "extra == 'all-sources'", editable = "packages/source-jquants" },
+    { name = "marketsieve-source-sec", marker = "extra == 'all'", editable = "packages/source-sec" },
+    { name = "marketsieve-source-sec", marker = "extra == 'all-sources'", editable = "packages/source-sec" },
     { name = "rich", specifier = ">=14,<15" },
 ]
 provides-extras = ["agent", "all-sources", "all"]
@@ -700,6 +705,21 @@ requires-dist = [
 ]
 
 [[package]]
+name = "marketsieve-source-sec"
+version = "0.3.0"
+source = { editable = "packages/source-sec" }
+dependencies = [
+    { name = "marketsieve" },
+    { name = "marketsieve-extension-api" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "marketsieve", editable = "packages/core" },
+    { name = "marketsieve-extension-api", editable = "packages/extension-api" },
+]
+
+[[package]]
 name = "marketsieve-workspace"
 version = "0.0.0"
 source = { virtual = "." }
@@ -710,6 +730,7 @@ dependencies = [
     { name = "marketsieve-source-csv" },
     { name = "marketsieve-source-fred" },
     { name = "marketsieve-source-jquants" },
+    { name = "marketsieve-source-sec" },
 ]
 
 [package.dev-dependencies]
@@ -734,6 +755,7 @@ requires-dist = [
     { name = "marketsieve-source-csv", editable = "packages/source-csv" },
     { name = "marketsieve-source-fred", editable = "packages/source-fred" },
     { name = "marketsieve-source-jquants", editable = "packages/source-jquants" },
+    { name = "marketsieve-source-sec", editable = "packages/source-sec" },
 ]
 
 [package.metadata.requires-dev]

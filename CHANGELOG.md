@@ -11,6 +11,7 @@ will follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Filing identity, amendment linkage, publication-time filtering, and durable fact-to-filing
   provenance for official financial sources.
+- An independently installable SEC source for filing histories and standard XBRL company facts.
 
 ## [0.3.0] - 2026-08-05
 

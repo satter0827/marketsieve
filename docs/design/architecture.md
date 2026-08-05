@@ -13,7 +13,8 @@ The root workspace catalog declares every public distribution, and all entries s
 I/O-independent SDK. `marketsieve-extension-api` defines the implemented daily-bar import contract,
 `marketsieve-source-csv` implements local import, `marketsieve-source-jquants` implements explicit
 J-Quants API V2 acquisition, `marketsieve-source-alphavantage` implements explicit Alpha Vantage
-acquisition, `marketsieve-source-fred` implements explicit FRED economic-series acquisition, and
+acquisition, `marketsieve-source-fred` implements explicit FRED economic-series acquisition,
+`marketsieve-source-sec` implements explicit SEC filing and company-fact acquisition, and
 `marketsieve-cli` owns the executable application and immutable
 snapshot store.
 The optional `marketsieve-agent` distribution implements decision-report fact selection,
@@ -101,7 +102,7 @@ installations without an operating-system timezone database.
 Analysis and synthetic modules do not reference one another; the application combines them through
 the daily-source contract.
 Sources that perform file or network I/O are separate distributions. CSV, J-Quants, Alpha
-Vantage, and FRED are working sources.
+Vantage, FRED, and SEC are working sources.
 
 ## CSV acquisition and snapshot path
 
@@ -198,6 +199,25 @@ or a changing total. The provider's `.` marker becomes an explicit missing date.
 authentication, redirect, rate-limit, malformed-response, and safety-limit failures stop the exact
 request without retry, transformation, series substitution, or fallback. Tests inject the
 transport and do not contact FRED.
+
+## SEC acquisition path
+
+`marketsieve-source-sec` reads only the official filer submissions and XBRL company-facts JSON
+resources on `data.sec.gov`. A profile supplies one ten-digit CIK and supported periodic forms.
+The adapter never infers a CIK from a ticker, downloads filing documents, or evaluates custom
+taxonomies. Additional submission-history files are fetched only when their declared date range
+overlaps the exact request.
+
+Every request carries the operator-supplied `SEC_USER_AGENT` organization and contact value required
+for fair access. The value is sent only in the header and is not retained. Redirects, fair-access
+rejections, rate limits, missing resources, oversized payloads, and malformed responses fail
+without retry or fallback.
+
+Each accepted filing retains its accession number, SEC acceptance instant, form, report end, and an
+unambiguous amendment link when the original filing is present in the same result. Supported
+US-GAAP and IFRS company facts retain taxonomy tags, units, periods, values, and accession links.
+The adapter maps only named standard concepts, rejects conflicting duplicates, and never derives
+cash flow or other values inside the source.
 
 Source registration, priority, fallback, authentication, retries, rate-limit handling, caching,
 and provider-symbol mapping belong to the application or adapter packages. A source must not:
