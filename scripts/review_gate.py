@@ -14,6 +14,8 @@ from typing import Any
 
 from jsonschema import Draft202012Validator
 
+from scripts.secret_gate import scan_patch_text, scan_paths
+
 ROOT = Path(__file__).parents[1]
 STATE_ROOT = ROOT / ".marketsieve"
 SCHEMA_VERSION = "2.0.0"
@@ -79,12 +81,11 @@ def tool_version(*command: str) -> str:
 def render_summary(report: dict[str, Any]) -> str:
     failures = [item for item in report["checks"] if item["status"] != "passed"]
     findings = report["findings"]
-    report_results = report.get("cli", {}).get("report", {}).get("reports", [])
-    cli_lines = [
-        f"- {item['market'].upper()}: status={item['latest']['status']}, "
-        f"transitions={len(item['transitions'])}, report={item['report_id']}"
-        for item in report_results
-    ]
+    cli_report = report.get("cli", {}).get("report", {})
+    section_statuses = cli_report.get("section_statuses", {})
+    cli_lines = [f"- {name}: status={status}" for name, status in sorted(section_statuses.items())]
+    if cli_report.get("report_id"):
+        cli_lines.append(f"- report={cli_report['report_id']}")
     lines = [
         "# Review Summary",
         "",
@@ -133,6 +134,43 @@ def load_metrics(evidence: Path) -> tuple[int, float]:
     return tests, float(coverage["totals"]["percent_covered"])
 
 
+def redact_patch(path: Path) -> None:
+    findings = scan_patch_text(str(path), path.read_text(encoding="utf-8"))
+    if any(finding.line <= 0 for finding in findings):
+        raise RuntimeError("review patch contains content that cannot be safely redacted")
+    lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
+    redacted_lines = {finding.line for finding in findings}
+    for finding in findings:
+        if finding.kind != "private_key":
+            continue
+        end_line = next(
+            (
+                index
+                for index in range(finding.line - 1, len(lines))
+                if (
+                    lines[index][1:] if lines[index].startswith(("+", "-", " ")) else lines[index]
+                ).find("-----END ")
+                >= 0
+                and "PRIVATE KEY-----" in lines[index]
+            ),
+            None,
+        )
+        if end_line is None:
+            raise RuntimeError("review patch contains an unterminated private-key block")
+        redacted_lines.update(range(finding.line, end_line + 2))
+    for line_number in redacted_lines:
+        original = lines[line_number - 1]
+        prefix = original[0] if original.startswith(("+", "-", " ")) else ""
+        newline = "\n" if original.endswith("\n") else ""
+        lines[line_number - 1] = f"{prefix}[REDACTED CREDENTIAL]{newline}"
+    path.write_text("".join(lines), encoding="utf-8")
+
+
+def ensure_secret_free(paths: list[Path]) -> None:
+    if scan_paths(paths):
+        raise RuntimeError("review bundle contains credential-like or unscannable content")
+
+
 def create(base_value: str, head_value: str, evidence: Path, output: Path) -> None:
     base = resolve_commit(base_value)
     head = resolve_commit(head_value)
@@ -149,7 +187,9 @@ def create(base_value: str, head_value: str, evidence: Path, output: Path) -> No
     shutil.copy2(evidence / "logs.jsonl", resolved / "logs.jsonl")
 
     patch = capture("git", "diff", "--no-color", "--no-ext-diff", "--unified=3", base, head)
-    (resolved / "changes.patch").write_text(patch + ("\n" if patch else ""), encoding="utf-8")
+    patch_path = resolved / "changes.patch"
+    patch_path.write_text(patch + ("\n" if patch else ""), encoding="utf-8")
+    redact_patch(patch_path)
 
     tests, branch_coverage = load_metrics(evidence_output)
     smoke = json.loads((evidence_output / "smoke.json").read_text(encoding="utf-8"))
@@ -194,6 +234,7 @@ def create(base_value: str, head_value: str, evidence: Path, output: Path) -> No
     )
     (resolved / "summary.md").write_text(render_summary(report), encoding="utf-8")
     files = sorted(path for path in resolved.rglob("*") if path.is_file())
+    ensure_secret_free(files)
     checksums = "".join(f"{sha256(path)}  {path.relative_to(resolved)}\n" for path in files)
     (resolved / "SHA256SUMS").write_text(checksums, encoding="utf-8")
     validate(resolved)
@@ -228,6 +269,9 @@ def validate(bundle: Path) -> None:
     }
     if checksummed != expected_files:
         raise RuntimeError("SHA256SUMS does not cover exactly the bundle files")
+    ensure_secret_free(
+        sorted(path for path in bundle.rglob("*") if path.is_file() and path.name != "SHA256SUMS")
+    )
     for artifact in report["artifacts"]:
         artifact_path = safe_bundle_path(bundle, artifact["path"])
         if sha256(artifact_path) != artifact["sha256"]:

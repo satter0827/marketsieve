@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 MarketSieve is an open-source Python foundation for reproducible analysis of Japanese and U.S.
-equities. The public SDK and the repository-local operational application have separate dependency
+equities. The public SDK and CLI application have separate dependency
 boundaries so market logic can remain independent from data providers, report agents, and delivery
 channels.
 
@@ -18,11 +18,12 @@ the SDK depend on email, LINE, an LLM provider, or a database.
 
 ## Current status
 
-`0.1.0` is the current public baseline. The `marketsieve` package exposes validated
-exchange-qualified instruments, daily-bar contracts, deterministic Japanese and U.S. synthetic
-sources, SMA20 state-change analysis, time-correct historical replay, and channel-neutral reports.
-The repository-local CLI presents the same evidence-backed report for people and machine clients;
-it is not an investment recommendation.
+`0.3.0` is the release candidate on `develop`. It provides the complete data workbench:
+independent CSV, J-Quants, and Alpha Vantage sources; immutable verified snapshots; price,
+financial, and event inspection; seven deterministic technical indicators; and an explanation-only
+Agent. FakeListLLM is the default. LM Studio and explicitly consented OpenAI, Anthropic, or Google
+calls use the same grounded pipeline. The CLI presents evidence and missing-data reasons, not an
+investment recommendation.
 
 ## Installation
 
@@ -33,42 +34,63 @@ Python 3.12 through 3.14 is supported. Development uses Python 3.13 and
 make sync
 ```
 
-The public SDK can be built independently:
+The SDK, extension API, CLI, Agent, CSV source, J-Quants source, and Alpha Vantage source build as
+independent artifacts:
 
 ```shell
 make build
 ```
 
+Published releases use a checksummed GitHub Release wheelhouse rather than PyPI. After verifying
+the assets against `release.json`, extract the wheelhouse ZIP and install offline:
+
+```shell
+python -m pip install --no-index --find-links ./marketsieve-wheelhouse \
+  "marketsieve-cli[all-sources]"
+```
+
+Install `marketsieve-cli[all]` from the same wheelhouse to include the optional Agent as well as all
+sources.
+
 ## CLI
 
-The CLI belongs to the repository-local application and is not included in the public SDK wheel.
-Its current commands perform no network requests and require no secrets.
+The public `marketsieve-cli` distribution depends on, but is not included in, the SDK wheel. Read
+commands are offline. Only an explicit provider fetch reads its provider credential from the
+environment and accesses the network.
 
 ```shell
 uv run marketsieve --version
 make doctor
-make report
-make report-json
 make capabilities-json
 ```
 
-`make report` uses a Rich terminal view when available and falls back to ANSI-free text when output
-is redirected. `make report-json` emits the versioned report contract. `make capabilities-json`
-describes commands, options, schemas, exit codes, streams, and side effects for AI clients.
+`make capabilities-json` describes commands, options, schemas, exit codes, streams, and side
+effects for AI clients. Inspection, analysis, comparison, and report commands read only verified
+local snapshots; acquisition is always explicit.
 
 The direct commands expose all output modes:
 
 ```shell
 uv run marketsieve doctor --output json
-uv run marketsieve report --market all --output rich
 uv run marketsieve capabilities --output json
+uv run marketsieve source list --output json
+uv run marketsieve source import ./example-bundle --output json
+uv run marketsieve --config marketsieve.toml source fetch us XNAS:MSFT --start 2026-01-01 --end 2026-07-31 --output json
+uv run marketsieve snapshot verify SNAPSHOT_ID --output json
+uv run marketsieve inspect XTKS:7203 --source-profile offline-jp --output json
+uv run marketsieve analyze rsi XTKS:7203 --period 14 --source-profile offline-jp --output json
+uv run marketsieve compare XTKS:7203 XTKS:6758 --source-profile offline-jp --output json
+uv run marketsieve report XTKS:7203 --source-profile offline-jp --format rich
+uv run marketsieve agent explain XTKS:7203 --source-profile offline-jp --output json
+uv run marketsieve --config marketsieve.toml agent explain XTKS:7203 --source-profile offline-jp --provider openai --dry-run --output json
 ```
 
 ## Architecture
 
-The public SDK lives under `packages/core`. The operational application lives under
-`apps/marketsieve` and depends on the SDK. The SDK cannot import the application or infrastructure
-libraries. See the [documentation index](docs/README.md) and formal
+The public SDK lives under `packages/core`, the implemented extension contract under
+`packages/extension-api`, provider adapters under `packages/source-*`, and the CLI under
+`packages/cli`. The SDK cannot import application or infrastructure libraries. See the
+[documentation index](docs/README.md) and formal
 [Architecture](docs/design/architecture.md) for the dependency rules.
 
 ## Development
@@ -97,9 +119,8 @@ request is the release boundary. See [Contributing](CONTRIBUTING.md) for the wor
 
 ## Roadmap
 
-The historical-report path is the `0.1.0` baseline. External data sources and personal delivery
-channels remain later milestones. See the [Roadmap](docs/roadmap.md) and the
-[formal design](docs/design/README.md).
+The 0.2 workbench and 0.3 grounded explanation Agent are complete on `develop`. See the
+[Roadmap](docs/roadmap.md) and the [formal design](docs/design/README.md).
 
 ## License
 

@@ -3,20 +3,23 @@ from __future__ import annotations
 import hashlib
 import json
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
 import pytest
+import scripts.release_gate as release_gate
 import scripts.review_gate as review_gate
 from scripts.github_repository import repository_name
 from scripts.governance_gate import normalized_ruleset
 from scripts.release_gate import validate_inputs, validate_source_release
 from scripts.review_gate import SCHEMA_VERSION, render_summary, validate
+from scripts.runtime_wheelhouse import SUPPORTED_PYTHON_VERSIONS, download_command
 
 
 def test_release_inputs_require_pep440_version_and_complete_commit() -> None:
-    validate_inputs("0.1.0", "a" * 40)
-    validate_source_release("0.1.0")
+    validate_inputs("0.3.0", "a" * 40)
+    validate_source_release("0.3.0")
 
     with pytest.raises(ValueError, match="version"):
         validate_inputs("v0.1", "a" * 40)
@@ -24,6 +27,39 @@ def test_release_inputs_require_pep440_version_and_complete_commit() -> None:
         validate_inputs("0.1.0.dev0", "a" * 40)
     with pytest.raises(ValueError, match="commit"):
         validate_inputs("0.1.0", "abc")
+
+
+def test_release_artifacts_are_secret_scanned(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    commands: list[tuple[str, ...]] = []
+    monkeypatch.setattr(release_gate, "run", commands.append)
+
+    paths = (tmp_path / "sdk.whl", tmp_path / "release.json")
+    release_gate.verify_secrets(paths)
+
+    assert commands == [
+        (
+            sys.executable,
+            str(release_gate.ROOT / "scripts" / "secret_gate.py"),
+            "--path",
+            str(paths[0]),
+            "--path",
+            str(paths[1]),
+        )
+    ]
+
+
+def test_runtime_wheelhouse_downloads_every_supported_python_version(tmp_path: Path) -> None:
+    assert SUPPORTED_PYTHON_VERSIONS == ("3.12", "3.13", "3.14")
+    command = download_command(
+        tmp_path / "python", tmp_path / "requirements.txt", tmp_path / "wheels", "3.12"
+    )
+
+    assert command[0] == str(tmp_path / "python")
+    assert command[command.index("--python-version") + 1] == "3.12"
+    assert "--only-binary=:all:" in command
+    assert "--require-hashes" in command
 
 
 def test_governance_ruleset_comparison_ignores_github_metadata() -> None:
@@ -112,6 +148,50 @@ def test_review_changes_normalize_renames_as_delete_and_add(
     ]
 
 
+def test_review_patch_redacts_removed_credentials(tmp_path: Path) -> None:
+    value = "sk-" + "A" * 24
+    patch = tmp_path / "changes.patch"
+    patch.write_text(f"-OPENAI_API_KEY={value}\n+safe\n", encoding="utf-8")
+
+    review_gate.redact_patch(patch)
+
+    assert patch.read_text(encoding="utf-8") == "-[REDACTED CREDENTIAL]\n+safe\n"
+
+
+def test_review_patch_redacts_generic_added_assignment(tmp_path: Path) -> None:
+    key = "JQUANTS_" + "API_KEY"
+    patch = tmp_path / "changes.patch"
+    patch.write_text(f"+{key}=opaque-production-credential\n", encoding="utf-8")
+
+    review_gate.redact_patch(patch)
+
+    assert patch.read_text(encoding="utf-8") == "+[REDACTED CREDENTIAL]\n"
+
+
+def test_review_patch_redacts_complete_private_key_block(tmp_path: Path) -> None:
+    patch = tmp_path / "changes.patch"
+    header = "-----BEGIN " + "PRIVATE KEY-----"
+    footer = "-----END " + "PRIVATE KEY-----"
+    patch.write_text(f"-{header}\n-private-material\n-{footer}\n+safe\n", encoding="utf-8")
+
+    review_gate.redact_patch(patch)
+
+    assert patch.read_text(encoding="utf-8") == (
+        "-[REDACTED CREDENTIAL]\n-[REDACTED CREDENTIAL]\n-[REDACTED CREDENTIAL]\n+safe\n"
+    )
+
+
+def test_review_patch_redacts_escaped_private_key_on_one_line(tmp_path: Path) -> None:
+    patch = tmp_path / "changes.patch"
+    header = "-----BEGIN " + "PRIVATE KEY-----"
+    footer = "-----END " + "PRIVATE KEY-----"
+    patch.write_text(f'-KEY="{header}\\nmaterial\\n{footer}"\n+safe\n', encoding="utf-8")
+
+    review_gate.redact_patch(patch)
+
+    assert patch.read_text(encoding="utf-8") == "-[REDACTED CREDENTIAL]\n+safe\n"
+
+
 def create_review_bundle(tmp_path: Path) -> Path:
     head = subprocess.run(
         ("git", "rev-parse", "HEAD"), check=True, capture_output=True, text=True
@@ -139,14 +219,16 @@ def create_review_bundle(tmp_path: Path) -> Path:
                 "exit_code": 0,
                 "schema_valid": True,
                 "reproducible": True,
-                "reports": [
-                    {
-                        "market": "jp",
-                        "latest": {"status": "ok"},
-                        "transitions": [],
-                        "report_id": "a" * 64,
-                    }
-                ],
+                "report_id": "a" * 64,
+                "section_statuses": {
+                    "price": "available",
+                    "technical": "partial",
+                    "financial": "unavailable",
+                    "valuation": "unavailable",
+                    "risk": "unavailable",
+                    "events": "unavailable",
+                    "data_quality": "partial",
+                },
             },
         },
         "artifacts": [

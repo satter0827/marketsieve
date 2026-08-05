@@ -28,7 +28,7 @@
               "secrets": {"const": false},
               "optional_writes": {
                 "type": "array",
-                "items": {"enum": ["log_file"]},
+                "items": {"enum": ["log_file", "snapshot"]},
                 "uniqueItems": true
               }
             },

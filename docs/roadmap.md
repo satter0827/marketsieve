@@ -3,50 +3,46 @@
 The roadmap orders planned outcomes by dependency and evidence. It is not a description of current
 behavior; current and approved near-term constraints live in the [formal design](design/README.md).
 
-## Foundation — complete
+## Foundation and 0.1.0 — complete
 
-- Build and install the typed `marketsieve` SDK.
-- Run the repository-local CLI without network access or secrets.
-- Enforce dependency and distribution boundaries in local and CI gates.
-- Establish the `develop -> main` release-review path.
+- Publish the typed, I/O-independent `marketsieve` SDK.
+- Validate exchange-qualified daily bars with deterministic Japanese and U.S. synthetic data.
+- Prove deterministic evidence with the initial SMA20 preview.
+- Establish reproducible local, review, develop, and release gates.
 
-## Offline Analysis Preview — complete
+## 0.2.0 Data Workbench — approved
 
-- Define exchange-aware instruments, currencies, sessions, and timezone-aware observations.
-- Reject ambiguous symbols and naive timestamps at public boundaries.
-- Document adjustment and as-of semantics before accepting historical data.
-- Add licensed-for-repository synthetic daily fixtures for Japanese and U.S. equities.
-- Implement SMA20 and an explainable close-versus-SMA20 state-change signal.
-- Demonstrate the complete synthetic-data-to-evidence path through an offline command.
+Each milestone must remain usable without later milestones.
 
-The preview validates the first data-kind-specific source contract with its synthetic implementation
-and tests. It publishes no file or network adapters.
+1. ~~Establish the target design, repository secret controls, and redacted evidence policy.~~
+2. ~~Publish an independently installable CLI and build a checksummed multi-package wheelhouse.~~
+3. ~~Prove the extension contract with CSV import, immutable daily-bar snapshots, and price inspection.~~
+4. ~~Replace SMA20-specific analysis with SMA, EMA, RSI, MACD, ATR, return, and drawdown results.~~
+5. ~~Add J-Quants API V2 price and instrument profile acquisition with explicit profile selection.~~
+6. ~~Add J-Quants financial and event facts with explicit availability.~~
+   - ~~Normalize financial summaries, explicitly selected dividends, and earnings schedules.~~
+   - ~~Keep J-Quants split events missing rather than relabeling a price adjustment factor as a
+     confirmed split.~~
+7. ~~Add Alpha Vantage capabilities without weakening raw, adjusted, range, or plan requests.~~
+8. ~~Complete financial, valuation, risk, comparison, and deterministic report projections.~~
+9. ~~Verify the same GitHub Release wheelhouse on every supported Python version before a human
+   `develop -> main` promotion.~~
 
-## 0.1.0 — complete
+## 0.3.0 Grounded Report Agent — approved
 
-- Add historical replay that prevents future-information leakage.
-- Generate channel-neutral template reports with evidence references.
-- Deliver reports through a console adapter.
+1. ~~Build a fact-selection pipeline with FakeListLLM and deterministic template fallback.~~
+2. ~~Add loopback-only-by-default LM Studio through its OpenAI-compatible endpoint.~~
+3. ~~Add explicit, separately tested OpenAI, Anthropic, and Google integrations.~~
+4. ~~Reject ungrounded, numeric, unsafe, or recommendation-like model content before rendering.~~
+5. ~~Require per-invocation cloud consent and expose credential-free payload dry runs.~~
+6. ~~Verify the multi-package artifacts before a human `develop -> main` promotion.~~
 
-This path defines the first stable public SDK release.
+## Later outcomes
 
-## External source expansion
+- Add screening only after an instrument-universe contract and bounded expression language exist.
+- Add news only after licensing, deduplication, reliability, and prompt-injection rules are approved.
+- Add persistent operational state only when scheduling or delivery provides a working use case.
+- Add SMTP and LINE delivery only after receipts, retries, idempotency, and recipient protection.
 
-- Add a CSV daily-bar adapter as the first file-backed extension.
-- Add J-Quants and Alpha Vantage daily-bar adapters independently after reviewing authentication,
-  plans, terms, coverage, rate limits, and redistribution constraints.
-- Keep each provider in a separate adapter and distribution with its own dependencies and tests.
-- Add application-owned source selection and narrowly classified fallback only after at least two
-  implementations establish the need.
-
-## Personal operation
-
-- Persist operational state and delivery receipts independently from structured logs.
-- Add SMTP email delivery, followed by LINE Messaging API delivery.
-- Add schedules as external interfaces into the same application pipeline.
-
-## Assisted reporting
-
-- Publish a report-agent port with the first template and LLM implementations.
-- Give report agents validated facts rather than raw authority over calculations or alert decisions.
-- Store model, prompt, input, output, and evidence provenance without exposing secrets or recipients.
+Automatic provider fallback, provider merging, foreign-exchange conversion, investment scoring,
+recommendations, portfolio management, and trading operations are not planned outcomes.

@@ -2,9 +2,10 @@
 
 ## Supported current operation
 
-MarketSieve currently supports local development, public SDK builds, version reporting, offline
-diagnostics, and historical synthetic-data reports on Python 3.12 through 3.14. Python 3.13 is the
-primary development version.
+MarketSieve currently supports local development, public distribution builds, offline analysis,
+immutable CSV snapshots, explicit J-Quants price, financial-summary, dividend, and earnings
+acquisition, and explicit Alpha Vantage price, profile, financial-statement, earnings, dividend,
+and split acquisition on Python 3.12 through 3.14. Python 3.13 is the primary development version.
 
 ```shell
 make sync
@@ -16,8 +17,9 @@ make capabilities-json
 make build
 ```
 
-These operations require no secrets, provider accounts, network data, database, scheduler, or
-delivery configuration. The application does not persist operational state.
+The listed development and synthetic-report operations require no secrets or provider accounts.
+J-Quants fetch is a separate explicit operation that requires its environment credential and writes
+an immutable snapshot below `.marketsieve/data`.
 
 Project-local caches and generated artifacts are rooted at `.marketsieve`. The `.venv` directory is
 the only repository-root development environment. Human, agent, editor, and CI workflows use the
@@ -63,7 +65,100 @@ the operation to stop. They do not expose environment secrets or silently switch
 
 ## Unsupported operation
 
-Live-data acquisition, scheduled execution, persistent state, non-console delivery, provider
-fallback, and LLM-assisted reporting are not supported operations. When later milestones introduce them,
+Scheduled execution, non-console delivery, provider fallback, and LLM-generated calculations are not
+supported operations. When later milestones introduce them,
 their configuration, recovery, observability, and secret-handling procedures must be added here in
 the same change.
+
+## Approved 0.2 operation
+
+Shareable, non-secret source profiles and analysis settings live in `marketsieve.toml`. Generated
+snapshots, references, logs, caches, and artifacts live below `.marketsieve`. A source profile names
+the distribution and entry point selected for each data kind. Listing installed entry-point
+metadata does not load plugin code; doctor and fetch load only the selected profile.
+
+Acquisition is explicit and may use network access and provider credentials. Inspection, analysis,
+comparison, report rendering, and snapshot verification are offline. Credentials enter through
+provider-specific environment variables only. MarketSieve does not load `.env` files, persist
+credential values, or pass the complete parent environment to child processes.
+
+The implemented J-Quants profile shape is:
+
+```toml
+[source_profiles.japan]
+currency = "JPY"
+timezone = "Asia/Tokyo"
+
+[source_profiles.japan.daily_bars]
+plugin = "jquants"
+
+[source_profiles.japan.daily_bars.settings]
+timeout_seconds = 30
+
+[source_profiles.japan.financials]
+plugin = "jquants"
+
+[source_profiles.japan.events]
+plugin = "jquants"
+
+[source_profiles.japan.events.settings]
+event_types = "earnings"
+```
+
+The API origin is fixed by the adapter to prevent credential forwarding to another host.
+`JQUANTS_API_KEY` is read from the invoking process only. MarketSieve does not obtain or refresh
+provider tokens, print response bodies on failure, or copy the credential into logs and snapshots.
+
+The individual J-Quants API V2 product page,
+[official Python client](https://github.com/J-Quants/jquants-api-client-python), daily-bars, instrument-master,
+financial-summary, dividend, and earnings-calendar contracts, plan presentation, and terms were
+reviewed on 2026-08-04. Financial summary and earnings calendar are available from Free; dividend
+requires Premium according to the reviewed plan. `event_types` therefore defaults to `earnings` and
+must include `dividend` explicitly before that endpoint is called. Provider plan entitlements, rate
+limits, retention rights, and terms remain external policy rather than a frozen MarketSieve
+contract. The adapter does not claim that a configured plan supports a range, does not retain raw
+responses, and preserves HTTP authorization and limit failures for the operator. Before a release,
+maintainers recheck the official [J-Quants site](https://jpx-jquants.com/) and endpoint contracts
+instead of relying on fixtures as legal or commercial authority.
+
+Alpha Vantage uses only `https://www.alphavantage.co/query` and reads
+`ALPHAVANTAGE_API_KEY` from the invoking environment. Official documentation reviewed on 2026-08-04
+identifies raw compact daily data as available to free and premium keys, raw full history as
+premium, and daily adjusted as premium. The adapter records the configured plan rather than
+probing or downgrading it. Raw responses are hashed but not persisted. Provider documentation and
+terms must be rechecked before a live release test or any change to raw-storage policy.
+
+Content-addressed objects are written to a temporary sibling directory, verified, and atomically
+renamed. Raw responses are retained only when the adapter's approved terms policy permits local
+retention and its redaction step succeeds. Mutable references can be rebuilt from verified object
+manifests.
+
+GitHub Release is the approved distribution channel. Release evidence contains every wheel and
+source distribution, a wheelhouse archive, constraints, a SHA-256 manifest, and compatibility
+results. The build-once job includes locked runtime wheels for Python 3.12, 3.13, and 3.14 on the
+release runner platform; every compatibility job verifies and installs that same checksummed
+artifact without regenerating dependencies. PyPI publication remains disabled, so installation uses an unpacked wheelhouse with
+`pip --no-index --find-links`.
+
+## Approved 0.3 operation
+
+FakeListLLM remains the default model. LM Studio accepts loopback endpoints by default. A cloud
+provider requires explicit provider configuration and `--allow-cloud` on every invocation. Dry-run
+shows the credential-free fact payload without contacting a model. Provider, model, prompt version,
+fact-catalog hash, selected fact identifiers, output status, and fallback reason are recorded; API
+keys and unrestricted prompts or responses are not written to logs.
+
+The implemented configuration contains only model destinations:
+
+```toml
+[agent.providers.lmstudio]
+model = "locally-installed-model"
+endpoint = "http://127.0.0.1:1234/v1"
+
+[agent.providers.openai]
+model = "explicit-cloud-model"
+```
+
+Cloud credentials are read from `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, or `GOOGLE_API_KEY` only
+after a non-dry-run invocation selects that provider. `LMSTUDIO_API_TOKEN` is optional. Dry-run and
+doctor perform no model request and do not read a cloud credential.

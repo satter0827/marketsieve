@@ -11,25 +11,29 @@ The Offline Analysis Preview tests:
 - OHLC and volume invariants, date ordering, duplicates, and requested ranges;
 - raw versus adjusted semantics, completeness, and provenance;
 - deterministic Japanese and U.S. synthetic fixtures;
-- SMA20 arithmetic independent of ambient decimal precision, exact 20-observation boundaries,
-  equality, and state transitions;
+- all seven indicator definitions independent of ambient decimal precision with exact warm-up
+  boundaries;
 - explicit insufficient history and the absence of future-information leakage across UTC offsets
   and daylight-saving folds;
 - stable evidence and results for identical inputs;
-- the source contract against its first synthetic implementation.
-
-The 0.1.0 historical report additionally tests:
-
-- independent source retrieval at every replay instant and rejection of invalid schedules;
-- stable replay, report, and evidence identities for identical inputs;
-- latest-state and transition-only report projection across sparse, insufficient, and repeated
-  replay points;
-- Rich, text, and schema-valid JSON projections across TTY and non-TTY output;
+- the source contracts against synthetic transports;
+- stable snapshot, section, comparison, report, and evidence identities for identical inputs;
+- Japanese and English Rich, text, and schema-valid JSON projections;
 - capability metadata against the actual command and option definitions;
 - user output, errors, and opt-in structured logs on their defined streams.
 
 Tests cover unit behavior, application integration, CLI execution, and structural boundaries. No
 test depends on network access, provider credentials, local portfolio data, or wall-clock timing.
+
+The CSV snapshot vertical slice additionally tests strict manifest metadata, publication and
+retrieval availability, path containment, deterministic object identity, idempotent import,
+normalized-content tamper detection, interrupted-write exclusion, explicit plugin metadata, and
+the offline import-to-inspect CLI path.
+
+Indicator acceptance uses fixed reference vectors for all seven definitions, exact warm-up
+boundaries, invalid parameter checks, stable evidence, canonical decimals, and an ambient Decimal
+context changed to two digits. CLI tests validate schema-conforming analysis from a stored CSV
+snapshot and explicit technical-section incompleteness.
 
 ## Repository acceptance
 
@@ -62,9 +66,12 @@ After semantic review succeeds, `make review-attest REVIEWED_SHA=<full-commit-sh
 matching local evidence and clean HEAD before publishing the `Pre-PR Review` commit status. The
 develop ruleset requires that status for the current head; a later commit cannot inherit it.
 
-The Release Gate builds the SDK distribution once and verifies the same artifact on every supported
-Python version. It admits only a same-repository `develop -> main` pull request. Tags, GitHub
-Releases, and package publication remain separate human-authorized operations.
+The Release Gate builds all seven public distributions and the locked multi-Python runtime
+wheelhouse once, then verifies and installs the same checksummed artifact set on every supported
+Python version. Compatibility jobs do not compare against runner-local regenerated dependencies.
+It admits only a same-repository
+`develop -> main` pull request. Tags, GitHub Releases, and package publication remain separate
+human-authorized operations.
 
 Repository-owned machine contracts use JSON Schema Draft 2020-12. Each schema has a stable
 identifier and a SemVer payload version: breaking changes increment major, compatible field
@@ -87,3 +94,30 @@ make evidence
 
 A failure is corrected and the affected checks are rerun. Environment or tool failures are reported
 as such and are not presented as successful test evidence.
+
+## Approved 0.2 and 0.3 acceptance additions
+
+The target gate adds deterministic reference vectors for every indicator, ambient-decimal-context
+tests, snapshot identity and atomicity tests, publication-versus-retrieval availability tests, and
+contract suites shared by CSV, J-Quants, and Alpha Vantage. Network clients are injected. Default
+tests use synthetic responses and never require accounts, credentials, wall-clock timing, or
+network access. Live provider checks use an explicit marker and manual credentials.
+
+CLI acceptance covers Japanese and English Rich and text projections, versioned JSON, partial
+sections, incompatible comparison warnings, installed plugin metadata without plugin import, and
+execution of only the selected source profile. Package acceptance builds and installs the SDK,
+extension API, CLI, and each source independently before verifying their wheelhouse combinations on
+Python 3.12 through 3.14.
+
+Agent acceptance uses FakeListLLM for ordinary tests and mocked transports for each real provider.
+It covers invalid schemas, unknown facts, numeric additions, recommendation language, timeouts,
+cloud consent, loopback restrictions, and deterministic fallback. Fake tests prove orchestration
+and safety behavior, not provider model behavior.
+
+CLI acceptance additionally verifies Fake as the default, a credential-free cloud dry-run over the
+same catalog hash, configuration-only local doctor, and refusal of cloud execution without consent.
+
+Secret acceptance scans tracked files, the reviewed diff, generated evidence, distributions, and
+release assets without printing matched values. CI also scans repository history. Tests ensure
+credentials are removed from URLs, headers, exceptions, logs, subprocess environments, and stored
+request metadata.

@@ -1,8 +1,8 @@
 # Domain
 
-This document defines the current market-data, analysis, replay, and report semantics. The public
-types live below `marketsieve.domain`, `marketsieve.data`, `marketsieve.analysis`,
-`marketsieve.reporting`, and `marketsieve.synthetic`.
+This document defines current market-data, indicator, financial-fact, and evidence semantics. The
+public types live below `marketsieve.domain`, `marketsieve.data`, `marketsieve.analysis`, and
+`marketsieve.synthetic`.
 
 ## Instrument identity
 
@@ -49,36 +49,88 @@ are not fabricated, forward-filled, or substituted with a different frequency.
 
 ## Analysis and evidence
 
-SMA20 is the exact arithmetic mean of the latest 20 eligible closing observations as of the
-analysis date. Its value and comparison do not depend on the process-wide decimal context. A state
-identifies whether the latest close is above, below, or equal to SMA20. A reported state change
-exists only when two consecutive valid replay points have different states; a point does not report
-changes inferred from observations that were not evaluated by the replay.
-
-Insufficient history is an explicit non-signal result. A state change is an observed market-data
-condition, not a buy, sell, suitability, or risk recommendation.
+SMA, EMA, RSI, MACD, ATR, period return, and maximum drawdown have versioned definitions and fixed
+local numeric policy. Insufficient history is an explicit non-signal result. Indicators describe
+observed market data and are not buy, sell, suitability, or risk recommendations.
 
 Evidence identifies the validated inputs, date range, indicator definition, computed value, and
 decision rule used for a result. The same inputs and analysis definition produce the same evidence
 identity and result.
 
-## Historical replay
+## Availability model
 
-A replay evaluates one exact daily-bar request at a non-empty sequence of unique timezone-aware
-as-of instants that is strictly increasing after UTC normalization. The source is loaded
-independently at every instant. A replay does
-not derive earlier results by truncating the final dataset because that dataset may contain values
-revised after an earlier evaluation instant.
+CSV acquisition distinguishes four related values:
 
-Each replay point retains its as-of instant, analysis result, provenance, and evidence identity.
-Insufficient history is a successful replay point. Identical requests, evaluation instants, source
-responses, and analysis definitions produce the same replay identity.
+- `observation_date` identifies the market or accounting period being described;
+- `published_at` identifies when the source or issuer made the fact available, when known;
+- `retrieved_at` identifies when MarketSieve acquired the response;
+- `availability_basis` is `published` or `retrieval` and identifies which instant bounds as-of use.
 
-## Historical report
+A fact without a verified publication instant uses retrieval availability and cannot support a claim
+about knowledge before it was retrieved. Historical coverage is not evidence of historical
+availability. Restated facts retain their revision identity rather than replacing earlier snapshot
+evidence.
 
-The SMA20 replay report contains the latest evaluated result and only changes observed between
-consecutive valid replay points. Insufficient-history points and repeated snapshots do not create
-transitions. It references the replay, provenance, and analysis evidence without changing
-calculated facts. The report is channel-neutral and contains no recommendation, forecast, or
-suitability decision. Its identity is derived from normalized report content rather than rendered
-text.
+Normalized daily bars retain the trading date and selected availability instant. Financial facts
+retain the provider publication instant and fiscal period. Events with a provider publication time
+use it; an earnings schedule without one uses retrieval availability and cannot enter an earlier
+knowledge-as-of view. Snapshot manifests separately retain retrieval time.
+
+## Financial facts
+
+A normalized financial fact retains its provider name, normalized concept, accounting standard,
+annual, single-quarter, cumulative interim, or trailing period, the provider's period label, known
+fiscal boundaries, publication instant, consolidation basis,
+reported or restated status, currency, scale, and provenance. Derived growth, margin, return,
+leverage, and valuation values are calculated only from compatible inputs. Provider-reported and
+MarketSieve-derived ratios remain distinguishable.
+
+When a provider omits a fiscal-period start, consolidation basis, revision state, accounting
+standard, or publication instant, the normalized fact keeps that dimension unknown and reports a
+missing reason. MarketSieve does not manufacture a period boundary or treat an unspecified basis as
+compatible.
+
+The implemented J-Quants summary mapping preserves `1Q` as a single quarter, `2Q` and `3Q` as
+cumulative interim periods, and `FY` as annual. It covers revenue, operating income, net income, EPS,
+operating cash flow, assets, and equity for consolidated and non-consolidated disclosures. A field
+that the summary endpoint does not provide, including accounting standard and interest-bearing
+debt, remains absent with an explicit reason. MarketSieve does not infer those values or construct
+free cash flow inside a source adapter.
+
+Financial completeness is the fraction of base and compatible derived target concepts present.
+Event completeness is endpoint coverage across dividend, earnings, and split facts, not the number
+of events that happened in a period. Missing accounting standard or other required dimensions keep
+the section partial even when every mapped concept is present. Each normalized fact retains the
+source, dataset, and source-version provenance of its immutable acquisition.
+
+## Indicator semantics
+
+The implemented indicator catalog contains SMA, EMA, RSI, MACD, ATR, period return, and maximum drawdown.
+Every result records its parameters, definition version, observation count, status, numeric policy,
+and evidence identity. The numeric policy uses a local decimal context with 34 digits and
+round-half-even. SMA aggregates exact fractions before one decimal conversion; recursive indicators
+perform each recurrence inside the fixed local context. Definition versions state the input field,
+warm-up, seed, recurrence, intermediate precision, and output normalization rules.
+
+Insufficient history is a non-signal result. NaN, infinity, invalid parameters, zero denominators,
+and incompatible currencies or accounting periods are never silently coerced into a value.
+
+The v1 definitions use close as the input for SMA, EMA, RSI, MACD, period return, and drawdown. EMA
+uses an SMA seed and alpha `2 / (period + 1)`. RSI and ATR use Wilder recurrence after an SMA seed;
+a completely flat RSI seed is 50. ATR true range includes the previous close after the first bar.
+MACD uses independently seeded fast and slow EMAs, then an SMA-seeded EMA for its signal. Period
+return is `latest / close[period ago] - 1`. Maximum drawdown is the minimum peak-relative return in
+the selected trailing window and is zero or negative.
+
+Outputs are canonical non-exponent decimal strings with redundant trailing zeros removed. Invalid
+or extra parameters are errors. Insufficient history returns no numeric values but retains the
+input count, definition, policy, as-of instant, and evidence. Reference vectors in
+`tests/unit/test_indicators.py` are the executable authority for all seven definitions.
+
+## Section semantics
+
+Instrument, price, technical, financial, valuation, risk, event, and data-quality sections are
+independent evidence-bearing results. A section may be complete, partial, unavailable, or invalid.
+Missing facts include machine-readable reasons. Comparison uses a common knowledge-as-of instant and
+does not rank incompatible periods, accounting bases, consolidation bases, or absolute values in
+different currencies.

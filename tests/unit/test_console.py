@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from io import StringIO
 
-from marketsieve_app.adapters.console import ConsoleOutput, OutputMode
-from marketsieve_app.application.diagnostics import DiagnosticCheck
+from marketsieve_cli.adapters.console import ConsoleOutput, OutputMode
+from marketsieve_cli.application.diagnostics import DiagnosticCheck
 
 
 class TerminalBuffer(StringIO):
@@ -12,11 +12,28 @@ class TerminalBuffer(StringIO):
 
 
 def console(
-    mode: OutputMode, *, terminal: bool = False
+    mode: OutputMode, *, terminal: bool = False, locale: str = "en"
 ) -> tuple[ConsoleOutput, StringIO, StringIO]:
     stdout = TerminalBuffer() if terminal else StringIO()
     stderr = StringIO()
-    return ConsoleOutput(mode, stdout=stdout, stderr=stderr, width=80), stdout, stderr
+    return (
+        ConsoleOutput(mode, stdout=stdout, stderr=stderr, width=80, locale=locale),
+        stdout,
+        stderr,
+    )
+
+
+def test_japanese_text_localizes_human_labels_only() -> None:
+    output, stdout, _ = console(OutputMode.TEXT, locale="ja")
+
+    output.emit_document(
+        {"schema_version": "2.0.0", "sections": {"price": {"status": "available"}}},
+        title="Equity inspection",
+    )
+
+    assert "スキーマ版" in stdout.getvalue()
+    assert "価格" in stdout.getvalue()
+    assert "利用可能" in stdout.getvalue()
 
 
 def test_auto_mode_selects_rich_for_a_terminal_landing() -> None:

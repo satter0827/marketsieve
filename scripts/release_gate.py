@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tarfile
@@ -17,13 +18,29 @@ from collections.abc import Sequence
 from pathlib import Path
 
 ROOT = Path(__file__).parents[1]
+RUNTIME_WHEELHOUSE = ROOT / ".marketsieve" / "cache" / "runtime-wheelhouse"
 VERSION = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+$")
 COMMIT = re.compile(r"^[0-9a-f]{40}$")
 CHANGELOG_HEADING = re.compile(r"^## \[([^]]+)] - (\d{4}-\d{2}-\d{2})$", re.MULTILINE)
 PACKAGE_PROJECTS = (
     ROOT / "packages" / "core" / "pyproject.toml",
-    ROOT / "apps" / "marketsieve" / "pyproject.toml",
+    ROOT / "packages" / "agent" / "pyproject.toml",
+    ROOT / "packages" / "extension-api" / "pyproject.toml",
+    ROOT / "packages" / "cli" / "pyproject.toml",
+    ROOT / "packages" / "source-csv" / "pyproject.toml",
+    ROOT / "packages" / "source-jquants" / "pyproject.toml",
+    ROOT / "packages" / "source-alphavantage" / "pyproject.toml",
 )
+PUBLIC_PACKAGES = (
+    "marketsieve",
+    "marketsieve-agent",
+    "marketsieve-extension-api",
+    "marketsieve-cli",
+    "marketsieve-source-csv",
+    "marketsieve-source-jquants",
+    "marketsieve-source-alphavantage",
+)
+GENERATED_ASSETS = ("constraints.txt", "VERIFY.md", "SHA256SUMS", "release.json")
 
 
 def run(command: Sequence[str], *, cwd: Path = ROOT) -> None:
@@ -60,12 +77,35 @@ def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def distributions(dist_dir: Path) -> tuple[Path, Path]:
-    wheels = tuple(dist_dir.glob("*.whl"))
-    sdists = tuple(dist_dir.glob("*.tar.gz"))
-    if len(wheels) != 1 or len(sdists) != 1:
-        raise RuntimeError("release directory must contain one wheel and one sdist")
-    return wheels[0], sdists[0]
+def distributions(dist_dir: Path) -> tuple[tuple[Path, ...], tuple[Path, ...]]:
+    wheels = tuple(sorted(dist_dir.glob("marketsieve*.whl")))
+    sdists = tuple(sorted(dist_dir.glob("marketsieve*.tar.gz")))
+    if len(wheels) != 7 or len(sdists) != 7:
+        raise RuntimeError("release directory must contain seven project wheels and seven sdists")
+    return wheels, sdists
+
+
+def release_assets(dist_dir: Path, *, include_manifest: bool = True) -> tuple[Path, ...]:
+    return tuple(
+        sorted(
+            path
+            for path in dist_dir.iterdir()
+            if path.is_file()
+            and path.name != ".gitignore"
+            and (include_manifest or path.name != "release.json")
+        )
+    )
+
+
+def verify_runtime_wheels(dist_dir: Path) -> None:
+    expected = {path.name: sha256(path) for path in RUNTIME_WHEELHOUSE.glob("*.whl")}
+    actual = {
+        path.name: sha256(path)
+        for path in dist_dir.glob("*.whl")
+        if not path.name.startswith("marketsieve")
+    }
+    if actual != expected:
+        raise RuntimeError("third-party wheels do not match the locked runtime wheelhouse")
 
 
 def metadata_version(wheel: Path) -> str:
@@ -81,19 +121,134 @@ def metadata_version(wheel: Path) -> str:
     )
 
 
-def verify_contents(wheel: Path, sdist: Path) -> None:
+def wheel_requirement(wheel: Path) -> str:
     with zipfile.ZipFile(wheel) as archive:
-        wheel_names = archive.namelist()
-    with tarfile.open(sdist) as archive:
-        sdist_names = archive.getnames()
-    forbidden = ("marketsieve_app", "/tests/", "/schemas/", ".marketsieve", "__pycache__")
-    violations = [
-        name
-        for name in (*wheel_names, *sdist_names)
-        if any(fragment in name for fragment in forbidden)
-    ]
+        metadata_name = next(
+            name for name in archive.namelist() if name.endswith(".dist-info/METADATA")
+        )
+        metadata = archive.read(metadata_name).decode("utf-8")
+    fields = {
+        key: value
+        for line in metadata.splitlines()
+        if ": " in line
+        for key, value in (line.split(": ", maxsplit=1),)
+        if key in {"Name", "Version"}
+    }
+    return f"{fields['Name']}=={fields['Version']}"
+
+
+def write_wheelhouse_assets(dist_dir: Path, version: str) -> None:
+    wheel_paths = tuple(sorted(dist_dir.glob("*.whl")))
+    constraints = "\n".join(sorted(wheel_requirement(path) for path in wheel_paths)) + "\n"
+    constraints_path = dist_dir / "constraints.txt"
+    constraints_path.write_text(constraints, encoding="utf-8")
+    instructions_path = dist_dir / "VERIFY.md"
+    instructions_path.write_text(
+        "# MarketSieve wheelhouse\n\n"
+        "Extract this archive, then install without an index:\n\n"
+        "```shell\n"
+        "python -m pip install --no-index --find-links ./marketsieve-wheelhouse "
+        '"marketsieve-cli[all-sources]"\n'
+        "```\n\n"
+        "Verify downloaded release assets against `release.json` before installation.\n",
+        encoding="utf-8",
+    )
+    archive_path = dist_dir / f"marketsieve-wheelhouse-{version}.zip"
+    with zipfile.ZipFile(archive_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for path in (*wheel_paths, constraints_path, instructions_path):
+            archive.write(path, f"marketsieve-wheelhouse/{path.name}")
+    checksum_paths = tuple(
+        sorted(
+            path
+            for path in release_assets(dist_dir, include_manifest=False)
+            if path.name != "SHA256SUMS"
+        )
+    )
+    (dist_dir / "SHA256SUMS").write_text(
+        "".join(f"{sha256(path)}  {path.name}\n" for path in checksum_paths),
+        encoding="utf-8",
+    )
+
+
+def verify_wheelhouse_assets(dist_dir: Path, version: str) -> None:
+    constraints = dist_dir / "constraints.txt"
+    instructions = dist_dir / "VERIFY.md"
+    archive_path = dist_dir / f"marketsieve-wheelhouse-{version}.zip"
+    checksums = dist_dir / "SHA256SUMS"
+    if not all(path.is_file() for path in (constraints, instructions, archive_path, checksums)):
+        raise RuntimeError("release wheelhouse assets are incomplete")
+    expected_requirements = {wheel_requirement(path) for path in dist_dir.glob("*.whl")}
+    if set(constraints.read_text(encoding="utf-8").splitlines()) != expected_requirements:
+        raise RuntimeError("release constraints do not match wheel metadata")
+    expected_checksums = {
+        path.name: sha256(path)
+        for path in release_assets(dist_dir, include_manifest=False)
+        if path.name != "SHA256SUMS"
+    }
+    actual_checksums = {
+        name: digest
+        for line in checksums.read_text(encoding="utf-8").splitlines()
+        for digest, name in (line.split("  ", maxsplit=1),)
+    }
+    if actual_checksums != expected_checksums:
+        raise RuntimeError("SHA256SUMS does not cover the release assets")
+    with zipfile.ZipFile(archive_path) as archive:
+        names = set(archive.namelist())
+    expected_names = {f"marketsieve-wheelhouse/{path.name}" for path in dist_dir.glob("*.whl")} | {
+        "marketsieve-wheelhouse/constraints.txt",
+        "marketsieve-wheelhouse/VERIFY.md",
+    }
+    if names != expected_names:
+        raise RuntimeError("wheelhouse ZIP contents do not match release wheels")
+
+
+def verify_contents(wheels: tuple[Path, ...], sdists: tuple[Path, ...]) -> None:
+    violations: list[str] = []
+    for wheel in wheels:
+        with zipfile.ZipFile(wheel) as archive:
+            names = archive.namelist()
+        forbidden = ["/tests/", "/schemas/", ".marketsieve", "__pycache__"]
+        if wheel.name.startswith("marketsieve-"):
+            forbidden.extend(
+                (
+                    "marketsieve_cli/",
+                    "marketsieve_agent/",
+                    "marketsieve_extension_api/",
+                    "marketsieve_source_csv/",
+                    "marketsieve_source_jquants/",
+                    "marketsieve_source_alphavantage/",
+                )
+            )
+        violations.extend(name for name in names if any(item in name for item in forbidden))
+    for sdist in sdists:
+        with tarfile.open(sdist) as archive:
+            names = archive.getnames()
+        sdist_forbidden = ("/tests/", "/schemas/", ".marketsieve", "__pycache__")
+        violations.extend(name for name in names if any(item in name for item in sdist_forbidden))
     if violations:
         raise RuntimeError(f"release contains private or generated files: {violations}")
+
+
+def verify_secrets(paths: Sequence[Path]) -> None:
+    command = [sys.executable, str(ROOT / "scripts" / "secret_gate.py")]
+    for path in paths:
+        command.extend(("--path", str(path)))
+    run(tuple(command))
+
+
+def prepare_dist_dir(dist_dir: Path) -> None:
+    if dist_dir.exists():
+        entries = tuple(dist_dir.iterdir())
+        retry_markers = tuple(
+            path
+            for path in entries
+            if path.name == ".gitignore" and path.read_text(encoding="utf-8") == "*"
+        )
+        if len(retry_markers) != len(entries):
+            raise RuntimeError("release directory must be empty")
+        for marker in retry_markers:
+            marker.unlink()
+    dist_dir.mkdir(parents=True, exist_ok=True)
 
 
 def build(version: str, commit: str, dist_dir: Path) -> None:
@@ -101,26 +256,33 @@ def build(version: str, commit: str, dist_dir: Path) -> None:
     validate_source_release(version)
     if capture(("git", "rev-parse", "HEAD")) != commit:
         raise RuntimeError("commit does not match the checked-out HEAD")
-    if dist_dir.exists() and any(dist_dir.iterdir()):
-        raise RuntimeError("release directory must be empty")
-    dist_dir.mkdir(parents=True, exist_ok=True)
-    run(("uv", "build", "--package", "marketsieve", "--out-dir", str(dist_dir)))
-    wheel, sdist = distributions(dist_dir)
-    run(("uv", "run", "twine", "check", str(wheel), str(sdist)))
-    if metadata_version(wheel) != version:
-        raise RuntimeError("built wheel version does not match the requested version")
-    verify_contents(wheel, sdist)
+    prepare_dist_dir(dist_dir)
+    for package in PUBLIC_PACKAGES:
+        run(("uv", "build", "--package", package, "--out-dir", str(dist_dir)))
+    runtime_wheels = tuple(sorted(RUNTIME_WHEELHOUSE.glob("*.whl")))
+    if not runtime_wheels:
+        raise RuntimeError("locked runtime wheelhouse is empty; run make sync")
+    for runtime_wheel in runtime_wheels:
+        shutil.copy2(runtime_wheel, dist_dir / runtime_wheel.name)
+    verify_runtime_wheels(dist_dir)
+    wheels, sdists = distributions(dist_dir)
+    run(("uv", "run", "twine", "check", *(str(path) for path in (*wheels, *sdists))))
+    if any(metadata_version(wheel) != version for wheel in wheels):
+        raise RuntimeError("built wheel versions do not match the requested version")
+    verify_contents(wheels, sdists)
+    write_wheelhouse_assets(dist_dir, version)
     manifest = {
         "version": version,
         "commit": commit,
         "artifacts": [
             {"name": path.name, "sha256": sha256(path), "size": path.stat().st_size}
-            for path in (wheel, sdist)
+            for path in release_assets(dist_dir, include_manifest=False)
         ],
     }
     (dist_dir / "release.json").write_text(
         json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
+    verify_secrets((*wheels, *sdists, *(dist_dir / name for name in GENERATED_ASSETS)))
 
 
 def python_in_venv(venv: Path) -> Path:
@@ -130,31 +292,53 @@ def python_in_venv(venv: Path) -> Path:
 def verify(version: str, commit: str, dist_dir: Path) -> None:
     validate_inputs(version, commit)
     validate_source_release(version)
-    wheel, sdist = distributions(dist_dir)
+    wheels, sdists = distributions(dist_dir)
     manifest = json.loads((dist_dir / "release.json").read_text(encoding="utf-8"))
     if manifest["version"] != version or manifest["commit"] != commit:
         raise RuntimeError("release manifest provenance does not match the request")
     expected = {item["name"]: item["sha256"] for item in manifest["artifacts"]}
-    for path in (wheel, sdist):
+    actual = {path.name: path for path in release_assets(dist_dir, include_manifest=False)}
+    if set(actual) != set(expected):
+        raise RuntimeError("release manifest does not cover exactly the release artifacts")
+    for path in actual.values():
         if expected.get(path.name) != sha256(path):
             raise RuntimeError(f"release checksum mismatch: {path.name}")
-    if metadata_version(wheel) != version:
-        raise RuntimeError("wheel metadata version does not match the request")
-    verify_contents(wheel, sdist)
+    if any(metadata_version(wheel) != version for wheel in wheels):
+        raise RuntimeError("wheel metadata versions do not match the request")
+    verify_contents(wheels, sdists)
+    verify_wheelhouse_assets(dist_dir, version)
+    verify_secrets((*wheels, *sdists, *(dist_dir / name for name in GENERATED_ASSETS)))
     with tempfile.TemporaryDirectory(prefix="marketsieve-release-") as temp_dir:
         venv = Path(temp_dir) / "venv"
         run((sys.executable, "-m", "venv", str(venv)))
         isolated = python_in_venv(venv)
-        run((str(isolated), "-m", "pip", "install", "--no-deps", str(wheel)))
+        run(
+            (
+                str(isolated),
+                "-m",
+                "pip",
+                "install",
+                "--disable-pip-version-check",
+                "--no-index",
+                "--find-links",
+                str(dist_dir),
+                *(str(wheel) for wheel in wheels),
+            )
+        )
         installed = capture(
             (
                 str(isolated),
                 "-c",
-                "import marketsieve; import marketsieve.analysis.sma20; "
+                "import marketsieve; import marketsieve_agent; import marketsieve_cli; "
+                "import marketsieve_extension_api; "
+                "import marketsieve_source_csv; import marketsieve_source_jquants; "
+                "import marketsieve_source_alphavantage; "
+                "import marketsieve.analysis.indicators; "
                 "import marketsieve.data.daily; import marketsieve.domain; "
                 "import marketsieve.synthetic.daily; print(marketsieve.__version__)",
             )
         )
+        run((str(isolated), "-m", "marketsieve_cli", "doctor", "--output", "json"))
     if installed != version:
         raise RuntimeError("isolated installation version does not match the request")
 

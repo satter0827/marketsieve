@@ -3,7 +3,7 @@
 [![CI](https://github.com/satter0827/marketsieve/actions/workflows/ci.yml/badge.svg)](https://github.com/satter0827/marketsieve/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-MarketSieveは、日本株と米国株を再現可能な方法で分析するためのオープンソースPython基盤です。公開SDKとリポジトリ内の運用アプリケーションの依存境界を分け、市場ロジックをデータプロバイダー、レポートエージェント、配信チャネルから独立させます。
+MarketSieveは、日本株と米国株を再現可能な方法で分析するためのオープンソースPython基盤です。公開SDKとCLI applicationの依存境界を分け、市場ロジックをデータプロバイダー、レポートエージェント、配信チャネルから独立させます。
 
 [English README](README.md)
 
@@ -13,7 +13,7 @@ MarketSieveは、検証済みの市場情報から再現可能な分析、過去
 
 ## 現在の状態
 
-`0.1.0`が現在の公開基準です。公開`marketsieve` packageは、取引所を明示した銘柄、日足contract、決定論的な日米Synthetic source、SMA20状態変化分析、未来情報を排除したhistorical replay、channel-neutral reportを提供します。リポジトリ内のCLIは、人とmachine clientへ同じ根拠付きreportを提示します。この結果は投資推奨ではありません。
+`0.3.0`はdevelop上のrelease candidateです。CSV、J-Quants、Alpha Vantageを独立した配布物として扱い、変更不能な検証済みスナップショット、価格・テクニカル・財務・valuation・risk・event・data qualityの総合確認、比較、レポート、説明専用Agentを提供します。FakeListLLMを既定とし、LM Studioと明示的に許可したOpenAI、Anthropic、Googleも同じgrounded pipelineを使用します。CLIは根拠と欠損理由を提示し、投資判断を推奨しません。
 
 ## インストール
 
@@ -23,37 +23,54 @@ Python 3.12から3.14をサポートします。開発にはPython 3.13と[uv](h
 make sync
 ```
 
-公開SDKは単独でビルドできます。
+SDK、extension API、CLI、Agent、CSV source、J-Quants source、Alpha Vantage sourceは独立した配布物としてビルドできます。
 
 ```shell
 make build
 ```
 
+公開releaseはPyPIではなく、checksum付きGitHub Release wheelhouseを使用します。assetを
+`release.json`で検証してwheelhouse ZIPを展開した後、offlineでinstallします。
+
+```shell
+python -m pip install --no-index --find-links ./marketsieve-wheelhouse \
+  "marketsieve-cli[all-sources]"
+```
+
+同じwheelhouseから`marketsieve-cli[all]`を指定すると、全sourceに加えて任意機能のAgentもinstallできます。
+
 ## CLI
 
-CLIはリポジトリ内の運用アプリケーションに属し、公開SDK wheelには含まれません。Foundation段階ではネットワークへ接続せず、秘密情報も要求しません。
+公開`marketsieve-cli` distributionはSDKへ依存しますが、SDK wheelには含まれません。参照系コマンドはオフラインで動作します。プロバイダーから取得する場合だけ、明示的な`source fetch`が環境変数の認証情報を読み、ネットワークへ接続します。
 
 ```shell
 uv run marketsieve --version
 make doctor
-make report
-make report-json
 make capabilities-json
 ```
 
-`make report`は利用可能なterminalではRich表示を使用し、redirect時はANSIを含まないtextへ切り替えます。`make report-json`はversion付きreport contractを出力します。`make capabilities-json`はAI client向けにcommand、option、schema、exit code、stream、副作用を説明します。
+`make capabilities-json`はAI client向けにcommand、option、schema、exit code、stream、副作用を説明します。inspect、analyze、compare、reportは検証済みlocal snapshotだけを読み、取得は常に明示的に実行します。
 
 各output modeは直接指定できます。
 
 ```shell
 uv run marketsieve doctor --output json
-uv run marketsieve report --market all --output rich
 uv run marketsieve capabilities --output json
+uv run marketsieve source list --output json
+uv run marketsieve source import ./example-bundle --output json
+uv run marketsieve --config marketsieve.toml source fetch us XNAS:MSFT --start 2026-01-01 --end 2026-07-31 --output json
+uv run marketsieve snapshot verify SNAPSHOT_ID --output json
+uv run marketsieve inspect XTKS:7203 --source-profile offline-jp --output json
+uv run marketsieve analyze rsi XTKS:7203 --period 14 --source-profile offline-jp --output json
+uv run marketsieve compare XTKS:7203 XTKS:6758 --source-profile offline-jp --output json
+uv run marketsieve report XTKS:7203 --source-profile offline-jp --format rich
+uv run marketsieve agent explain XTKS:7203 --source-profile offline-jp --output json
+uv run marketsieve --config marketsieve.toml agent explain XTKS:7203 --source-profile offline-jp --provider openai --dry-run --output json
 ```
 
 ## アーキテクチャ
 
-公開SDKは`packages/core`、運用アプリケーションは`apps/marketsieve`に配置します。運用アプリケーションはSDKへ依存しますが、SDKはアプリケーションやインフラストラクチャ用ライブラリをimportできません。[文書索引](docs/README.md)と正式な[Architecture](docs/design/architecture.md)に依存規則を記載しています。
+公開SDKは`packages/core`、実装済みextension contractは`packages/extension-api`、プロバイダーadapterは`packages/source-*`、CLIは`packages/cli`に配置します。SDKはアプリケーションやインフラストラクチャ用ライブラリをimportできません。[文書索引](docs/README.md)と正式な[Architecture](docs/design/architecture.md)に依存規則を記載しています。
 
 ## 開発
 
@@ -73,7 +90,7 @@ VS Codeはworkspaceの`.venv`を使用し、依存同期、format、現在のテ
 
 ## Roadmap
 
-historical reportの処理経路が`0.1.0`の基準です。外部data sourceと個人向け配信channelは後続milestoneです。順序は[Roadmap](docs/roadmap.md)、制約は[正式設計](docs/design/README.md)を参照してください。
+0.2 workbenchと0.3 grounded explanation Agentはdevelop上で完成しています。順序は[Roadmap](docs/roadmap.md)、制約は[正式設計](docs/design/README.md)を参照してください。
 
 ## ライセンス
 

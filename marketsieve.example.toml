@@ -1,0 +1,40 @@
+# Copy to marketsieve.toml and keep credentials in the invoking environment only.
+[source_profiles.japan]
+currency = "JPY"
+timezone = "Asia/Tokyo"
+
+[source_profiles.japan.daily_bars]
+plugin = "jquants"
+
+[source_profiles.japan.daily_bars.settings]
+timeout_seconds = 30
+
+[source_profiles.japan.financials]
+plugin = "jquants"
+
+[source_profiles.japan.events]
+plugin = "jquants"
+
+[source_profiles.japan.events.settings]
+# Add dividend only when the selected J-Quants plan permits the Premium endpoint.
+event_types = "earnings"
+
+[source_profiles.us]
+currency = "USD"
+timezone = "America/New_York"
+
+[source_profiles.us.daily_bars]
+plugin = "alphavantage"
+
+[source_profiles.us.daily_bars.settings]
+plan = "free"
+outputsize = "compact"
+
+[source_profiles.us.financials]
+plugin = "alphavantage"
+
+[source_profiles.us.events]
+plugin = "alphavantage"
+
+[source_profiles.us.events.settings]
+event_types = "earnings,dividend,split"

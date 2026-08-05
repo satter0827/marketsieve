@@ -12,9 +12,17 @@ ROOT = Path(__file__).parents[2]
 
 def test_license_copies_match() -> None:
     root_license = (ROOT / "LICENSE").read_text(encoding="utf-8")
-    package_license = (ROOT / "packages" / "core" / "LICENSE").read_text(encoding="utf-8")
+    package_licenses = (
+        (ROOT / "packages" / "agent" / "LICENSE").read_text(encoding="utf-8"),
+        (ROOT / "packages" / "core" / "LICENSE").read_text(encoding="utf-8"),
+        (ROOT / "packages" / "cli" / "LICENSE").read_text(encoding="utf-8"),
+        (ROOT / "packages" / "extension-api" / "LICENSE").read_text(encoding="utf-8"),
+        (ROOT / "packages" / "source-csv" / "LICENSE").read_text(encoding="utf-8"),
+        (ROOT / "packages" / "source-jquants" / "LICENSE").read_text(encoding="utf-8"),
+        (ROOT / "packages" / "source-alphavantage" / "LICENSE").read_text(encoding="utf-8"),
+    )
 
-    assert package_license == root_license
+    assert all(package_license == root_license for package_license in package_licenses)
 
 
 def test_readmes_show_the_same_commands() -> None:
@@ -24,8 +32,6 @@ def test_readmes_show_the_same_commands() -> None:
         "make test",
         "make check",
         "make build",
-        "make report",
-        "make report-json",
         "make capabilities-json",
     )
     readmes = (
@@ -38,12 +44,20 @@ def test_readmes_show_the_same_commands() -> None:
 
 
 def test_workspace_package_versions_match() -> None:
-    core = tomllib.loads((ROOT / "packages/core/pyproject.toml").read_text(encoding="utf-8"))
-    application = tomllib.loads(
-        (ROOT / "apps/marketsieve/pyproject.toml").read_text(encoding="utf-8")
+    projects = (
+        ROOT / "packages/agent/pyproject.toml",
+        ROOT / "packages/core/pyproject.toml",
+        ROOT / "packages/extension-api/pyproject.toml",
+        ROOT / "packages/cli/pyproject.toml",
+        ROOT / "packages/source-csv/pyproject.toml",
+        ROOT / "packages/source-jquants/pyproject.toml",
+        ROOT / "packages/source-alphavantage/pyproject.toml",
     )
+    versions = {
+        tomllib.loads(path.read_text(encoding="utf-8"))["project"]["version"] for path in projects
+    }
 
-    assert core["project"]["version"] == application["project"]["version"]
+    assert len(versions) == 1
 
 
 def test_generated_state_is_centralized() -> None:
@@ -59,6 +73,14 @@ def test_generated_state_is_centralized() -> None:
     )
 
     assert [name for name in forbidden if (ROOT / name).exists()] == []
+
+
+def test_ignore_files_exclude_private_key_suffixes() -> None:
+    required = {"*.key", "*.pem", "*.p12", "*.pfx", "*.private-key"}
+
+    for name in (".gitignore", ".dockerignore"):
+        patterns = set((ROOT / name).read_text(encoding="utf-8").splitlines())
+        assert required <= patterns
 
 
 def test_shared_vscode_tasks_use_make_targets() -> None:
@@ -116,10 +138,9 @@ def test_makefile_exposes_stable_entry_points() -> None:
         "lint",
         "typecheck",
         "test",
+        "secret-check",
         "check",
         "doctor",
-        "report",
-        "report-json",
         "capabilities-json",
         "build",
         "clean-generated",
@@ -143,7 +164,8 @@ def test_ci_and_rulesets_use_stable_gate_names() -> None:
     assert "name: Evidence Gate" in workflow
     assert "name: Review Gate" not in workflow
     assert "name: Release Gate" in workflow
-    assert "fetch-depth: 0" in workflow
+    assert workflow.count("fetch-depth: 0") == 2
+    assert 'make check BASE_SHA="$BASE_SHA"' in workflow
     assert "ref: ${{ github.event.pull_request.head.sha || github.sha }}" in workflow
     assert workflow.count(".marketsieve/artifacts/checks/${{ github.sha }}") == 0
     assert workflow.count("uv build") == 0
