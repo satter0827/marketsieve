@@ -92,6 +92,9 @@ uv run marketsieve report show latest --output json
 uv run marketsieve report export latest --format markdown
 uv run marketsieve --config marketsieve.toml daily jp
 uv run marketsieve --config marketsieve.toml weekly
+uv run marketsieve experiment run strategy.toml --output json
+uv run marketsieve experiment show RUN_ID --output json
+uv run marketsieve experiment compare LEFT_RUN_ID RIGHT_RUN_ID --output json
 uv run marketsieve --config marketsieve.toml report explain latest --provider openai --dry-run --output json
 ```
 

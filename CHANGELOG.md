@@ -21,6 +21,7 @@ will follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   filing amendments, and company-relative valuation ranges.
 - Immutable experiment specifications, knowledge-time-correct policy replay, deterministic metrics,
   and run comparison in the public SDK.
+- Offline Strategy Lab run, show, and compare commands with content-addressed local artifacts.
 
 ## [0.3.0] - 2026-08-05
 

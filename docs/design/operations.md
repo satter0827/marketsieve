@@ -103,6 +103,21 @@ the weekend briefing can be created.
 Failures identify whether input validation, analysis prerequisites, or an internal contract caused
 the operation to stop. They do not expose environment secrets or silently switch data sources.
 
+Strategy Lab specifications identify immutable local daily-bar snapshots directly:
+
+```toml
+[experiment]
+start = "2025-01-01"
+end = "2025-12-31"
+
+[experiment.datasets]
+"XTKS:7203" = "<snapshot_sha256>"
+```
+
+`marketsieve experiment run strategy.toml` performs no acquisition. Runs are stored below
+`.marketsieve/experiments/objects`. Execution costs are optional, but commission, tax, and FX rates
+must be supplied together; no net-profit metric is calculated in the current implementation.
+
 ## Unsupported operation
 
 Scheduled execution, non-console delivery, provider fallback, and LLM-generated calculations are not

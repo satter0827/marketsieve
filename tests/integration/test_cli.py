@@ -1,3 +1,4 @@
+import importlib
 import json
 import sys
 from dataclasses import replace
@@ -195,6 +196,9 @@ def test_capabilities_match_click_commands_and_validate_schema() -> None:
         "daily",
         "doctor",
         "equity-report",
+        "experiment compare",
+        "experiment run",
+        "experiment show",
         "inspect",
         "portfolio import",
         "portfolio show",
@@ -230,6 +234,91 @@ def test_capabilities_match_click_commands_and_validate_schema() -> None:
         "optional_writes": ["explanation"],
         "secrets": True,
     }
+
+
+def test_experiment_commands_project_service_documents(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    left = "a" * 64
+    right = "b" * 64
+    run_document: dict[str, object] = {
+        "schema": "experiment-run/v1",
+        "run_id": left,
+        "spec_id": "c" * 64,
+        "profit_simulation": False,
+        "spec": {},
+        "decisions": [],
+        "metrics": {},
+    }
+    comparison_document: dict[str, object] = {
+        "schema": "experiment-comparison/v1",
+        "left_run_id": left,
+        "right_run_id": right,
+        "metric_deltas": {},
+    }
+
+    class StubExperimentService:
+        def run(self, spec: Path) -> dict[str, object]:
+            assert spec == strategy
+            return run_document
+
+        def show(self, run_id: str) -> dict[str, object]:
+            assert run_id == left
+            return run_document
+
+        def compare(self, left_run_id: str, right_run_id: str) -> dict[str, object]:
+            assert (left_run_id, right_run_id) == (left, right)
+            return comparison_document
+
+    strategy = tmp_path / "strategy.toml"
+    strategy.write_text("[experiment]\n", encoding="utf-8")
+    cli_module = importlib.import_module("marketsieve_cli.interfaces.cli.main")
+    monkeypatch.setattr(cli_module, "build_experiment_service", StubExperimentService)
+    runner = CliRunner()
+
+    results = (
+        runner.invoke(main, ["experiment", "run", str(strategy), "--output", "json"]),
+        runner.invoke(main, ["experiment", "show", left, "--output", "json"]),
+        runner.invoke(main, ["experiment", "compare", left, right, "--output", "json"]),
+    )
+
+    assert all(result.exit_code == 0 for result in results)
+    assert json.loads(results[0].stdout) == run_document
+    assert json.loads(results[1].stdout) == run_document
+    assert json.loads(results[2].stdout) == comparison_document
+
+
+def test_experiment_commands_report_service_failures_without_tracebacks(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    class FailedExperimentService:
+        def run(self, spec: Path) -> dict[str, object]:
+            raise ValueError(f"invalid strategy: {spec.name}")
+
+        def show(self, run_id: str) -> dict[str, object]:
+            raise LookupError(f"missing run: {run_id}")
+
+        def compare(self, left_run_id: str, right_run_id: str) -> dict[str, object]:
+            raise ValueError(f"incompatible runs: {left_run_id}, {right_run_id}")
+
+    strategy = tmp_path / "strategy.toml"
+    strategy.write_text("[experiment]\n", encoding="utf-8")
+    cli_module = importlib.import_module("marketsieve_cli.interfaces.cli.main")
+    monkeypatch.setattr(cli_module, "build_experiment_service", FailedExperimentService)
+    digest = "a" * 64
+    results = (
+        CliRunner().invoke(main, ["experiment", "run", str(strategy), "--output", "json"]),
+        CliRunner().invoke(main, ["experiment", "show", digest, "--output", "json"]),
+        CliRunner().invoke(main, ["experiment", "compare", digest, digest, "--output", "json"]),
+    )
+
+    assert all(result.exit_code == 1 for result in results)
+    assert [json.loads(result.stderr)["error"] for result in results] == [
+        "experiment_run_failed",
+        "experiment_show_failed",
+        "experiment_compare_failed",
+    ]
+    assert all("Traceback" not in result.output for result in results)
 
 
 def test_canonical_portfolio_import_and_show_are_offline_and_deterministic() -> None:

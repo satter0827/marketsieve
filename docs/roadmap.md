@@ -10,8 +10,7 @@ design and release history, not in this file.
 
 ## 0.6.0 Strategy Lab
 
-1. Persist reproducible experiment runs and comparisons and expose them through the CLI.
-2. Compare prompts and models without allowing an LLM to own calculations or decisions.
+1. Compare prompts and models without allowing an LLM to own calculations or decisions.
 
 ## 0.7.0 Screening Workbench
 
