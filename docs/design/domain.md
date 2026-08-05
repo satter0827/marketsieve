@@ -180,6 +180,6 @@ free cash flow. Valuation values are retained as display evidence and do not rev
 decision. The policy never converts an action into an order.
 
 A decision report is an immutable composition of one market session, one portfolio snapshot, the
-selected policy, per-instrument decisions, input diagnostics, and previous-report changes. Its
-identity is a digest of canonical semantic content. Locale-specific headings and terminal styling
-are projections and do not affect identity.
+selected policy, per-instrument decisions, input diagnostics, and an optional previous-report
+link. Its identity is a digest of canonical semantic content. Locale-specific headings and terminal
+styling are projections and do not affect identity.

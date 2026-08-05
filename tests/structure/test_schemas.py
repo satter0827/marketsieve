@@ -20,6 +20,7 @@ def test_schemas_are_draft_2020_12_and_semantically_versioned() -> None:
         "cli-error",
         "comparison-result",
         "doctor-result",
+        "decision-report",
         "inspect-result",
         "indicator-result",
         "log-record",
@@ -37,14 +38,23 @@ def test_schemas_are_draft_2020_12_and_semantically_versioned() -> None:
             r"urn:marketsieve:schema:[a-z-]+:([0-9]+\.[0-9]+\.[0-9]+)", schema["$id"]
         )
         assert identifier is not None
-        assert schema["properties"]["schema_version"]["const"] == identifier.group(1)
+        if "schema_version" in schema["properties"]:
+            assert schema["properties"]["schema_version"]["const"] == identifier.group(1)
+        else:
+            major = identifier.group(1).partition(".")[0]
+            assert schema["properties"]["schema"]["const"] == f"{path.parent.parent.name}/v{major}"
         assert path.parent.name == f"v{identifier.group(1).partition('.')[0]}"
 
 
 def test_schemas_reject_unknown_major_versions() -> None:
     for path in SCHEMAS.glob("*/v*/schema.json"):
         schema = json.loads(path.read_text(encoding="utf-8"))
-        version = schema["properties"]["schema_version"]["const"]
-        major = int(version.partition(".")[0])
+        version_property = (
+            "schema_version" if "schema_version" in schema["properties"] else "schema"
+        )
+        major = int(path.parent.name.removeprefix("v"))
+        invalid = f"{major + 1}.0.0"
+        if version_property == "schema":
+            invalid = f"{path.parent.parent.name}/v{major + 1}"
         with pytest.raises(ValidationError):
-            Draft202012Validator(schema).validate({"schema_version": f"{major + 1}.0.0"})
+            Draft202012Validator(schema).validate({version_property: invalid})

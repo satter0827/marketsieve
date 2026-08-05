@@ -16,6 +16,8 @@ The Offline Analysis Preview tests:
 - explicit insufficient history and the absence of future-information leakage across UTC offsets
   and daylight-saving folds;
 - stable evidence and results for identical inputs;
+- stable decision-report JSON and Markdown for identical inputs;
+- canonical report reconstruction, tamper detection, and all-indeterminate latest protection;
 - the source contracts against synthetic transports;
 - stable snapshot, section, comparison, report, and evidence identities for identical inputs;
 - Japanese and English Rich, text, and schema-valid JSON projections;
@@ -128,9 +130,9 @@ request metadata.
 Personal Close Brief acceptance adds:
 
 - complete reference cases for every held and unheld decision branch;
-- stable policy, decision, report, JSON, and Markdown identities for identical inputs;
+- stable policy and decision identities for identical inputs;
 - explicit confidence reduction and indeterminate results for missing evidence;
-- partial-instrument success, all-instrument failure, and atomic latest-reference behavior;
+- partial-instrument success and all-instrument failure behavior in daily orchestration;
 - Japanese, U.S., daylight-saving, non-trading-day, stale-data, and future-data cases;
 - portfolio normalization without retained source files or personal identifiers;
 - FRED pagination, missing observations, revision bounds, rate limits, and injected transport;
