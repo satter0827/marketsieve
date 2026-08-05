@@ -16,6 +16,7 @@ from marketsieve_extension_api import (
     CorporateEventType,
     DailyBarFetchRequest,
     FactFetchRequest,
+    FilingDocument,
     FinancialFact,
     FinancialPeriod,
     ImportedEvents,
@@ -127,6 +128,18 @@ def test_financial_and_event_snapshots_have_independent_kind_references(tmp_path
         {},
     )
     published_at = datetime(2026, 7, 31, 6, tzinfo=UTC)
+    filing = FilingDocument(
+        "doc-2026",
+        "issuer-7203",
+        "annual-report",
+        published_at,
+        FinancialPeriod.ANNUAL,
+        date(2025, 4, 1),
+        date(2026, 3, 31),
+        "J-GAAP",
+        Consolidation.CONSOLIDATED,
+        "JPY",
+    )
     financials = ImportedFinancials(
         request,
         "fixture",
@@ -150,9 +163,12 @@ def test_financial_and_event_snapshots_have_independent_kind_references(tmp_path
                 "JPY",
                 1,
                 Decimal("1000"),
+                filing.filing_id,
             ),
         ),
         "a" * 64,
+        (),
+        (filing,),
     )
     events = ImportedEvents(
         request,
@@ -190,6 +206,10 @@ def test_financial_and_event_snapshots_have_independent_kind_references(tmp_path
     stored_fact = store.normalized(financial_stored.object_id)["facts"][0]
     assert stored_fact["concept"] == "revenue"
     assert stored_fact["provider_period"] == "FY"
+    assert stored_fact["filing_id"] == filing.filing_id
+    stored_filing = store.normalized(financial_stored.object_id)["filings"][0]
+    assert stored_filing["filing_id"] == filing.filing_id
+    assert stored_filing["published_at"] == published_at.isoformat()
     assert store.normalized(event_stored.object_id)["missing_reasons"] == ["split_not_available"]
 
 

@@ -13,9 +13,8 @@ design and release history, not in this file.
 
 1. Add SEC submission and XBRL acquisition with publication-time semantics.
 2. Add EDINET document and XBRL acquisition with the same normalized financial contract.
-3. Preserve corrections, accounting basis, fiscal period, consolidation, currency, and provenance.
-4. Add knowledge-as-of financial trends and company-history valuation comparisons.
-5. Integrate filing changes into daily and weekly reports without coupling reports to a provider.
+3. Add knowledge-as-of financial trends and company-history valuation comparisons.
+4. Integrate filing changes into daily and weekly reports without coupling reports to a provider.
 
 ## 0.6.0 Strategy Lab
 

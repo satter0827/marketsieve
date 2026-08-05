@@ -78,12 +78,22 @@ knowledge-as-of view. Snapshot manifests separately retain retrieval time.
 
 ## Financial facts
 
+A filing document has a provider-stable filing ID, issuer ID, document type, aware publication
+instant, optional amendment target, and the fiscal and accounting dimensions the provider states.
+An amendment is a separate filing and never overwrites its original. Filing collections use stable
+publication order and reject duplicate identities or documents published after retrieval.
+
 A normalized financial fact retains its provider name, normalized concept, accounting standard,
 annual, single-quarter, cumulative interim, or trailing period, the provider's period label, known
 fiscal boundaries, publication instant, consolidation basis,
 reported or restated status, currency, scale, and provenance. Derived growth, margin, return,
 leverage, and valuation values are calculated only from compatible inputs. Provider-reported and
 MarketSieve-derived ratios remain distinguishable.
+
+A fact may reference one filing included in the same acquisition. Its publication instant must
+match that filing. Knowledge-time selection includes only filings whose publication instant and
+facts whose availability instant are no later than the requested aware instant. The normalized
+financial snapshot stores both the filing collection and each fact-to-filing link.
 
 When a provider omits a fiscal-period start, consolidation basis, revision state, accounting
 standard, or publication instant, the normalized fact keeps that dimension unknown and reports a

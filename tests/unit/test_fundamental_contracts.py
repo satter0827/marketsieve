@@ -14,6 +14,7 @@ from marketsieve_extension_api import (
     CorporateEvent,
     CorporateEventType,
     FactFetchRequest,
+    FilingDocument,
     FinancialFact,
     FinancialPeriod,
     ImportedEvents,
@@ -27,6 +28,18 @@ INSTRUMENT = Instrument.create(
 )
 REQUEST = FactFetchRequest("japan", INSTRUMENT, date(2026, 1, 1), date(2026, 7, 31), {})
 PUBLISHED = datetime(2026, 7, 31, 6, tzinfo=UTC)
+FILING = FilingDocument(
+    "doc-2026",
+    "issuer-7203",
+    "annual-report",
+    PUBLISHED,
+    FinancialPeriod.ANNUAL,
+    date(2025, 4, 1),
+    date(2026, 3, 31),
+    "J-GAAP",
+    Consolidation.CONSOLIDATED,
+    "JPY",
+)
 FACT = FinancialFact(
     "revenue",
     "Sales",
@@ -105,6 +118,31 @@ def test_financial_fact_requires_contract_types_and_consistent_availability() ->
         replace(FACT, available_at=datetime(2026, 7, 31, 7, tzinfo=UTC))
     with pytest.raises(TypeError, match="integer"):
         replace(FACT, scale=True)
+    with pytest.raises(ValueError, match="filing_id"):
+        replace(FACT, filing_id="")
+
+
+def test_filing_document_preserves_publication_period_and_amendment_identity() -> None:
+    amendment = replace(
+        FILING,
+        filing_id="doc-2026-amended",
+        document_type="annual-report-amendment",
+        published_at=datetime(2026, 8, 1, 6, tzinfo=UTC),
+        amends_filing_id=FILING.filing_id,
+    )
+
+    assert FILING.is_known_at(PUBLISHED)
+    assert not amendment.is_known_at(PUBLISHED)
+    with pytest.raises(ValueError, match="UTC offset"):
+        FILING.is_known_at(datetime(2026, 7, 31, 6))
+    with pytest.raises(ValueError, match="amend itself"):
+        replace(FILING, amends_filing_id=FILING.filing_id)
+    with pytest.raises(ValueError, match="ascending"):
+        replace(FILING, fiscal_period_start=date(2026, 4, 1))
+    with pytest.raises(TypeError, match="FinancialPeriod"):
+        replace(FILING, period="annual")  # type: ignore[arg-type]
+    with pytest.raises(TypeError, match="Consolidation"):
+        replace(FILING, consolidation="consolidated")  # type: ignore[arg-type]
 
 
 def test_event_rejects_naive_publication_and_empty_value_identity() -> None:
@@ -141,11 +179,12 @@ def test_imported_facts_require_evidence_or_explicit_missing_reason() -> None:
 
     assert financials.facts == (FACT,)
     assert events.events == (EVENT,)
-    with pytest.raises(ValueError, match="facts or missing"):
+    with pytest.raises(ValueError, match="facts, filings, or missing"):
         replace(financials, facts=())
     with pytest.raises(ValueError, match="events or missing"):
         replace(events, events=())
     assert replace(financials, facts=(), missing_reasons=("not_available",)).facts == ()
+    assert replace(financials, facts=(), filings=(FILING,)).filings == (FILING,)
     assert replace(events, events=(), missing_reasons=("not_available",)).events == ()
     with pytest.raises(ValueError, match="after retrieval"):
         replace(
@@ -176,6 +215,59 @@ def test_imported_facts_require_evidence_or_explicit_missing_reason() -> None:
         replace(financials, facts=(FACT, FACT))
     with pytest.raises(ValueError, match="unique provider observation"):
         replace(events, events=(EVENT, EVENT))
+
+
+def test_imported_financials_links_facts_to_ordered_filings_and_filters_knowledge() -> None:
+    amendment = replace(
+        FILING,
+        filing_id="doc-2026-amended",
+        published_at=datetime(2026, 8, 1, 6, tzinfo=UTC),
+        amends_filing_id=FILING.filing_id,
+    )
+    reported = replace(FACT, filing_id=FILING.filing_id)
+    restated = replace(
+        FACT,
+        value=Decimal("1050"),
+        published_at=amendment.published_at,
+        available_at=amendment.published_at,
+        revision=Revision.RESTATED,
+        filing_id=amendment.filing_id,
+    )
+    imported = ImportedFinancials(
+        REQUEST,
+        "fixture",
+        "v1",
+        "financials",
+        datetime(2026, 8, 2, tzinfo=UTC),
+        (reported, restated),
+        "a" * 64,
+        (),
+        (FILING, amendment),
+    )
+
+    assert imported.filings_known_at(PUBLISHED) == (FILING,)
+    assert imported.facts_known_at(PUBLISHED) == (reported,)
+    with pytest.raises(ValueError, match="stable publication order"):
+        replace(imported, filings=(amendment, FILING))
+    with pytest.raises(ValueError, match="unique filing"):
+        replace(imported, filings=(FILING, FILING))
+    with pytest.raises(ValueError, match="included filing"):
+        replace(imported, facts=(replace(reported, filing_id="missing"),))
+    with pytest.raises(ValueError, match="publication must match"):
+        replace(
+            imported,
+            facts=(
+                replace(
+                    reported,
+                    published_at=amendment.published_at,
+                    available_at=amendment.published_at,
+                ),
+            ),
+        )
+    with pytest.raises(ValueError, match="after retrieval"):
+        replace(imported, retrieved_at=PUBLISHED)
+    with pytest.raises(ValueError, match="UTC offset"):
+        imported.facts_known_at(datetime(2026, 7, 31, 6))
 
 
 @pytest.mark.parametrize("kind", ("financial", "event"))

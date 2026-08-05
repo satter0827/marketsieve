@@ -25,6 +25,8 @@ notifications.
   installation on supported Python versions.
 - **FND-07:** FRED supplies explicit economic-series observations with observation, retrieval, and
   revision time semantics.
+- **FND-08:** Financial acquisitions preserve filing identity, amendment linkage, public time, and
+  fact-to-filing provenance so historical analysis can exclude facts not yet available.
 
 ## 0.4.0 Personal Close Brief target
 

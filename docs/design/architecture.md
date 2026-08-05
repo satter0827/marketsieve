@@ -177,7 +177,9 @@ the provider.
 Daily bars, financials, and events are stored as independent content-addressed objects and have
 independent mutable references. A failed or unavailable data kind does not overwrite another kind.
 Financial records preserve fiscal boundaries, publication time, consolidation, revision, currency,
-scale, provider field, and normalized concept. Earnings schedules without a provider publication
+scale, provider field, normalized concept, and an optional filing link. Filing records separately
+preserve provider document and issuer identities, amendment linkage, publication time, and stated
+accounting dimensions. Earnings schedules without a provider publication
 timestamp use retrieval availability. Split events come only from the explicitly selected
 `SPLITS` endpoint and are never inferred from adjusted-price factors; an unselected or unavailable
 event kind remains missing.
