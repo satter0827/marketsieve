@@ -7,19 +7,15 @@ import sys
 import tomllib
 from pathlib import Path
 
+from scripts.package_catalog import load_package_catalog
+
 ROOT = Path(__file__).parents[2]
 
 
 def test_license_copies_match() -> None:
     root_license = (ROOT / "LICENSE").read_text(encoding="utf-8")
-    package_licenses = (
-        (ROOT / "packages" / "agent" / "LICENSE").read_text(encoding="utf-8"),
-        (ROOT / "packages" / "core" / "LICENSE").read_text(encoding="utf-8"),
-        (ROOT / "packages" / "cli" / "LICENSE").read_text(encoding="utf-8"),
-        (ROOT / "packages" / "extension-api" / "LICENSE").read_text(encoding="utf-8"),
-        (ROOT / "packages" / "source-csv" / "LICENSE").read_text(encoding="utf-8"),
-        (ROOT / "packages" / "source-jquants" / "LICENSE").read_text(encoding="utf-8"),
-        (ROOT / "packages" / "source-alphavantage" / "LICENSE").read_text(encoding="utf-8"),
+    package_licenses = tuple(
+        (spec.path / "LICENSE").read_text(encoding="utf-8") for spec in load_package_catalog(ROOT)
     )
 
     assert all(package_license == root_license for package_license in package_licenses)
@@ -44,20 +40,23 @@ def test_readmes_show_the_same_commands() -> None:
 
 
 def test_workspace_package_versions_match() -> None:
-    projects = (
-        ROOT / "packages/agent/pyproject.toml",
-        ROOT / "packages/core/pyproject.toml",
-        ROOT / "packages/extension-api/pyproject.toml",
-        ROOT / "packages/cli/pyproject.toml",
-        ROOT / "packages/source-csv/pyproject.toml",
-        ROOT / "packages/source-jquants/pyproject.toml",
-        ROOT / "packages/source-alphavantage/pyproject.toml",
-    )
-    versions = {
-        tomllib.loads(path.read_text(encoding="utf-8"))["project"]["version"] for path in projects
-    }
+    versions = {spec.project_version for spec in load_package_catalog(ROOT)}
 
     assert len(versions) == 1
+
+
+def test_public_package_catalog_drives_workspace_tools() -> None:
+    workspace = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    specs = load_package_catalog(ROOT)
+    relative_paths = {spec.path.relative_to(ROOT).as_posix() for spec in specs}
+    source_paths = {f"{path}/src" for path in relative_paths}
+    modules = {spec.module for spec in specs}
+
+    assert set(workspace["tool"]["uv"]["workspace"]["members"]) == relative_paths
+    assert source_paths <= set(workspace["tool"]["ruff"]["src"])
+    assert source_paths <= set(workspace["tool"]["mypy"]["files"])
+    assert modules == set(workspace["tool"]["importlinter"]["root_packages"])
+    assert modules == set(workspace["tool"]["coverage"]["run"]["source"])
 
 
 def test_generated_state_is_centralized() -> None:

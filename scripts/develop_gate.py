@@ -17,6 +17,8 @@ from pathlib import Path
 
 from jsonschema import Draft202012Validator, FormatChecker
 
+from scripts.package_catalog import PackageSpec, load_package_catalog
+
 ROOT = Path(__file__).parents[1]
 STATE_ROOT = ROOT / ".marketsieve"
 RUNTIME_WHEELHOUSE = STATE_ROOT / "cache" / "runtime-wheelhouse"
@@ -200,44 +202,33 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def verify_core_wheel(wheel: Path) -> list[str]:
+def verify_catalog_wheel(
+    spec: PackageSpec, wheel: Path, catalog: tuple[PackageSpec, ...]
+) -> list[str]:
     with zipfile.ZipFile(wheel) as archive:
         names = sorted(archive.namelist())
-    required = ("marketsieve/__init__.py", "marketsieve/py.typed")
+    required = [f"{spec.module}/__init__.py"]
+    if spec.role == "sdk":
+        required.append(f"{spec.module}/py.typed")
     if any(not any(name.endswith(suffix) for name in names) for suffix in required):
-        raise RuntimeError("wheel is missing required SDK files")
-    forbidden = ("marketsieve_cli/", "/tests/", "/schemas/", ".marketsieve/", "__pycache__")
-    violations = [name for name in names if any(fragment in name for fragment in forbidden)]
-    if violations:
-        raise RuntimeError(f"wheel contains private or generated files: {violations}")
-    return names
-
-
-def verify_cli_wheel(wheel: Path) -> list[str]:
-    with zipfile.ZipFile(wheel) as archive:
-        names = sorted(archive.namelist())
-    if not any(name.endswith("marketsieve_cli/__init__.py") for name in names):
-        raise RuntimeError("CLI wheel is missing its public module")
-    if any(name.startswith("marketsieve/") for name in names):
-        raise RuntimeError("CLI wheel must depend on, not contain, the SDK")
-    return names
-
-
-def verify_module_wheel(wheel: Path, module: str, *, forbidden: tuple[str, ...]) -> list[str]:
-    with zipfile.ZipFile(wheel) as archive:
-        names = sorted(archive.namelist())
-    if not any(name.endswith(f"{module}/__init__.py") for name in names):
-        raise RuntimeError(f"wheel is missing its public module: {module}")
+        raise RuntimeError(f"wheel is missing required files for {spec.distribution}")
+    forbidden = (
+        *(f"{other.module}/" for other in catalog if other.distribution != spec.distribution),
+        "/tests/",
+        "/schemas/",
+        ".marketsieve/",
+        "__pycache__",
+    )
     violations = [name for name in names if any(fragment in name for fragment in forbidden)]
     if violations:
         raise RuntimeError(f"wheel crosses a distribution boundary: {violations}")
     return names
 
 
-def verify_sdist(sdist: Path, *, forbidden_package: str) -> list[str]:
+def verify_catalog_sdist(sdist: Path) -> list[str]:
     with tarfile.open(sdist) as archive:
         names = sorted(archive.getnames())
-    forbidden = (forbidden_package, "/tests/", "/schemas/", ".marketsieve", "__pycache__")
+    forbidden = ("/packages/", "/tests/", "/schemas/", ".marketsieve", "__pycache__")
     violations = [name for name in names if any(fragment in name for fragment in forbidden)]
     if violations:
         raise RuntimeError(f"sdist contains private or generated files: {violations}")
@@ -277,103 +268,24 @@ def verify_isolated_target(
 
 
 def check_package(path: Path) -> None:
+    catalog = load_package_catalog()
     dist = (path / "dist").resolve()
     dist.mkdir()
-    for package_name in (
-        "marketsieve",
-        "marketsieve-agent",
-        "marketsieve-extension-api",
-        "marketsieve-cli",
-        "marketsieve-source-csv",
-        "marketsieve-source-jquants",
-        "marketsieve-source-alphavantage",
-    ):
-        run(("uv", "build", "--package", package_name, "--out-dir", str(dist)))
+    for spec in catalog:
+        run(("uv", "build", "--package", spec.distribution, "--out-dir", str(dist)))
     wheels = tuple(dist.glob("*.whl"))
     sdists = tuple(dist.glob("*.tar.gz"))
-    if len(wheels) != 7 or len(sdists) != 7:
-        raise RuntimeError("the public build must produce seven wheels and seven sdists")
+    if len(wheels) != len(catalog) or len(sdists) != len(catalog):
+        raise RuntimeError("the public build must produce one wheel and sdist per catalog entry")
     run(("uv", "run", "twine", "check", *(str(path) for path in (*wheels, *sdists))))
-    core_wheel = next(item for item in wheels if item.name.startswith("marketsieve-"))
-    agent_wheel = next(item for item in wheels if item.name.startswith("marketsieve_agent-"))
-    cli_wheel = next(item for item in wheels if item.name.startswith("marketsieve_cli-"))
-    extension_wheel = next(
-        item for item in wheels if item.name.startswith("marketsieve_extension_api-")
-    )
-    csv_wheel = next(item for item in wheels if item.name.startswith("marketsieve_source_csv-"))
-    jquants_wheel = next(
-        item for item in wheels if item.name.startswith("marketsieve_source_jquants-")
-    )
-    alphavantage_wheel = next(
-        item for item in wheels if item.name.startswith("marketsieve_source_alphavantage-")
-    )
-    core_sdist = next(item for item in sdists if item.name.startswith("marketsieve-"))
-    agent_sdist = next(item for item in sdists if item.name.startswith("marketsieve_agent-"))
-    cli_sdist = next(item for item in sdists if item.name.startswith("marketsieve_cli-"))
-    extension_sdist = next(
-        item for item in sdists if item.name.startswith("marketsieve_extension_api-")
-    )
-    csv_sdist = next(item for item in sdists if item.name.startswith("marketsieve_source_csv-"))
-    jquants_sdist = next(
-        item for item in sdists if item.name.startswith("marketsieve_source_jquants-")
-    )
-    alphavantage_sdist = next(
-        item for item in sdists if item.name.startswith("marketsieve_source_alphavantage-")
-    )
     wheel_files = {
-        "marketsieve": verify_core_wheel(core_wheel),
-        "marketsieve-agent": verify_module_wheel(
-            agent_wheel,
-            "marketsieve_agent",
-            forbidden=("marketsieve_cli/", "marketsieve_source_csv/", "marketsieve/"),
-        ),
-        "marketsieve-cli": verify_cli_wheel(cli_wheel),
-        "marketsieve-extension-api": verify_module_wheel(
-            extension_wheel,
-            "marketsieve_extension_api",
-            forbidden=("marketsieve_cli/", "marketsieve_source_csv/", "marketsieve/"),
-        ),
-        "marketsieve-source-csv": verify_module_wheel(
-            csv_wheel,
-            "marketsieve_source_csv",
-            forbidden=("marketsieve_cli/", "marketsieve_extension_api/", "marketsieve/"),
-        ),
-        "marketsieve-source-jquants": verify_module_wheel(
-            jquants_wheel,
-            "marketsieve_source_jquants",
-            forbidden=("marketsieve_cli/", "marketsieve_extension_api/", "marketsieve/"),
-        ),
-        "marketsieve-source-alphavantage": verify_module_wheel(
-            alphavantage_wheel,
-            "marketsieve_source_alphavantage",
-            forbidden=("marketsieve_cli/", "marketsieve_extension_api/", "marketsieve/"),
-        ),
+        spec.distribution: verify_catalog_wheel(spec, spec.wheel(dist), catalog) for spec in catalog
     }
-    sdist_files = {
-        "marketsieve": verify_sdist(core_sdist, forbidden_package="marketsieve_cli"),
-        "marketsieve-agent": verify_sdist(agent_sdist, forbidden_package="packages/cli"),
-        "marketsieve-cli": verify_sdist(cli_sdist, forbidden_package="packages/core"),
-        "marketsieve-extension-api": verify_sdist(
-            extension_sdist, forbidden_package="marketsieve_source_csv"
-        ),
-        "marketsieve-source-csv": verify_sdist(csv_sdist, forbidden_package="packages/cli"),
-        "marketsieve-source-jquants": verify_sdist(jquants_sdist, forbidden_package="packages/cli"),
-        "marketsieve-source-alphavantage": verify_sdist(
-            alphavantage_sdist, forbidden_package="packages/cli"
-        ),
-    }
+    sdist_files = {spec.distribution: verify_catalog_sdist(spec.sdist(dist)) for spec in catalog}
 
     with tempfile.TemporaryDirectory(prefix="marketsieve-install-") as temp_dir:
         temporary_root = Path(temp_dir)
-        isolated_targets = (
-            (core_wheel, "import marketsieve"),
-            (agent_wheel, "import marketsieve_agent"),
-            (extension_wheel, "import marketsieve_extension_api"),
-            (cli_wheel, "import marketsieve_cli"),
-            (csv_wheel, "import marketsieve_source_csv"),
-            (jquants_wheel, "import marketsieve_source_jquants"),
-            (alphavantage_wheel, "import marketsieve_source_alphavantage"),
-        )
+        isolated_targets = tuple((spec.wheel(dist), f"import {spec.module}") for spec in catalog)
         for target, statement in isolated_targets:
             verify_isolated_target(
                 temporary_root,
@@ -394,29 +306,21 @@ def check_package(path: Path) -> None:
                 "--no-index",
                 "--find-links",
                 str(RUNTIME_WHEELHOUSE),
-                str(core_wheel),
-                str(agent_wheel),
-                str(extension_wheel),
-                str(cli_wheel),
-                str(csv_wheel),
-                str(jquants_wheel),
-                str(alphavantage_wheel),
+                *(str(spec.wheel(dist)) for spec in catalog),
             )
         )
         installed = capture(
             (
                 str(isolated),
                 "-c",
-                "import marketsieve; import marketsieve_agent; import marketsieve_cli; "
-                "import marketsieve_extension_api; "
-                "import marketsieve_source_csv; import marketsieve_source_jquants; "
-                "import marketsieve_source_alphavantage; "
-                "import marketsieve.analysis.indicators; import marketsieve.data.daily; "
-                "import marketsieve.domain; "
-                "import marketsieve.synthetic.daily; print(marketsieve.__version__)",
+                "; ".join(f"import {spec.module}" for spec in catalog)
+                + "; import marketsieve.analysis.indicators; import marketsieve.data.daily; "
+                "import marketsieve.domain; import marketsieve.synthetic.daily; "
+                "print(marketsieve.__version__)",
             )
         ).stdout.strip()
-        run((str(isolated), "-m", "marketsieve_cli", "doctor", "--output", "json"))
+        cli_module = next(spec.module for spec in catalog if spec.role == "cli")
+        run((str(isolated), "-m", cli_module, "doctor", "--output", "json"))
 
     package = {
         "version": installed,

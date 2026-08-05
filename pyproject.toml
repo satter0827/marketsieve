@@ -46,6 +46,48 @@ marketsieve-source-csv = { workspace = true }
 marketsieve-source-jquants = { workspace = true }
 marketsieve-source-alphavantage = { workspace = true }
 
+[[tool.marketsieve.public-packages]]
+distribution = "marketsieve"
+path = "packages/core"
+module = "marketsieve"
+role = "sdk"
+
+[[tool.marketsieve.public-packages]]
+distribution = "marketsieve-agent"
+path = "packages/agent"
+module = "marketsieve_agent"
+role = "agent"
+
+[[tool.marketsieve.public-packages]]
+distribution = "marketsieve-extension-api"
+path = "packages/extension-api"
+module = "marketsieve_extension_api"
+role = "extension-api"
+
+[[tool.marketsieve.public-packages]]
+distribution = "marketsieve-cli"
+path = "packages/cli"
+module = "marketsieve_cli"
+role = "cli"
+
+[[tool.marketsieve.public-packages]]
+distribution = "marketsieve-source-csv"
+path = "packages/source-csv"
+module = "marketsieve_source_csv"
+role = "adapter"
+
+[[tool.marketsieve.public-packages]]
+distribution = "marketsieve-source-jquants"
+path = "packages/source-jquants"
+module = "marketsieve_source_jquants"
+role = "adapter"
+
+[[tool.marketsieve.public-packages]]
+distribution = "marketsieve-source-alphavantage"
+path = "packages/source-alphavantage"
+module = "marketsieve_source_alphavantage"
+role = "adapter"
+
 [tool.pytest.ini_options]
 addopts = "-q --strict-config --strict-markers"
 cache_dir = ".marketsieve/cache/pytest"
