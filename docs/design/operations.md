@@ -60,6 +60,12 @@ Generated command output is ephemeral and is not committed as a report or fixtur
 terminals receive Rich output, while redirection receives ANSI-free text. JSON output is selected
 explicitly for machine consumers.
 
+The decision-report adapter stores canonical JSON below `.marketsieve/reports/objects`, generated
+Markdown below `.marketsieve/reports/rendered`, and atomic per-session latest references below
+`.marketsieve/reports/refs`. An all-indeterminate report is retained for diagnosis but never
+replaces a usable latest reference. Routine commands start using this store when the remaining
+Personal Close Brief orchestration is implemented.
+
 Failures identify whether input validation, analysis prerequisites, or an internal contract caused
 the operation to stop. They do not expose environment secrets or silently switch data sources.
 

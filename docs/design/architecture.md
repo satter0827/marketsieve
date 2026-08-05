@@ -248,7 +248,7 @@ providers. Each real provider has separate mocked-transport contract tests. LM S
 loopback-only by default. Cloud use requires an explicit invocation flag and never becomes a
 fallback for a failed local or cloud provider.
 
-## 0.4.0 Personal Close Brief target architecture
+## Decision report storage
 
 The report becomes the application boundary for routine use:
 
@@ -263,9 +263,22 @@ Explicit acquisition or import
 ```
 
 The SDK owns portfolio, policy, decision, evidence, and report semantics without owning a clock,
-configuration, persistence, provider, renderer, or LLM. The extension API adds portfolio-import and
-economic-series capabilities only with the working Rakuten and FRED packages. The CLI owns source
-selection, report orchestration, content-addressed storage, latest references, and presentation.
+configuration, persistence, provider, renderer, or LLM. The CLI adapter serializes
+`decision-report/v1` as canonical sorted JSON, derives its SHA-256 report ID from semantic content,
+and generates deterministic Markdown from the validated report. The JSON object is evidence
+authority; Markdown and latest references are replaceable indexes and projections.
+
+Reports live below `.marketsieve/reports`. Immutable JSON objects use `objects/<report_id>.json`,
+Markdown uses `rendered/<report_id>.md`, and session references use
+`refs/{jp-latest,us-latest,weekly-latest}.json`. Writes use a temporary sibling and atomic replace.
+A report containing only indeterminate decisions remains inspectable but does not advance a latest
+reference. Reads reconstruct and validate SDK values and reject non-canonical or modified content.
+
+## Remaining 0.4.0 Personal Close Brief target architecture
+
+The extension API adds portfolio-import and economic-series capabilities only with the working
+Rakuten and FRED packages. The CLI owns source selection and report orchestration in addition to its
+implemented content-addressed storage and Markdown presentation.
 
 Application use cases replace the growing snapshot-service orchestration surface. Acquisition,
 portfolio import, daily reporting, weekly reporting, report lookup, and model explanation have
