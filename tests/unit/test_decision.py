@@ -261,6 +261,7 @@ def test_decision_report_rejects_time_portfolio_and_policy_mismatches() -> None:
         ({"policy_settings": (("z", "1"), ("a", "2"))}, "settings"),
         ({"diagnostics": ("",)}, "diagnostics"),
         ({"previous_report_id": "g" * 64}, "previous report"),
+        ({"input_report_ids": ("c" * 64,)}, "daily reports"),
     ],
 )
 def test_decision_report_rejects_noncanonical_values(
@@ -282,6 +283,31 @@ def test_decision_report_rejects_noncanonical_values(
 
     with pytest.raises((TypeError, ValueError), match=error):
         replace(report, **changes)  # type: ignore[arg-type]
+
+
+def test_weekly_report_requires_two_canonical_input_ids() -> None:
+    analysis = context(held=True)
+    decision = BalancedMediumTermPolicy().evaluate(analysis)
+    report = DecisionReport(
+        "a" * 64,
+        "decision-report/v1",
+        MarketSession.JP_CLOSE,
+        analysis.as_of,
+        PortfolioSnapshot(analysis.as_of, (holding(),), (), "csv"),
+        decision.policy_name,
+        decision.policy_version,
+        decision.policy_settings,
+        (decision,),
+    )
+
+    with pytest.raises(ValueError, match="exactly two"):
+        replace(report, session=MarketSession.WEEKLY)
+    with pytest.raises(ValueError, match="unique sorted"):
+        replace(
+            report,
+            session=MarketSession.WEEKLY,
+            input_report_ids=("d" * 64, "c" * 64),
+        )
 
 
 @pytest.mark.parametrize(

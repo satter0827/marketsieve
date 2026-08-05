@@ -239,6 +239,10 @@ missing or stale input names the daily command required to recover. `report show
 export` are read-only. `report explain` contacts only the explicitly selected model and stores an
 explanation separately from the report.
 
+`decision-report/v1` records `input_report_ids`. The field is empty for daily reports and contains
+exactly the sorted Japanese and U.S. report IDs for a weekly report. The default weekly eligibility
+window is seven days. `[routines.weekly].max_age_days` can set an integer from 1 through 14.
+
 Human output presents conclusion, attention items, changes, unchanged items, next action, data
 limitations, and detailed evidence in that order. `--quiet` retains the conclusion, attention
 items, and next action. JSON returns the canonical English-keyed decision-report contract without

@@ -129,6 +129,7 @@ def semantic_document(
     decisions: tuple[InstrumentDecision, ...],
     diagnostics: tuple[str, ...],
     previous_report_id: str | None,
+    input_report_ids: tuple[str, ...] = (),
 ) -> dict[str, object]:
     """Build canonical semantic content without its derived ID."""
 
@@ -156,6 +157,7 @@ def semantic_document(
         "decisions": [_decision_document(item) for item in decisions],
         "diagnostics": list(diagnostics),
         "previous_report_id": previous_report_id,
+        "input_report_ids": list(input_report_ids),
     }
 
 
@@ -167,11 +169,18 @@ def create_report(
     *,
     diagnostics: tuple[str, ...] = (),
     previous_report_id: str | None = None,
+    input_report_ids: tuple[str, ...] = (),
 ) -> DecisionReport:
     """Create a report whose ID is the digest of its canonical semantic content."""
 
     semantic = semantic_document(
-        session, as_of, portfolio, decisions, diagnostics, previous_report_id
+        session,
+        as_of,
+        portfolio,
+        decisions,
+        diagnostics,
+        previous_report_id,
+        input_report_ids,
     )
     report_id = hashlib.sha256(_json_bytes(semantic)).hexdigest()
     first = decisions[0]
@@ -187,6 +196,7 @@ def create_report(
         decisions,
         diagnostics,
         previous_report_id,
+        input_report_ids,
     )
 
 
@@ -198,6 +208,7 @@ def report_document(report: DecisionReport) -> dict[str, object]:
         report.decisions,
         report.diagnostics,
         report.previous_report_id,
+        report.input_report_ids,
     )
     expected = hashlib.sha256(_json_bytes(semantic)).hexdigest()
     if expected != report.report_id:
@@ -468,6 +479,7 @@ def _parse_report(value: dict[str, Any]) -> DecisionReport:
         decisions,
         tuple(value["diagnostics"]),
         value["previous_report_id"],
+        tuple(value["input_report_ids"]),
     )
 
 

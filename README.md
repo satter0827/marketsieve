@@ -24,7 +24,8 @@ independent CSV, J-Quants, Alpha Vantage, FRED, SEC, and EDINET sources; immutab
 snapshots; price,
 financial, and event inspection; seven deterministic technical indicators; and an explanation-only
 Agent. Configured `daily jp` and `daily us` commands explicitly acquire portfolio instruments and
-write immutable Close Brief reports. The Agent reads only an immutable decision report and requires an explicit LM Studio,
+write immutable Close Brief reports. `weekly` combines eligible daily reports offline as the
+weekend briefing. The Agent reads only an immutable decision report and requires an explicit LM Studio,
 OpenAI, Anthropic, or Google provider. Its output is stored separately and cannot change a report.
 
 ## Installation
@@ -87,6 +88,7 @@ uv run marketsieve report list --output json
 uv run marketsieve report show latest --output json
 uv run marketsieve report export latest --format markdown
 uv run marketsieve --config marketsieve.toml daily jp
+uv run marketsieve --config marketsieve.toml weekly
 uv run marketsieve --config marketsieve.toml report explain latest --provider openai --dry-run --output json
 ```
 

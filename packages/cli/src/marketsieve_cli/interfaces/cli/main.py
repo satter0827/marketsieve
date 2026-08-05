@@ -17,6 +17,7 @@ from marketsieve_cli.bootstrap import (
     build_daily_brief_service,
     build_diagnostics_service,
     build_snapshot_service,
+    build_weekly_brief_service,
     import_portfolio,
     list_decision_reports,
     project_decision_report,
@@ -80,6 +81,10 @@ COMMAND_METADATA: dict[str, dict[str, Any]] = {
     "source list": {
         "output_schema": "urn:marketsieve:schema:source-result:1.0.0",
         "effects": {"network": False, "secrets": False, "optional_writes": []},
+    },
+    "weekly": {
+        "output_schema": "urn:marketsieve:schema:decision-report:1.0.0",
+        "effects": {"network": False, "secrets": False, "optional_writes": ["report"]},
     },
     "source import": {
         "output_schema": "urn:marketsieve:schema:source-result:1.0.0",
@@ -268,6 +273,30 @@ def daily(context: click.Context, market: str, as_of: str | None, output_mode: s
         report = build_daily_brief_service(context.obj["config_path"]).run(market, as_of=instant)
     except (LookupError, OSError, RuntimeError, TypeError, ValueError) as error:
         console.emit_error("daily_failed", str(error))
+        raise click.exceptions.Exit(1) from None
+    if output_mode == "json":
+        console.emit_document(read_decision_report(report.report_id), title="Decision report")
+    else:
+        click.echo(project_decision_report(report.report_id), nl=False)
+
+
+@main.command()
+@click.option(
+    "--as-of",
+    default=None,
+    help="Use an explicit ISO 8601 knowledge time; defaults to the current time.",
+)
+@output_option
+@click.pass_context
+def weekly(context: click.Context, as_of: str | None, output_mode: str) -> None:
+    """Create the offline weekend briefing from eligible daily reports."""
+
+    console = _console(context, output_mode)
+    try:
+        instant = datetime.now().astimezone() if as_of is None else datetime.fromisoformat(as_of)
+        report = build_weekly_brief_service(context.obj["config_path"]).run(as_of=instant)
+    except (LookupError, OSError, RuntimeError, TypeError, ValueError) as error:
+        console.emit_error("weekly_failed", str(error))
         raise click.exceptions.Exit(1) from None
     if output_mode == "json":
         console.emit_document(read_decision_report(report.report_id), title="Decision report")

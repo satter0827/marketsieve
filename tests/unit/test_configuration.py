@@ -122,6 +122,30 @@ def test_daily_routine_configuration_never_guesses_a_profile() -> None:
         Configuration(None).daily_profile("jp")
 
 
+def test_weekly_routine_age_has_a_low_burden_default_and_bounds(tmp_path: Path) -> None:
+    assert Configuration(None).weekly_max_age_days() == 7
+
+    path = tmp_path / "weekly.toml"
+    path.write_text("[routines.weekly]\nmax_age_days = 5\n", encoding="utf-8")
+    assert Configuration(path).weekly_max_age_days() == 5
+
+    path.write_text("[routines.weekly]\nmax_age_days = 15\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="1 through 14"):
+        Configuration(path).weekly_max_age_days()
+
+    path.write_text("routines = 1\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="routines configuration"):
+        Configuration(path).weekly_max_age_days()
+
+    path.write_text('routines.weekly = "invalid"\n', encoding="utf-8")
+    with pytest.raises(ValueError, match="TOML table"):
+        Configuration(path).weekly_max_age_days()
+
+    path.write_text('[routines.weekly]\nunknown = "invalid"\n', encoding="utf-8")
+    with pytest.raises(ValueError, match="unsupported settings"):
+        Configuration(path).weekly_max_age_days()
+
+
 def test_explicit_configuration_rejects_missing_invalid_and_secret_like_shapes(
     tmp_path: Path,
 ) -> None:

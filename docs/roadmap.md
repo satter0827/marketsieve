@@ -7,8 +7,7 @@ design and release history, not in this file.
 
 1. Add a Rakuten importer based on anonymized real fixtures and map it to the implemented canonical
    portfolio model.
-2. Add the offline weekly workflow that combines eligible Japanese and U.S. close reports.
-3. Replace generic JSON-shaped terminal output with conclusion-first Close Brief projections.
+2. Replace generic JSON-shaped terminal output with conclusion-first Close Brief projections.
 
 ## 0.5.0 Official Fundamentals
 

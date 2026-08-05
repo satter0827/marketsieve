@@ -44,6 +44,7 @@ class AgentProvider:
 
 
 DEFAULT_DAILY_LOOKBACK_DAYS = 400
+DEFAULT_WEEKLY_MAX_AGE_DAYS = 7
 
 
 class Configuration:
@@ -160,3 +161,20 @@ class Configuration:
         ):
             raise ValueError("daily lookback_days must be an integer from 60 through 2000")
         return value["source_profile"], lookback
+
+    def weekly_max_age_days(self) -> int:
+        """Return the maximum age accepted for each daily input report."""
+
+        routines = self._document().get("routines", {})
+        if not isinstance(routines, dict):
+            raise ValueError("routines configuration must be a TOML table")
+        value = routines.get("weekly", {})
+        if not isinstance(value, dict):
+            raise ValueError("weekly routine must be a TOML table")
+        unknown = set(value) - {"max_age_days"}
+        if unknown:
+            raise ValueError("weekly routine contains unsupported settings")
+        maximum = value.get("max_age_days", DEFAULT_WEEKLY_MAX_AGE_DAYS)
+        if not isinstance(maximum, int) or isinstance(maximum, bool) or not 1 <= maximum <= 14:
+            raise ValueError("weekly max_age_days must be an integer from 1 through 14")
+        return maximum

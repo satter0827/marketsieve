@@ -108,6 +108,7 @@ def _report(
         ),
         diagnostics=("FRED系列は未取得",),
         previous_report_id=previous_report_id,
+        input_report_ids=("1" * 64, "2" * 64) if session is MarketSession.WEEKLY else (),
     )
 
 
@@ -308,6 +309,20 @@ def test_report_id_covers_diagnostics_and_previous_report() -> None:
     )
 
     assert len({report.report_id, changed_diagnostics.report_id, changed_previous.report_id}) == 3
+
+
+def test_weekly_report_id_covers_exact_input_reports() -> None:
+    report = _report(session=MarketSession.WEEKLY)
+    changed = create_report(
+        report.session,
+        report.as_of,
+        report.portfolio,
+        report.decisions,
+        diagnostics=report.diagnostics,
+        input_report_ids=("1" * 64, "3" * 64),
+    )
+
+    assert changed.report_id != report.report_id
 
 
 def test_markdown_has_stable_conclusion_first_sections() -> None:

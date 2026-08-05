@@ -208,6 +208,7 @@ def test_capabilities_match_click_commands_and_validate_schema() -> None:
         "source fetch",
         "source import",
         "source list",
+        "weekly",
     ]
     report = next(item for item in document["commands"] if item["name"] == "report explain")
     assert {option["name"] for option in report["options"]} == {
