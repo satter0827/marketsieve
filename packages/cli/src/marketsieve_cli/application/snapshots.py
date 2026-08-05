@@ -3,14 +3,16 @@
 from __future__ import annotations
 
 from datetime import UTC, date, datetime
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation, localcontext
 from pathlib import Path
 from typing import Any, Protocol
 
 from marketsieve.analysis.indicators import (
+    CONTEXT,
     IndicatorName,
     IndicatorSpec,
     calculate,
+    canonical_decimal,
 )
 from marketsieve.data.daily import Adjustment, DailyBar
 from marketsieve.domain import Instrument
@@ -537,3 +539,131 @@ class SnapshotService:
             and date.fromisoformat(item["effective_date"]) >= local_date
         )
         return min(candidates, default=None)
+
+    def valuation_history(
+        self, profile: str, instrument: str, as_of: datetime
+    ) -> tuple[tuple[str, str], ...]:
+        """Compare current valuation facts with explicitly acquired company history."""
+
+        if as_of.tzinfo is None or as_of.utcoffset() is None:
+            raise ValueError("as_of must include a UTC offset")
+        observations: dict[str, dict[datetime, tuple[str, Decimal]]] = {}
+        for stored in self._repository.list():
+            manifest = stored.manifest
+            identity = manifest.get("instrument", {})
+            source = manifest.get("source", {})
+            if (
+                manifest.get("kind") != "daily_bars"
+                or source.get("profile") != profile
+                or f"{identity.get('mic')}:{identity.get('symbol')}" != instrument
+            ):
+                continue
+            self._repository.verify(stored.object_id)
+            document = self._repository.normalized(stored.object_id)
+            raw_profile = document.get("instrument_profile")
+            if not isinstance(raw_profile, dict):
+                continue
+            available_at = datetime.fromisoformat(str(raw_profile["available_at"]))
+            if available_at.astimezone(UTC) > as_of.astimezone(UTC):
+                continue
+            attributes = raw_profile.get("attributes", {})
+            if not isinstance(attributes, dict):
+                continue
+            for name, provider_name in (
+                ("dividend_yield", "dividend_yield"),
+                ("pbr", "price_to_book"),
+                ("psr", "price_to_sales_ttm"),
+                ("trailing_per", "trailing_per"),
+            ):
+                try:
+                    value = Decimal(str(attributes[provider_name]))
+                except (KeyError, InvalidOperation, TypeError, ValueError):
+                    continue
+                if value.is_finite():
+                    prior = observations.setdefault(name, {}).get(available_at)
+                    if prior is not None and prior[1] != value:
+                        raise ValueError("valuation history contains conflicting observations")
+                    if prior is None or stored.object_id < prior[0]:
+                        observations[name][available_at] = (stored.object_id, value)
+        values: list[tuple[str, str]] = []
+        for name, items in sorted(observations.items()):
+            ordered = sorted(
+                ((available_at, *item) for available_at, item in items.items()),
+                key=lambda item: (item[0], item[1]),
+            )
+            current = ordered[-1][2]
+            history = sorted(item[2] for item in ordered)
+            values.append((f"{name}.current", canonical_decimal(current)))
+            values.append((f"{name}.history_count", str(len(history))))
+            if len(history) >= 2:
+                values.extend(
+                    (
+                        (f"{name}.history_max", canonical_decimal(history[-1])),
+                        (f"{name}.history_median", canonical_decimal(_median(history))),
+                        (f"{name}.history_min", canonical_decimal(history[0])),
+                    )
+                )
+        return tuple(sorted(values))
+
+    def fundamental_changes(
+        self, profile: str, instrument: str, as_of: datetime
+    ) -> tuple[tuple[str, str], ...]:
+        """Describe the latest known filing and any explicit amendment."""
+
+        if as_of.tzinfo is None or as_of.utcoffset() is None:
+            raise ValueError("as_of must include a UTC offset")
+        stored = self._repository.resolve(profile, instrument, "financials")
+        self._repository.verify(stored.object_id)
+        document = self._repository.normalized(stored.object_id)
+        filings = sorted(
+            (
+                item
+                for item in document["filings"]
+                if datetime.fromisoformat(item["published_at"]).astimezone(UTC)
+                <= as_of.astimezone(UTC)
+            ),
+            key=lambda item: (item["published_at"], item["filing_id"]),
+        )
+        if not filings:
+            return ()
+        latest = filings[-1]
+        values = {
+            "change_type": "amendment" if latest["amends_filing_id"] else "new_filing",
+            "latest_filing_id": latest["filing_id"],
+            "latest_filing_published_at": latest["published_at"],
+            "latest_filing_type": latest["document_type"],
+        }
+        if latest["fiscal_period_end"]:
+            values["latest_period_end"] = latest["fiscal_period_end"]
+        amended_id = latest["amends_filing_id"]
+        if amended_id:
+            values["amends_filing_id"] = amended_id
+            by_filing: dict[str, dict[str, Decimal]] = {}
+            for fact in document["facts"]:
+                if fact["filing_id"] not in {latest["filing_id"], amended_id}:
+                    continue
+                if datetime.fromisoformat(fact["available_at"]).astimezone(UTC) > as_of.astimezone(
+                    UTC
+                ):
+                    continue
+                by_filing.setdefault(fact["filing_id"], {})[fact["concept"]] = Decimal(
+                    fact["value"]
+                ) * Decimal(fact["scale"])
+            current = by_filing.get(latest["filing_id"], {})
+            previous = by_filing.get(amended_id, {})
+            changed = sorted(
+                concept
+                for concept in current.keys() & previous.keys()
+                if current[concept] != previous[concept]
+            )
+            if changed:
+                values["restated_concepts"] = ",".join(changed)
+        return tuple(sorted(values.items()))
+
+
+def _median(values: list[Decimal]) -> Decimal:
+    middle = len(values) // 2
+    if len(values) % 2:
+        return values[middle]
+    with localcontext(CONTEXT):
+        return +(values[middle - 1] + values[middle]) / Decimal(2)

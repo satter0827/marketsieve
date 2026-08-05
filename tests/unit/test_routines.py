@@ -44,6 +44,8 @@ class DataService:
     fetches: list[str] = field(default_factory=list)
     trends: dict[str, FinancialTrendReport] = field(default_factory=dict)
     earnings: dict[str, date] = field(default_factory=dict)
+    valuations: dict[str, tuple[tuple[str, str], ...]] = field(default_factory=dict)
+    fundamentals: dict[str, tuple[tuple[str, str], ...]] = field(default_factory=dict)
 
     def fetch(
         self,
@@ -74,6 +76,18 @@ class DataService:
     def next_earnings_date(self, profile: str, instrument: str, as_of: datetime) -> date | None:
         del profile, as_of
         return self.earnings.get(instrument)
+
+    def valuation_history(
+        self, profile: str, instrument: str, as_of: datetime
+    ) -> tuple[tuple[str, str], ...]:
+        del profile, as_of
+        return self.valuations.get(instrument, ())
+
+    def fundamental_changes(
+        self, profile: str, instrument: str, as_of: datetime
+    ) -> tuple[tuple[str, str], ...]:
+        del profile, as_of
+        return self.fundamentals.get(instrument, ())
 
 
 class Configuration:
@@ -176,6 +190,13 @@ def test_daily_passes_known_financial_trends_and_earnings_to_policy(tmp_path: Pa
         {"XTKS:7203": bars},
         trends={"XTKS:7203": trend},
         earnings={"XTKS:7203": earnings},
+        valuations={
+            "XTKS:7203": (
+                ("trailing_per.current", "14"),
+                ("trailing_per.history_count", "3"),
+            )
+        },
+        fundamentals={"XTKS:7203": (("latest_filing_id", "filing-2025"),)},
     )
     service = DailyBriefService(
         PortfolioReader(_portfolio(available)),
@@ -192,6 +213,8 @@ def test_daily_passes_known_financial_trends_and_earnings_to_policy(tmp_path: Pa
     assert decision.eps_growth == Decimal("0.2")
     assert decision.free_cash_flow == Decimal("20")
     assert decision.next_earnings_date == earnings
+    assert dict(decision.valuation)["trailing_per.current"] == "14"
+    assert dict(decision.fundamentals)["latest_filing_id"] == "filing-2025"
     assert any(trend.evidence_id in item.evidence_ids for item in decision.evidence)
 
 

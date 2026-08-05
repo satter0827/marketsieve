@@ -23,6 +23,7 @@ from marketsieve_extension_api import (
     FinancialPeriod,
     ImportedEvents,
     ImportedFinancials,
+    InstrumentProfile,
     Revision,
 )
 from marketsieve_source_csv import CsvDailyBarImporter
@@ -142,12 +143,20 @@ def test_financial_and_event_snapshots_have_independent_kind_references(tmp_path
         Consolidation.CONSOLIDATED,
         "JPY",
     )
+    amendment_published_at = datetime(2026, 8, 1, 6, tzinfo=UTC)
+    amendment = replace(
+        filing,
+        filing_id="doc-2026-amended",
+        document_type="annual-report-amendment",
+        published_at=amendment_published_at,
+        amends_filing_id=filing.filing_id,
+    )
     financials = ImportedFinancials(
         request,
         "fixture",
         "v1",
         "financials",
-        datetime(2026, 8, 1, tzinfo=UTC),
+        datetime(2026, 8, 2, tzinfo=UTC),
         (
             FinancialFact(
                 "revenue",
@@ -167,10 +176,28 @@ def test_financial_and_event_snapshots_have_independent_kind_references(tmp_path
                 Decimal("1000"),
                 filing.filing_id,
             ),
+            FinancialFact(
+                "revenue",
+                "Sales",
+                "J-GAAP",
+                FinancialPeriod.ANNUAL,
+                "FY",
+                date(2025, 4, 1),
+                date(2026, 3, 31),
+                amendment_published_at,
+                amendment_published_at,
+                AvailabilityBasis.PUBLISHED,
+                Consolidation.CONSOLIDATED,
+                Revision.RESTATED,
+                "JPY",
+                1,
+                Decimal("1100"),
+                amendment.filing_id,
+            ),
         ),
         "a" * 64,
         (),
-        (filing,),
+        (filing, amendment),
     )
     events = ImportedEvents(
         request,
@@ -197,9 +224,24 @@ def test_financial_and_event_snapshots_have_independent_kind_references(tmp_path
     daily_stored = store.put_daily_bars(daily)
     financial_stored = store.put_financials(financials)
     event_stored = store.put_events(events)
+    profiled_stored = daily_stored
+    for day, per, digest in ((1, "10", "c" * 64), (2, "14", "d" * 64)):
+        profiled_stored = store.put_daily_bars(
+            replace(
+                daily,
+                retrieved_at=datetime(2026, 8, day, tzinfo=UTC),
+                bundle_hash=digest,
+                instrument_profile=InstrumentProfile(
+                    date(2026, 8, day),
+                    None,
+                    (("ja", "トヨタ自動車"),),
+                    (("trailing_per", per),),
+                ),
+            )
+        )
 
     assert len({daily_stored.object_id, financial_stored.object_id, event_stored.object_id}) == 3
-    assert store.resolve("offline-jp", "XTKS:7203").object_id == daily_stored.object_id
+    assert store.resolve("offline-jp", "XTKS:7203").object_id == profiled_stored.object_id
     assert (
         store.resolve("offline-jp", "XTKS:7203", "financials").object_id
         == financial_stored.object_id
@@ -215,10 +257,49 @@ def test_financial_and_event_snapshots_have_independent_kind_references(tmp_path
     assert store.normalized(event_stored.object_id)["missing_reasons"] == ["split_not_available"]
     service = SnapshotService(cast(Any, None), store, cast(Any, None))
     trend = service.financial_trend("offline-jp", "XTKS:7203", datetime(2026, 8, 2, tzinfo=UTC))
-    assert dict(trend.periods[0].values)["revenue"] == Decimal("1000")
+    assert dict(trend.periods[0].values)["revenue"] == Decimal("1100")
     assert service.next_earnings_date(
         "offline-jp", "XTKS:7203", datetime(2026, 7, 25, tzinfo=UTC)
     ) == date(2026, 7, 31)
+    valuation = dict(
+        service.valuation_history("offline-jp", "XTKS:7203", datetime(2026, 8, 3, tzinfo=UTC))
+    )
+    assert valuation == {
+        "trailing_per.current": "14",
+        "trailing_per.history_count": "2",
+        "trailing_per.history_max": "14",
+        "trailing_per.history_median": "12",
+        "trailing_per.history_min": "10",
+    }
+    assert dict(
+        service.valuation_history("offline-jp", "XTKS:7203", datetime(2026, 8, 1, 12, tzinfo=UTC))
+    ) == {
+        "trailing_per.current": "10",
+        "trailing_per.history_count": "1",
+    }
+    assert (
+        service.fundamental_changes("offline-jp", "XTKS:7203", datetime(2026, 7, 30, tzinfo=UTC))
+        == ()
+    )
+    assert dict(
+        service.fundamental_changes("offline-jp", "XTKS:7203", datetime(2026, 8, 2, tzinfo=UTC))
+    ) == {
+        "amends_filing_id": "doc-2026",
+        "change_type": "amendment",
+        "latest_filing_id": "doc-2026-amended",
+        "latest_filing_published_at": "2026-08-01T06:00:00+00:00",
+        "latest_filing_type": "annual-report-amendment",
+        "latest_period_end": "2026-03-31",
+        "restated_concepts": "revenue",
+    }
+    for method in (
+        service.financial_trend,
+        service.next_earnings_date,
+        service.valuation_history,
+        service.fundamental_changes,
+    ):
+        with pytest.raises(ValueError, match="UTC offset"):
+            method("offline-jp", "XTKS:7203", datetime(2026, 8, 2))
 
 
 def test_pending_directory_is_not_a_snapshot(tmp_path: Path) -> None:

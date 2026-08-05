@@ -144,6 +144,7 @@
         "eps_growth",
         "free_cash_flow",
         "valuation",
+        "fundamentals",
         "invalidation_conditions",
         "next_action",
         "policy"
@@ -171,6 +172,7 @@
         "eps_growth": { "type": ["string", "null"] },
         "free_cash_flow": { "type": ["string", "null"] },
         "valuation": { "$ref": "#/$defs/stringMap" },
+        "fundamentals": { "$ref": "#/$defs/stringMap" },
         "invalidation_conditions": {
           "type": "array",
           "items": { "type": "string", "minLength": 1 }

@@ -235,6 +235,11 @@ Price failure makes that instrument indeterminate. Financial or event failure le
 decision usable, records the missing evidence, and cannot silently reuse another provider. If every
 instrument is indeterminate, the command fails and does not update the latest reference.
 
+The detailed report section shows period-to-period revenue, EPS, and free-cash-flow results,
+the latest known filing and amendment context, and company-relative valuation history when the
+configured source supplies valuation facts. A single observation is labeled with a history count
+of one and is not presented as a range. These display facts do not alter the decision policy.
+
 `weekly` reads the latest eligible Japanese and U.S. reports and performs no network access. A
 missing or stale input names the daily command required to recover. `report show` and `report
 export` are read-only. `report explain` contacts only the explicitly selected model and stores an

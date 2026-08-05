@@ -357,6 +357,13 @@ Financial and event acquisition are optional evidence; failures lower confidence
 earnings wait rule and remain visible as diagnostics. An all-indeterminate run stores diagnostic
 evidence without advancing the session reference.
 
+The CLI derives filing context from the verified financial snapshot and derives company-relative
+valuation ranges by scanning verified daily-bar snapshots for the same source profile and
+exchange-qualified instrument. Only profile facts available by the command knowledge time enter
+the range. This history is application-owned local composition, not a provider-specific SDK model.
+The decision report preserves the resulting sorted string maps as display evidence; the policy does
+not use them to reverse an action.
+
 The weekly service performs no acquisition. It reads the explicit Japanese-close and U.S.-close
 latest references, rejects missing, future, or stale inputs, and combines their decisions without
 recalculation. The weekly report records both sorted input report IDs in its canonical JSON; those

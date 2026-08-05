@@ -45,6 +45,14 @@ class DailyDataService(Protocol):
 
     def next_earnings_date(self, profile: str, instrument: str, as_of: datetime) -> date | None: ...
 
+    def valuation_history(
+        self, profile: str, instrument: str, as_of: datetime
+    ) -> tuple[tuple[str, str], ...]: ...
+
+    def fundamental_changes(
+        self, profile: str, instrument: str, as_of: datetime
+    ) -> tuple[tuple[str, str], ...]: ...
+
 
 class DecisionReportRepository(Protocol):
     def put(self, report: DecisionReport) -> DecisionReport: ...
@@ -68,6 +76,8 @@ class _OptionalContext:
     revenue_growth: Decimal | None = None
     eps_growth: Decimal | None = None
     free_cash_flow: Decimal | None = None
+    valuation: tuple[tuple[str, str], ...] = ()
+    fundamentals: tuple[tuple[str, str], ...] = ()
     evidence_ids: tuple[str, ...] = ()
 
 
@@ -149,6 +159,8 @@ class DailyBriefService:
                     optional_by_instrument[(instrument.mic, instrument.symbol)].revenue_growth,
                     optional_by_instrument[(instrument.mic, instrument.symbol)].eps_growth,
                     optional_by_instrument[(instrument.mic, instrument.symbol)].free_cash_flow,
+                    optional_by_instrument[(instrument.mic, instrument.symbol)].valuation,
+                    optional_by_instrument[(instrument.mic, instrument.symbol)].fundamentals,
                     input_evidence_ids=optional_by_instrument[
                         (instrument.mic, instrument.symbol)
                     ].evidence_ids,
@@ -187,6 +199,7 @@ class DailyBriefService:
         key = self._key(instrument)
         local_end = as_of.astimezone(instrument.exchange_timezone).date()
         trend: FinancialTrendReport | None = None
+        fundamentals: tuple[tuple[str, str], ...] = ()
         try:
             self._data.fetch(
                 profile,
@@ -197,6 +210,7 @@ class DailyBriefService:
                 "financials",
             )
             trend = self._data.financial_trend(profile, key, as_of)
+            fundamentals = self._data.fundamental_changes(profile, key, as_of)
         except (LookupError, OSError, RuntimeError, TypeError, ValueError) as error:
             diagnostics.append(f"{key}: financial acquisition failed ({type(error).__name__})")
         earnings: date | None = None
@@ -212,13 +226,24 @@ class DailyBriefService:
             earnings = self._data.next_earnings_date(profile, key, as_of)
         except (LookupError, OSError, RuntimeError, TypeError, ValueError) as error:
             diagnostics.append(f"{key}: event acquisition failed ({type(error).__name__})")
+        valuation: tuple[tuple[str, str], ...] = ()
+        try:
+            valuation = self._data.valuation_history(profile, key, as_of)
+        except (LookupError, OSError, RuntimeError, TypeError, ValueError) as error:
+            diagnostics.append(f"{key}: valuation history failed ({type(error).__name__})")
         if trend is None:
-            return _OptionalContext(next_earnings_date=earnings)
+            return _OptionalContext(
+                next_earnings_date=earnings,
+                valuation=valuation,
+                fundamentals=fundamentals,
+            )
         return _OptionalContext(
             earnings,
             self._metric(trend, "revenue_growth"),
             self._metric(trend, "eps_growth"),
             self._metric(trend, "free_cash_flow"),
+            valuation,
+            fundamentals,
             (trend.evidence_id,),
         )
 
