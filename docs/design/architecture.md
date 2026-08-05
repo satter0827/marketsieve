@@ -279,7 +279,7 @@ minor release series, such as `marketsieve-extension-api>=0.7,<0.8`, so an adapt
 and installed outside this workspace without requiring an exact patch lock. The root catalog and
 package metadata are validated together; workspace-only source overrides do not enter a wheel.
 
-## Approved 0.2 target architecture
+## Workbench architecture
 
 The workbench replaces the report-specific application path with acquisition, immutable storage,
 deterministic analysis, section assembly, and independent projections:
@@ -293,7 +293,7 @@ Provider or CSV package
     -> inspect / analyze / compare / report
 ```
 
-The target workspace contains the `marketsieve` SDK, a minimal `marketsieve-extension-api`, the
+The workspace contains the `marketsieve` SDK, a minimal `marketsieve-extension-api`, the
 public `marketsieve-cli`, and independent CSV, J-Quants, and Alpha Vantage source distributions.
 The extension API is introduced with the working CSV integration, not as an empty plugin framework.
 The CLI and source packages depend inward through the extension API to the SDK. The SDK imports none
@@ -305,10 +305,10 @@ a Python plugin is equivalent to running any other trusted installed Python pack
 sandbox boundary.
 
 Network acquisition and offline consumption are different use cases. `source fetch` and `source
-import` create immutable objects below `.marketsieve/data/objects`. Inspection, analysis,
-comparison and legacy equity rendering read verified snapshots and never trigger an implicit
-refresh. Model explanation reads a verified decision report instead. Mutable references are
-rebuildable indexes and are not evidence authorities.
+import` create immutable objects below `.marketsieve/data/objects`. Inspection, analysis, and
+comparison read verified snapshots and never trigger an implicit refresh. Model explanation reads
+a verified decision report instead. Mutable references are rebuildable indexes and are not
+evidence authorities.
 
 An equity view is a composition of independent instrument, price, technical, financial, valuation,
 risk, event, and data-quality sections. Each section owns status, completeness, missing reasons,

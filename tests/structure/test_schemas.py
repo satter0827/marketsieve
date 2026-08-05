@@ -29,7 +29,6 @@ def test_schemas_are_draft_2020_12_and_semantically_versioned() -> None:
         "instrument-universe",
         "portfolio-result",
         "log-record",
-        "report-result",
         "report-list",
         "review-report",
         "screening-report",

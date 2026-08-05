@@ -26,7 +26,6 @@ from marketsieve_cli.application.equity import (
     data_quality_section,
     financial_section,
     indicator_document,
-    report_document,
     risk_section,
     technical_section,
     valuation_section,
@@ -472,9 +471,6 @@ class SnapshotService:
 
     def compare(self, instruments: tuple[str, ...], profile: str) -> dict[str, Any]:
         return comparison_document(tuple(self.inspect(item, profile) for item in instruments))
-
-    def report(self, instrument: str, profile: str) -> dict[str, Any]:
-        return report_document(self.inspect(instrument, profile))
 
     def bars(self, profile: str, instrument: str) -> tuple[DailyBar, ...]:
         """Read verified daily bars for a routine after explicit acquisition."""

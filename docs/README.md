@@ -10,7 +10,7 @@ resolved in the same change that alters the behavior.
 
 1. Tested code, public types, and command behavior define the exact executable contract.
 2. [Design](design/README.md) defines system-level requirements, semantics, boundaries, and quality
-   policy for implemented behavior and the next approved release target.
+   policy for implemented behavior.
 3. [Roadmap](roadmap.md) orders planned outcomes. It is not a description of current behavior.
 4. [Notes](notes/README.md) contain temporary, non-normative investigation and discussion.
 5. The root README files summarize the project for users and contributors.
@@ -23,9 +23,9 @@ resolved in the same change that alters the behavior.
 
 ## Change policy
 
-Formal design is written in English. It uses the present tense for implemented behavior and an
-explicit target heading for the next release. Each paragraph makes one claim and states concrete
-behavior before rationale. Speculative work belongs in the roadmap or a dated note. Exact public
+Formal design is written in English and uses the present tense for implemented behavior. Each
+paragraph makes one claim and states concrete behavior before rationale. Speculative work belongs
+in the roadmap or a dated note. Exact public
 Python signatures are documented only when a working implementation and tests establish them.
 
 Architecture decision records are not used yet. If persistent decision history becomes necessary,

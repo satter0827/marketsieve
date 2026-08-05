@@ -33,12 +33,11 @@ failure includes a recovery action. JSON output conforms to `schemas/doctor-resu
 ```shell
 uv run marketsieve inspect MIC:SYMBOL --source-profile PROFILE
 uv run marketsieve compare MIC:SYMBOL MIC:SYMBOL --source-profile PROFILE
-uv run marketsieve equity-report MIC:SYMBOL --source-profile PROFILE --format {rich,text,json}
 ```
 
 These commands use only verified local snapshots. `inspect` exposes all independent sections,
-`compare` reports comparability without ranking, and `equity-report` projects the same section facts. JSON
-output conforms to inspect v2, comparison v1, and report v2 schemas. Partial data is successful
+and `compare` reports comparability without ranking. JSON output conforms to inspect v2 and
+comparison v1 schemas. Partial data is successful
 when completeness and missing reasons are explicit.
 
 ## Capability discovery
@@ -78,14 +77,13 @@ marketsieve snapshot verify ID
 marketsieve inspect MIC:SYMBOL --source-profile PROFILE
 marketsieve analyze INDICATOR MIC:SYMBOL --source-profile PROFILE
 marketsieve compare MIC:SYMBOL MIC:SYMBOL --source-profile PROFILE
-marketsieve equity-report MIC:SYMBOL --source-profile PROFILE
 ```
 
 Only fetch and import commands may create source snapshots. Read commands never perform network
 access and explain the required acquisition command when no suitable snapshot exists. `inspect`
 projects independent sections; `analyze` exposes the approved indicator catalog and parameters;
-`compare` uses one knowledge-as-of instant; and `equity-report` is a deterministic projection of the same
-facts rather than a separate analysis path.
+`compare` uses one knowledge-as-of instant. Durable investment decisions use the separate
+`decision-report/v1` artifact rather than a second projection of the equity view.
 
 `--config` selects an explicit configuration file, otherwise the current directory's
 `marketsieve.toml` is used when present. Source profiles bind each data kind to a distribution and
@@ -200,7 +198,7 @@ changes the selected report. Successful and template explanations are immutable 
 loopback-only unless `--allow-remote` is explicit. Provider model names and the optional LM Studio
 endpoint are read from `[agent.providers.NAME]`; credentials are never valid TOML settings.
 
-## 0.4.0 routine CLI target
+## Routine CLI
 
 Routine operation uses the following commands:
 

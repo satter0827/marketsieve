@@ -129,7 +129,7 @@ supported operations. When later milestones introduce them,
 their configuration, recovery, observability, and secret-handling procedures must be added here in
 the same change.
 
-## Approved 0.2 operation
+## Data workbench operation
 
 Shareable, non-secret source profiles and analysis settings live in `marketsieve.toml`. Generated
 snapshots, references, logs, caches, and artifacts live below `.marketsieve`. A source profile names
@@ -253,7 +253,7 @@ Cloud credentials are read from `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, or `GOOGL
 after a non-dry-run invocation selects that provider. `LMSTUDIO_API_TOKEN` is optional. Dry-run and
 doctor perform no model request and do not read a cloud credential.
 
-## 0.4.0 personal operation target
+## Personal operation
 
 The normal schedule is one Japanese close report after Tokyo trading, one U.S. close report after
 New York trading, and one combined report on the weekend. MarketSieve provides one-shot commands;

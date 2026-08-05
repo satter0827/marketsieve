@@ -249,11 +249,11 @@ def create_review_bundle(tmp_path: Path) -> Path:
             "doctor": {},
             "module_doctor": {},
             "capabilities": {},
-            "report": {
+            "analysis": {
                 "exit_code": 0,
                 "schema_valid": True,
                 "reproducible": True,
-                "report_id": "a" * 64,
+                "analysis_id": "a" * 64,
                 "section_statuses": {
                     "price": "available",
                     "technical": "partial",

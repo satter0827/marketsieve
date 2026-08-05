@@ -83,10 +83,6 @@ COMMAND_METADATA: dict[str, dict[str, Any]] = {
         "output_schema": "urn:marketsieve:schema:decision-report:1.0.0",
         "effects": {"network": True, "secrets": True, "optional_writes": ["snapshot", "report"]},
     },
-    "equity-report": {
-        "output_schema": "urn:marketsieve:schema:report-result:2.0.0",
-        "effects": {"network": False, "secrets": False, "optional_writes": ["log_file"]},
-    },
     "report list": {
         "output_schema": "urn:marketsieve:schema:report-list:1.0.0",
         "effects": {"network": False, "secrets": False, "optional_writes": []},
@@ -498,39 +494,6 @@ def experiment_explain(
             f"model output was not used ({document['validation']['reason']})",
         )
     console.emit_document(document, title="Experiment explanation")
-
-
-@main.command("equity-report")
-@click.argument("instrument")
-@click.option("--source-profile", required=True, help="Select the exact stored source profile.")
-@click.option(
-    "--format",
-    "report_format",
-    type=click.Choice(("rich", "text", "json")),
-    default="text",
-    show_default=True,
-)
-@output_option
-@click.pass_context
-def equity_report(
-    context: click.Context,
-    instrument: str,
-    source_profile: str,
-    report_format: str,
-    output_mode: str,
-) -> None:
-    """Project one legacy equity view without creating a decision report."""
-
-    selected_output = report_format if output_mode == "auto" else output_mode
-    console = _console(context, selected_output)
-    try:
-        document = build_snapshot_service(context.obj["config_path"]).report(
-            instrument, source_profile
-        )
-    except (LookupError, RuntimeError, TypeError, ValueError, OSError) as error:
-        console.emit_error("equity_report_failed", str(error))
-        raise click.exceptions.Exit(1) from None
-    console.emit_document(document, title="Equity report")
 
 
 @main.group()

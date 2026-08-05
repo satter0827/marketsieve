@@ -341,31 +341,6 @@ def data_quality_section(sections: dict[str, dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def report_document(view: dict[str, Any]) -> dict[str, Any]:
-    sections = view["sections"]
-    summaries = [
-        {
-            "section": name,
-            "status": section["status"],
-            "completeness": section["completeness"],
-            "evidence_id": section["evidence_id"],
-        }
-        for name, section in sections.items()
-    ]
-    payload = {
-        "schema_version": "2.0.0",
-        "instrument": view["instrument"],
-        "source_profile": view["source_profile"],
-        "as_of": max(
-            section["as_of"] for section in sections.values() if section.get("as_of") is not None
-        ),
-        "sections": sections,
-        "summary": summaries,
-        "disclaimer": "Market data and derived indicators only; not investment advice.",
-    }
-    return {**payload, "report_id": digest(payload)}
-
-
 def comparison_document(views: tuple[dict[str, Any], ...]) -> dict[str, Any]:
     if len(views) < 2:
         raise ValueError("comparison requires at least two instruments")

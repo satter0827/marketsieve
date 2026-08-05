@@ -70,7 +70,6 @@ uv run marketsieve snapshot verify SNAPSHOT_ID --output json
 uv run marketsieve inspect XTKS:7203 --source-profile offline-jp --output json
 uv run marketsieve analyze rsi XTKS:7203 --period 14 --source-profile offline-jp --output json
 uv run marketsieve compare XTKS:7203 XTKS:6758 --source-profile offline-jp --output json
-uv run marketsieve equity-report XTKS:7203 --source-profile offline-jp --format rich
 uv run marketsieve report list --output json
 uv run marketsieve report show latest --output json
 uv run marketsieve report export latest --format markdown

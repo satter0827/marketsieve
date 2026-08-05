@@ -124,41 +124,41 @@ def check_smoke(path: Path) -> None:
             "json",
         )
     )
-    report_first = capture(
+    analysis_first = capture(
         (
             "uv",
             "run",
             "marketsieve",
-            "equity-report",
+            "inspect",
             "XTKS:7203",
             "--source-profile",
             "example-jp",
-            "--format",
+            "--output",
             "json",
         )
     )
-    report_second = capture(
+    analysis_second = capture(
         (
             "uv",
             "run",
             "marketsieve",
-            "equity-report",
+            "inspect",
             "XTKS:7203",
             "--source-profile",
             "example-jp",
-            "--format",
+            "--output",
             "json",
         )
     )
-    if report_first.stdout != report_second.stdout:
-        raise RuntimeError("historical report JSON is not reproducible")
+    if analysis_first.stdout != analysis_second.stdout:
+        raise RuntimeError("offline inspection JSON is not reproducible")
     documents = {
         "doctor-result": json.loads(doctor.stdout),
         "capabilities-result": json.loads(capabilities.stdout),
-        "report-result": json.loads(report_first.stdout),
+        "inspect-result": json.loads(analysis_first.stdout),
     }
     for name, document in documents.items():
-        major = "v2" if name in {"capabilities-result", "report-result"} else "v1"
+        major = "v2" if name in {"capabilities-result", "inspect-result"} else "v1"
         schema = json.loads(
             (ROOT / f"schemas/{name}/{major}/schema.json").read_text(encoding="utf-8")
         )
@@ -171,20 +171,21 @@ def check_smoke(path: Path) -> None:
             "exit_code": capabilities.returncode,
             "result": documents["capabilities-result"],
         },
-        "report": {
-            "exit_code": report_first.returncode,
+        "analysis": {
+            "exit_code": analysis_first.returncode,
             "schema_valid": True,
             "reproducible": True,
-            "report_id": documents["report-result"]["report_id"],
+            "analysis_id": documents["inspect-result"]["snapshot_id"],
             "section_statuses": {
-                item["section"]: item["status"] for item in documents["report-result"]["summary"]
+                name: section["status"]
+                for name, section in documents["inspect-result"]["sections"].items()
             },
         },
     }
     (path / "smoke.json").write_text(
         json.dumps(smoke, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
-    logs = doctor.stderr + report_first.stderr
+    logs = doctor.stderr + analysis_first.stderr
     (path / "logs.jsonl").write_text(logs, encoding="utf-8")
 
     log_schema = json.loads(
