@@ -33,6 +33,62 @@ class Revision(StrEnum):
     UNKNOWN = "unknown"
 
 
+@dataclass(frozen=True, slots=True)
+class FilingDocument:
+    """One provider filing with an explicit public-time and amendment identity."""
+
+    filing_id: str
+    issuer_id: str
+    document_type: str
+    published_at: datetime
+    period: FinancialPeriod | None
+    fiscal_period_start: date | None
+    fiscal_period_end: date | None
+    accounting_standard: str | None
+    consolidation: Consolidation
+    currency: str | None
+    amends_filing_id: str | None = None
+
+    def __post_init__(self) -> None:
+        required_text = (self.filing_id, self.issuer_id, self.document_type)
+        optional_text = (self.accounting_standard, self.currency, self.amends_filing_id)
+        if any(not isinstance(value, str) for value in required_text):
+            raise TypeError("filing identity values must be strings")
+        if any(value is not None and not isinstance(value, str) for value in optional_text):
+            raise TypeError("optional filing identity values must be strings or None")
+        if any(not value for value in required_text) or any(value == "" for value in optional_text):
+            raise ValueError("filing identity values must not be empty")
+        if not isinstance(self.published_at, datetime):
+            raise TypeError("filing published_at must be a datetime")
+        if self.published_at.tzinfo is None or self.published_at.utcoffset() is None:
+            raise ValueError("filing published_at must include a UTC offset")
+        if self.period is not None and not isinstance(self.period, FinancialPeriod):
+            raise TypeError("filing period must use FinancialPeriod or None")
+        if not isinstance(self.consolidation, Consolidation):
+            raise TypeError("filing consolidation must use Consolidation")
+        if self.fiscal_period_start is not None and type(self.fiscal_period_start) is not date:
+            raise TypeError("filing fiscal period start must be a date or None")
+        if self.fiscal_period_end is not None and type(self.fiscal_period_end) is not date:
+            raise TypeError("filing fiscal period end must be a date or None")
+        if (
+            self.fiscal_period_start is not None
+            and self.fiscal_period_end is not None
+            and self.fiscal_period_start > self.fiscal_period_end
+        ):
+            raise ValueError("filing fiscal period must be ascending")
+        if self.amends_filing_id == self.filing_id:
+            raise ValueError("a filing must not amend itself")
+
+    def is_known_at(self, knowledge_at: datetime) -> bool:
+        """Return whether the filing was public at the requested aware instant."""
+
+        if not isinstance(knowledge_at, datetime):
+            raise TypeError("knowledge_at must be a datetime")
+        if knowledge_at.tzinfo is None or knowledge_at.utcoffset() is None:
+            raise ValueError("knowledge_at must include a UTC offset")
+        return self.published_at <= knowledge_at
+
+
 class CorporateEventType(StrEnum):
     DIVIDEND = "dividend"
     EARNINGS = "earnings"
@@ -96,6 +152,7 @@ class FinancialFact:
     currency: str
     scale: int
     value: Decimal
+    filing_id: str | None = None
 
     def __post_init__(self) -> None:
         if self.fiscal_period_start is not None and type(self.fiscal_period_start) is not date:
@@ -143,6 +200,10 @@ class FinancialFact:
             raise TypeError("financial fact scale must be an integer")
         if self.scale <= 0 or not self.value.is_finite():
             raise ValueError("financial fact scale and value must be finite and positive-scale")
+        if self.filing_id is not None and not isinstance(self.filing_id, str):
+            raise TypeError("financial fact filing_id must be a string or None")
+        if self.filing_id == "":
+            raise ValueError("financial fact filing_id must not be empty")
 
 
 @dataclass(frozen=True, slots=True)
@@ -191,12 +252,15 @@ class ImportedFinancials:
     facts: tuple[FinancialFact, ...]
     response_hash: str
     missing_reasons: tuple[str, ...] = ()
+    filings: tuple[FilingDocument, ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.request, FactFetchRequest):
             raise TypeError("financial request must use FactFetchRequest")
         if any(not isinstance(fact, FinancialFact) for fact in self.facts):
             raise TypeError("financial facts must use FinancialFact")
+        if any(not isinstance(filing, FilingDocument) for filing in self.filings):
+            raise TypeError("financial filings must use FilingDocument")
         if (
             not self.source_name
             or not self.source_version
@@ -210,10 +274,27 @@ class ImportedFinancials:
             raise ValueError("financial response_hash must be a lowercase SHA-256 digest")
         if self.retrieved_at.tzinfo is None or self.retrieved_at.utcoffset() is None:
             raise ValueError("financial retrieved_at must include a UTC offset")
-        if not self.facts and not self.missing_reasons:
-            raise ValueError("financial import must contain facts or missing reasons")
+        if not self.facts and not self.filings and not self.missing_reasons:
+            raise ValueError("financial import must contain facts, filings, or missing reasons")
         if any(fact.available_at > self.retrieved_at for fact in self.facts):
             raise ValueError("financial facts must not be available after retrieval")
+        if any(filing.published_at > self.retrieved_at for filing in self.filings):
+            raise ValueError("financial filings must not be published after retrieval")
+        filing_ids = tuple(filing.filing_id for filing in self.filings)
+        if len(set(filing_ids)) != len(filing_ids):
+            raise ValueError("financial filings must have unique filing identities")
+        filing_order = tuple((filing.published_at, filing.filing_id) for filing in self.filings)
+        if filing_order != tuple(sorted(filing_order)):
+            raise ValueError("financial filings must use stable publication order")
+        filings_by_id = {filing.filing_id: filing for filing in self.filings}
+        for fact in self.facts:
+            if fact.filing_id is None:
+                continue
+            filing = filings_by_id.get(fact.filing_id)
+            if filing is None:
+                raise ValueError("financial fact filing_id must reference an included filing")
+            if fact.published_at != filing.published_at:
+                raise ValueError("financial fact publication must match its filing")
         identities = tuple(
             (
                 fact.provider_fact,
@@ -227,6 +308,7 @@ class ImportedFinancials:
                 fact.revision,
                 fact.currency,
                 fact.scale,
+                fact.filing_id,
             )
             for fact in self.facts
         )
@@ -236,6 +318,24 @@ class ImportedFinancials:
             set(self.missing_reasons)
         ) != len(self.missing_reasons):
             raise ValueError("financial missing reasons must be non-empty and unique")
+
+    def filings_known_at(self, knowledge_at: datetime) -> tuple[FilingDocument, ...]:
+        """Return filings public no later than an aware knowledge instant."""
+
+        if not isinstance(knowledge_at, datetime):
+            raise TypeError("knowledge_at must be a datetime")
+        if knowledge_at.tzinfo is None or knowledge_at.utcoffset() is None:
+            raise ValueError("knowledge_at must include a UTC offset")
+        return tuple(filing for filing in self.filings if filing.is_known_at(knowledge_at))
+
+    def facts_known_at(self, knowledge_at: datetime) -> tuple[FinancialFact, ...]:
+        """Return facts available no later than an aware knowledge instant."""
+
+        if not isinstance(knowledge_at, datetime):
+            raise TypeError("knowledge_at must be a datetime")
+        if knowledge_at.tzinfo is None or knowledge_at.utcoffset() is None:
+            raise ValueError("knowledge_at must include a UTC offset")
+        return tuple(fact for fact in self.facts if fact.available_at <= knowledge_at)
 
 
 @dataclass(frozen=True, slots=True)
