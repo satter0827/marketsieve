@@ -10,11 +10,8 @@ design and release history, not in this file.
 
 ## 0.6.0 Strategy Lab
 
-1. Add immutable experiment specifications and replay windows that reuse decision policies.
-2. Replay only facts available at each historical as-of instant.
-3. Measure coverage, decision activity, churn, holding period, drawdown, and forward return.
-4. Persist reproducible experiment runs and comparisons.
-5. Compare prompts and models without allowing an LLM to own calculations or decisions.
+1. Persist reproducible experiment runs and comparisons and expose them through the CLI.
+2. Compare prompts and models without allowing an LLM to own calculations or decisions.
 
 ## 0.7.0 Screening Workbench
 

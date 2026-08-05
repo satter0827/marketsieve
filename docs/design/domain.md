@@ -226,3 +226,17 @@ A decision report is an immutable composition of one market session, one portfol
 selected policy, per-instrument decisions, input diagnostics, and an optional previous-report
 link. Its identity is a digest of canonical semantic content. Locale-specific headings and terminal
 styling are projections and do not affect identity.
+
+## Experiment semantics
+
+An experiment specification fixes the decision policy name, version, settings, replay window, and
+the content identifier for every exchange-qualified instrument dataset. A replay calls the same
+decision policy used by routine analysis and supplies only bars available at each historical
+instant. A specification and its deterministic decisions and metrics form the content-addressed
+run identity.
+
+The implemented metrics are data coverage, decision count, decision changes, average consecutive
+active-signal period, maximum drawdown inside the replay window, and next-observation return.
+Forward return describes subsequent data; it is not a portfolio profit. An experiment is labeled a
+profit simulation only when commission, tax, and foreign-exchange cost rates are all fixed. The
+current engine does not apply those costs and therefore exposes no net-profit metric.
