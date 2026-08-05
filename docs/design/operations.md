@@ -156,13 +156,14 @@ release runner platform; every compatibility job verifies and installs that same
 artifact without regenerating dependencies. PyPI publication remains disabled, so installation uses an unpacked wheelhouse with
 `pip --no-index --find-links`.
 
-## Approved 0.3 operation
+## Model operation
 
-FakeListLLM remains the default model. LM Studio accepts loopback endpoints by default. A cloud
+The CLI has no default model. LM Studio accepts loopback endpoints by default. A cloud
 provider requires explicit provider configuration and `--allow-cloud` on every invocation. Dry-run
 shows the credential-free fact payload without contacting a model. Provider, model, prompt version,
-fact-catalog hash, selected fact identifiers, output status, and fallback reason are recorded; API
-keys and unrestricted prompts or responses are not written to logs.
+fact-catalog hash, selected fact identifiers, output status, and fallback reason are recorded in a
+separate content-addressed explanation artifact; API keys and unrestricted prompts are not written
+to logs or report objects.
 
 The implemented configuration contains only model destinations:
 

@@ -10,7 +10,20 @@ import pytest
 from click.testing import CliRunner
 from jsonschema import Draft202012Validator, FormatChecker
 
-from marketsieve import __version__
+from marketsieve import (
+    DecisionAction,
+    DecisionConfidence,
+    DecisionEvidence,
+    EvidenceDirection,
+    Holding,
+    InstrumentDecision,
+    MarketSession,
+    PortfolioSnapshot,
+    __version__,
+)
+from marketsieve.domain import Instrument
+from marketsieve_cli.adapters.reports import ReportStore, create_report
+from marketsieve_cli.application.agent import AgentService
 from marketsieve_cli.application.diagnostics import DiagnosticCheck, DiagnosticsService
 from marketsieve_cli.interfaces.cli import entrypoint, main
 from marketsieve_extension_api import (
@@ -69,6 +82,57 @@ def write_csv_bundle(path: Path) -> Path:
     return path
 
 
+def write_decision_report(root: Path) -> str:
+    instrument = Instrument.create(
+        symbol="7203",
+        mic="XTKS",
+        currency="JPY",
+        exchange_timezone="Asia/Tokyo",
+    )
+    settings = (("rsi_overbought", "70"),)
+    decision = InstrumentDecision(
+        instrument,
+        True,
+        DecisionAction.KEEP,
+        DecisionConfidence.MEDIUM,
+        (
+            DecisionEvidence(
+                "trend_above_sma60",
+                EvidenceDirection.SUPPORTING,
+                "2500",
+                "2400",
+                ("bars-evidence",),
+            ),
+        ),
+        None,
+        Decimal("0.05"),
+        Decimal("0.03"),
+        Decimal("1000000"),
+        (("per", "14.2"),),
+        ("close_below_sma60",),
+        "次の終値で傾向を確認する",
+        "balanced_medium_term",
+        "1.0.0",
+        settings,
+    )
+    as_of = datetime(2026, 8, 3, 6, tzinfo=UTC)
+    portfolio = PortfolioSnapshot(
+        as_of,
+        (Holding(instrument, Decimal("10"), Decimal("2300"), "taxable"),),
+        (),
+        "fixture",
+    )
+    report = create_report(
+        MarketSession.JP_CLOSE,
+        as_of,
+        portfolio,
+        (decision,),
+        diagnostics=("FRED系列は未取得",),
+    )
+    ReportStore(root).put(report)
+    return report.report_id
+
+
 def validate(name: str, document: object, major: int = 1) -> None:
     schema = json.loads((SCHEMAS / name / f"v{major}" / "schema.json").read_text())
     Draft202012Validator(schema, format_checker=FormatChecker()).validate(document)
@@ -118,7 +182,6 @@ def test_capabilities_match_click_commands_and_validate_schema() -> None:
     validate("capabilities-result", document, major=2)
     assert [item["name"] for item in document["commands"]] == [
         "agent doctor",
-        "agent explain",
         "analyze atr",
         "analyze ema",
         "analyze macd",
@@ -129,8 +192,12 @@ def test_capabilities_match_click_commands_and_validate_schema() -> None:
         "capabilities",
         "compare",
         "doctor",
+        "equity-report",
         "inspect",
-        "report",
+        "report explain",
+        "report export",
+        "report list",
+        "report show",
         "snapshot list",
         "snapshot show",
         "snapshot verify",
@@ -139,10 +206,12 @@ def test_capabilities_match_click_commands_and_validate_schema() -> None:
         "source import",
         "source list",
     ]
-    report = next(item for item in document["commands"] if item["name"] == "report")
+    report = next(item for item in document["commands"] if item["name"] == "report explain")
     assert {option["name"] for option in report["options"]} == {
-        "source_profile",
-        "report_format",
+        "provider",
+        "allow_cloud",
+        "allow_remote",
+        "dry_run",
         "output_mode",
     }
     assert {option["name"] for option in document["global_options"]} == {
@@ -152,9 +221,9 @@ def test_capabilities_match_click_commands_and_validate_schema() -> None:
         "locale",
     }
     assert report["effects"] == {
-        "network": False,
-        "optional_writes": ["log_file"],
-        "secrets": False,
+        "network": True,
+        "optional_writes": ["explanation"],
+        "secrets": True,
     }
 
 
@@ -264,9 +333,40 @@ def test_csv_import_snapshot_and_price_inspect_are_one_offline_path(tmp_path: Pa
     assert analysis["indicator"]["values"] == {"sma": "108.5"}
 
 
-def test_agent_fake_and_cloud_dry_run_share_the_offline_fact_catalog(tmp_path: Path) -> None:
+def test_report_commands_and_explicit_agent_share_one_immutable_report(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     runner = CliRunner()
-    bundle = write_csv_bundle(tmp_path / "agent-bundle")
+
+    class LocalModel:
+        provider = "lmstudio"
+        model = "configured-local-model"
+
+        def invoke(self, prompt: str) -> str:
+            assert '"quantity"' not in prompt
+            assert "2300" not in prompt
+            return json.dumps(
+                {
+                    "section_order": ["XTKS:7203"],
+                    "selected_facts": [
+                        {
+                            "fact_id": "decision.XTKS:7203.action",
+                            "emphasis": "context",
+                        }
+                    ],
+                    "connections": ["保存済みの判断根拠を整理します。"],
+                },
+                ensure_ascii=False,
+            )
+
+    class FailedModel:
+        provider = "lmstudio"
+        model = "configured-local-model"
+
+        def invoke(self, prompt: str) -> str:
+            del prompt
+            raise RuntimeError("provider detail must not escape")
+
     with runner.isolated_filesystem():
         Path("marketsieve.toml").write_text(
             "[agent.providers.openai]\n"
@@ -275,27 +375,18 @@ def test_agent_fake_and_cloud_dry_run_share_the_offline_fact_catalog(tmp_path: P
             'model = "configured-local-model"\n',
             encoding="utf-8",
         )
-        assert runner.invoke(main, ["source", "import", str(bundle)]).exit_code == 0
-        fake = runner.invoke(
-            main,
-            [
-                "agent",
-                "explain",
-                "XTKS:7203",
-                "--source-profile",
-                "offline-jp",
-                "--output",
-                "json",
-            ],
-        )
+        report_id = write_decision_report(Path(".marketsieve/reports"))
+        report_path = Path(f".marketsieve/reports/objects/{report_id}.json")
+        original_report = report_path.read_bytes()
+        listed = runner.invoke(main, ["report", "list", "--output", "json"])
+        shown = runner.invoke(main, ["report", "show", "latest", "--output", "json"])
+        exported = runner.invoke(main, ["report", "export", "latest"])
         preview = runner.invoke(
             main,
             [
-                "agent",
+                "report",
                 "explain",
-                "XTKS:7203",
-                "--source-profile",
-                "offline-jp",
+                report_id,
                 "--provider",
                 "openai",
                 "--dry-run",
@@ -307,35 +398,78 @@ def test_agent_fake_and_cloud_dry_run_share_the_offline_fact_catalog(tmp_path: P
         refused_cloud = runner.invoke(
             main,
             [
-                "agent",
+                "report",
                 "explain",
-                "XTKS:7203",
-                "--source-profile",
-                "offline-jp",
+                report_id,
                 "--provider",
                 "openai",
                 "--output",
                 "json",
             ],
         )
+        monkeypatch.setattr(AgentService, "_model", lambda *args, **kwargs: LocalModel())
+        explained = runner.invoke(
+            main,
+            [
+                "report",
+                "explain",
+                "latest",
+                "--provider",
+                "lmstudio",
+                "--output",
+                "json",
+            ],
+        )
+        monkeypatch.setattr(AgentService, "_model", lambda *args, **kwargs: FailedModel())
+        fallback = runner.invoke(
+            main,
+            [
+                "report",
+                "explain",
+                report_id,
+                "--provider",
+                "lmstudio",
+                "--output",
+                "json",
+            ],
+        )
 
-    assert fake.exit_code == 0, fake.output
-    fake_document = json.loads(fake.stdout)
-    validate("agent-result", fake_document)
-    assert fake_document["provider"] == "fake"
-    assert fake_document["status"] == "model"
-    assert "not investment advice" in fake_document["text"]
+        assert report_path.read_bytes() == original_report
+        assert len(tuple(Path(".marketsieve/explanations/objects").glob("*.json"))) == 2
+
+    assert listed.exit_code == 0, listed.output
+    list_document = json.loads(listed.stdout)
+    validate("report-list", list_document)
+    assert list_document["reports"][0]["report_id"] == report_id
+    assert shown.exit_code == 0, shown.output
+    shown_document = json.loads(shown.stdout)
+    validate("decision-report", shown_document)
+    assert shown_document["report_id"] == report_id
+    assert exported.exit_code == 0
+    assert exported.stdout.startswith("# Close Brief\n")
     assert preview.exit_code == 0, preview.output
     preview_document = json.loads(preview.stdout)
     validate("agent-result", preview_document)
     assert preview_document["operation"] == "dry_run"
-    assert preview_document["catalog_hash"] == fake_document["catalog_hash"]
+    assert preview_document["report_id"] == report_id
     assert preview_document["model"] == "configured-cloud-model"
     assert "credential" not in preview_document["payload"].casefold()
     assert local_doctor.exit_code == 0
     validate("agent-result", json.loads(local_doctor.stdout))
     assert refused_cloud.exit_code == 1
     assert "cloud consent" in refused_cloud.stderr
+    assert explained.exit_code == 0, explained.output
+    explanation = json.loads(explained.stdout)
+    validate("agent-result", explanation)
+    assert explanation["provider"] == "lmstudio"
+    assert explanation["report_id"] == report_id
+    assert explanation["schema"] == "report-explanation/v1"
+    assert fallback.exit_code == 0, fallback.output
+    fallback_document = json.loads(fallback.stdout)
+    validate("agent-result", fallback_document)
+    assert fallback_document["status"] == "template"
+    assert "provider detail" not in fallback_document["text"]
+    assert "provider detail" not in fallback.stderr
 
 
 def test_report_projects_the_same_offline_equity_view(tmp_path: Path) -> None:
@@ -346,7 +480,7 @@ def test_report_projects_the_same_offline_equity_view(tmp_path: Path) -> None:
         report = runner.invoke(
             main,
             [
-                "report",
+                "equity-report",
                 "XTKS:7203",
                 "--source-profile",
                 "offline-jp",

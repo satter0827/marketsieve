@@ -354,6 +354,16 @@ class ReportStore:
             raise ValueError("latest report reference is invalid")
         return self.show(report_id)
 
+    def resolve(self, report_id: str) -> DecisionReport:
+        """Resolve an exact ID or the newest report across explicit sessions."""
+
+        if report_id != "latest":
+            return self.show(report_id)
+        reports = self.list()
+        if not reports:
+            raise LookupError("no decision report exists")
+        return max(reports, key=lambda report: (report.as_of.timestamp(), report.report_id))
+
     def markdown(self, report_id: str) -> str:
         report = self.show(report_id)
         self._require_real_directory(self._rendered)

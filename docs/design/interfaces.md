@@ -33,11 +33,11 @@ failure includes a recovery action. JSON output conforms to `schemas/doctor-resu
 ```shell
 uv run marketsieve inspect MIC:SYMBOL --source-profile PROFILE
 uv run marketsieve compare MIC:SYMBOL MIC:SYMBOL --source-profile PROFILE
-uv run marketsieve report MIC:SYMBOL --source-profile PROFILE --format {rich,text,json}
+uv run marketsieve equity-report MIC:SYMBOL --source-profile PROFILE --format {rich,text,json}
 ```
 
 These commands use only verified local snapshots. `inspect` exposes all independent sections,
-`compare` reports comparability without ranking, and `report` projects the same section facts. JSON
+`compare` reports comparability without ranking, and `equity-report` projects the same section facts. JSON
 output conforms to inspect v2, comparison v1, and report v2 schemas. Partial data is successful
 when completeness and missing reasons are explicit.
 
@@ -78,13 +78,13 @@ marketsieve snapshot verify ID
 marketsieve inspect MIC:SYMBOL --source-profile PROFILE
 marketsieve analyze INDICATOR MIC:SYMBOL --source-profile PROFILE
 marketsieve compare MIC:SYMBOL MIC:SYMBOL --source-profile PROFILE
-marketsieve report MIC:SYMBOL --source-profile PROFILE
+marketsieve equity-report MIC:SYMBOL --source-profile PROFILE
 ```
 
 Only fetch and import commands may create source snapshots. Read commands never perform network
 access and explain the required acquisition command when no suitable snapshot exists. `inspect`
 projects independent sections; `analyze` exposes the approved indicator catalog and parameters;
-`compare` uses one knowledge-as-of instant; and `report` is a deterministic projection of the same
+`compare` uses one knowledge-as-of instant; and `equity-report` is a deterministic projection of the same
 facts rather than a separate analysis path.
 
 `--config` selects an explicit configuration file, otherwise the current directory's
@@ -163,18 +163,19 @@ implicit persistence yet; Personal Close Brief orchestration adds those applicat
 ## Agent explanation
 
 ```shell
-marketsieve agent explain MIC:SYMBOL --source-profile PROFILE --provider fake
-marketsieve agent explain MIC:SYMBOL --source-profile PROFILE --provider lmstudio
-marketsieve agent explain MIC:SYMBOL --source-profile PROFILE --provider openai --allow-cloud
-marketsieve agent explain MIC:SYMBOL --source-profile PROFILE --provider anthropic --allow-cloud
-marketsieve agent explain MIC:SYMBOL --source-profile PROFILE --provider google --allow-cloud
-marketsieve agent explain MIC:SYMBOL --source-profile PROFILE --provider openai --dry-run
+marketsieve agent doctor lmstudio
+marketsieve report explain {ID,latest} --provider lmstudio
+marketsieve report explain {ID,latest} --provider openai --allow-cloud
+marketsieve report explain {ID,latest} --provider anthropic --allow-cloud
+marketsieve report explain {ID,latest} --provider google --allow-cloud
+marketsieve report explain {ID,latest} --provider openai --dry-run
 ```
 
-Fake is the default. Real model names are explicit configuration and are not frozen in source code.
-Dry-run shows the credential-free outgoing fact payload. Unsafe, invalid, or unavailable model
+There is no default provider. Model names are explicit configuration and are not frozen in source
+code. Dry-run shows the credential-free outgoing report payload. Unsafe, invalid, or unavailable model
 output produces a warning on stderr and a deterministic template on stdout. No provider failure
-changes the selected destination.
+changes the selected report. Successful and template explanations are immutable artifacts below
+`.marketsieve/explanations`; report objects remain unchanged.
 
 `agent doctor PROVIDER` validates configuration without contacting a model. LM Studio endpoints are
 loopback-only unless `--allow-remote` is explicit. Provider model names and the optional LM Studio

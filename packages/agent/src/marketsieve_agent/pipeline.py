@@ -1,54 +1,27 @@
-"""One-attempt model pipeline with deterministic grounding and fallback."""
+"""One-attempt explanation of an immutable decision report."""
 
 from __future__ import annotations
 
 import hashlib
 import json
 import re
-from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol
 
-from langchain_core.language_models.fake import FakeListLLM
-from langsmith import tracing_context
+from marketsieve import DecisionReport
 
-PROMPT_VERSION = "fact-selection-v1"
-MAX_SELECTED_FACTS = 12
+PROMPT_VERSION = "decision-report-selection-v1"
+MAX_SELECTED_FACTS = 16
 ALLOWED_EMPHASIS = frozenset({"context", "trend", "quality", "risk", "valuation"})
-SECTION_ORDER = (
-    "price",
-    "technical",
-    "financial",
-    "valuation",
-    "risk",
-    "events",
-    "data_quality",
-)
 UNSAFE_TERMS = (
-    "buy",
-    "sell",
-    "hold",
     "recommend",
     "should invest",
     "strong pick",
-    "bullish",
-    "bearish",
-    "outperform",
-    "underperform",
-    "undervalued",
-    "overvalued",
     "target price",
     "entry point",
     "exit point",
-    "買い",
-    "売り",
-    "保有すべき",
     "推奨",
     "投資すべき",
-    "強気",
-    "弱気",
-    "割安",
-    "割高",
     "目標株価",
     "エントリー",
     "利確",
@@ -61,10 +34,13 @@ NUMBER_WORDS = re.compile(
 NON_DIGIT_NUMERIC = re.compile(
     "[〇零一二三四五六七八九十百千万億兆%\N{FULLWIDTH PERCENT SIGN}$¥￥€£]"
 )
-DISCLAIMER = "Market data and derived indicators only; not investment advice."
 DEFAULT_CONNECTIONS = {
-    "ja": "確認できる事実を項目別に整理します。",
-    "en": "The validated facts are organized by section.",
+    "ja": "保存済みレポートの判断と根拠を整理します。",
+    "en": "The stored report decisions and evidence are organized below.",
+}
+FOOTERS = {
+    "ja": "判断値は保存済みレポートから引用し、AIは変更していません。",
+    "en": "Decision values are quoted from the stored report and were not changed by the model.",
 }
 
 
@@ -79,7 +55,7 @@ class TextModel(Protocol):
 
 @dataclass(frozen=True, slots=True)
 class Fact:
-    """One renderer-owned fact exposed to a model by identifier."""
+    """One renderer-owned report fact exposed to a model by identifier."""
 
     fact_id: str
     section: str
@@ -100,54 +76,87 @@ class Fact:
 
 @dataclass(frozen=True, slots=True)
 class FactCatalog:
-    """Canonical fact set derived from one sectioned equity view."""
+    """Canonical non-private fact set derived from one decision report."""
 
-    instrument: str
-    source_profile: str
+    report_id: str
     facts: tuple[Fact, ...]
+    sections: tuple[str, ...]
     catalog_hash: str
 
     @classmethod
-    def from_view(cls, view: Mapping[str, Any]) -> FactCatalog:
-        instrument = _instrument_label(view.get("instrument"))
-        source_profile = _required_text(view.get("source_profile"), "source_profile")
-        sections = view.get("sections")
-        if not isinstance(sections, Mapping):
-            raise ValueError("equity view sections must be a mapping")
-        facts: list[Fact] = []
-        for section in SECTION_ORDER:
-            raw_section = sections.get(section)
-            if not isinstance(raw_section, Mapping):
-                continue
-            as_of = _optional_text(raw_section.get("as_of"))
-            evidence_id = _optional_text(raw_section.get("evidence_id"))
-            values = raw_section.get("values")
-            if not isinstance(values, Mapping):
-                continue
-            for path, value in _leaf_values(values):
-                fact_id = f"{section}.{'.'.join(path)}"
+    def from_report(cls, report: DecisionReport) -> FactCatalog:
+        if not isinstance(report, DecisionReport):
+            raise TypeError("agent input must be DecisionReport")
+        as_of = report.as_of.isoformat()
+        facts = [
+            Fact("report.session", "report", "session", report.session.value, as_of, None),
+            Fact("report.as_of", "report", "as of", as_of, as_of, None),
+            Fact(
+                "report.policy",
+                "report",
+                "policy",
+                f"{report.policy_name}@{report.policy_version}",
+                as_of,
+                None,
+            ),
+        ]
+        for decision in report.decisions:
+            instrument = f"{decision.instrument.mic}:{decision.instrument.symbol}"
+            prefix = f"decision.{instrument}"
+            facts.extend(
+                (
+                    Fact(
+                        f"{prefix}.action", instrument, "action", decision.action.value, as_of, None
+                    ),
+                    Fact(
+                        f"{prefix}.confidence",
+                        instrument,
+                        "confidence",
+                        decision.confidence.value,
+                        as_of,
+                        None,
+                    ),
+                    Fact(
+                        f"{prefix}.next_action",
+                        instrument,
+                        "next action",
+                        decision.next_action,
+                        as_of,
+                        None,
+                    ),
+                )
+            )
+            for index, evidence in enumerate(decision.evidence):
+                evidence_id = evidence.evidence_ids[0] if evidence.evidence_ids else None
                 facts.append(
                     Fact(
-                        fact_id=fact_id,
-                        section=section,
-                        label=" / ".join(path),
-                        value=_canonical_scalar(value),
-                        as_of=as_of,
-                        evidence_id=evidence_id,
+                        f"{prefix}.evidence.{index}",
+                        instrument,
+                        f"evidence {evidence.code}",
+                        _evidence_value(
+                            evidence.direction.value, evidence.value, evidence.threshold
+                        ),
+                        as_of,
+                        evidence_id,
                     )
                 )
+        for index, diagnostic in enumerate(report.diagnostics):
+            facts.append(
+                Fact(
+                    f"diagnostic.{index}", "diagnostics", "data limitation", diagnostic, as_of, None
+                )
+            )
         facts.sort(key=lambda fact: fact.fact_id)
+        sections = tuple(dict.fromkeys(fact.section for fact in facts))
         payload = [fact.prompt_document() | {"evidence_id": fact.evidence_id} for fact in facts]
-        catalog_hash = _digest(
-            {"instrument": instrument, "source_profile": source_profile, "facts": payload}
-        )
-        return cls(instrument, source_profile, tuple(facts), catalog_hash)
+        catalog_hash = _digest({"report_id": report.report_id, "facts": payload})
+        return cls(report.report_id, tuple(facts), sections, catalog_hash)
 
     def prompt_document(self) -> dict[str, Any]:
         return {
-            "instrument": self.instrument,
-            "source_profile": self.source_profile,
+            "report_id": self.report_id,
             "catalog_hash": self.catalog_hash,
+            "sections": list(self.sections),
             "facts": [fact.prompt_document() for fact in self.facts],
         }
 
@@ -160,7 +169,7 @@ class SelectedFact:
 
 @dataclass(frozen=True, slots=True)
 class ModelPlan:
-    """Strict model-owned selection; it contains no market values."""
+    """Strict model-owned selection; it contains no report values."""
 
     section_order: tuple[str, ...]
     selected_facts: tuple[SelectedFact, ...]
@@ -175,6 +184,7 @@ class ExplanationResult:
     provider: str
     model: str
     prompt_version: str
+    report_id: str
     catalog_hash: str
     selected_fact_ids: tuple[str, ...]
     fallback_reason: str | None
@@ -187,6 +197,7 @@ class ExplanationResult:
             "provider": self.provider,
             "model": self.model,
             "prompt_version": self.prompt_version,
+            "report_id": self.report_id,
             "catalog_hash": self.catalog_hash,
             "selected_fact_ids": list(self.selected_fact_ids),
             "fallback_reason": self.fallback_reason,
@@ -194,45 +205,29 @@ class ExplanationResult:
         }
 
 
-class FakeModel:
-    """Natural deterministic FakeListLLM adapter used by default and in ordinary tests."""
-
-    provider = "fake"
-    model = "fake-list-llm"
-
-    def __init__(self, responses: Sequence[str] | None = None) -> None:
-        self._responses = tuple(responses) if responses is not None else None
-
-    def invoke(self, prompt: str) -> str:
-        catalog = _catalog_from_prompt(prompt)
-        response = self._responses[0] if self._responses is not None else _fake_response(catalog)
-        with tracing_context(enabled=False):
-            return str(FakeListLLM(responses=[response]).invoke(prompt))
-
-
 def explain(
-    view: Mapping[str, Any],
+    report: DecisionReport,
     *,
-    model: TextModel | None = None,
+    model: TextModel,
     locale: str = "ja",
 ) -> ExplanationResult:
-    """Explain one validated view or return the deterministic safe template."""
+    """Explain one validated report or return its deterministic safe template."""
 
     if locale not in DEFAULT_CONNECTIONS:
         raise ValueError("locale must be ja or en")
-    catalog = FactCatalog.from_view(view)
-    selected_model = model or FakeModel()
+    catalog = FactCatalog.from_report(report)
     prompt = build_prompt(catalog, locale)
     try:
-        raw = selected_model.invoke(prompt)
+        raw = model.invoke(prompt)
         plan = parse_plan(raw, catalog)
     except (RuntimeError, TimeoutError, TypeError, ValueError, json.JSONDecodeError) as error:
-        return _fallback(catalog, selected_model, locale, _fallback_code(error))
+        return _fallback(catalog, model, locale, _fallback_code(error))
     return ExplanationResult(
         status="model",
-        provider=selected_model.provider,
-        model=selected_model.model,
+        provider=model.provider,
+        model=model.model,
         prompt_version=PROMPT_VERSION,
+        report_id=report.report_id,
         catalog_hash=catalog.catalog_hash,
         selected_fact_ids=tuple(item.fact_id for item in plan.selected_facts),
         fallback_reason=None,
@@ -241,12 +236,16 @@ def explain(
 
 
 def build_prompt(catalog: FactCatalog, locale: str) -> str:
+    if locale not in DEFAULT_CONNECTIONS:
+        raise ValueError("locale must be ja or en")
     instructions = {
-        "task": "Select only supplied fact IDs for a neutral evidence summary.",
+        "task": "Select only supplied fact IDs to explain the immutable decision report.",
         "output": {
             "section_order": "unique supplied section names",
             "selected_facts": [{"fact_id": "supplied ID", "emphasis": sorted(ALLOWED_EMPHASIS)}],
-            "connections": "short text without numbers, dates, symbols, values, advice, or actions",
+            "connections": (
+                "short text without numbers, dates, symbols, values, advice, or new decisions"
+            ),
         },
         "limits": {"selected_facts": MAX_SELECTED_FACTS, "attempts": 1},
         "locale": locale,
@@ -274,7 +273,7 @@ def parse_plan(raw: str, catalog: FactCatalog) -> ModelPlan:
     known = {fact.fact_id: fact for fact in catalog.facts}
     section_order = _string_tuple(document["section_order"], "section_order")
     if len(set(section_order)) != len(section_order) or any(
-        section not in SECTION_ORDER for section in section_order
+        section not in catalog.sections for section in section_order
     ):
         raise ValueError("model response contains an invalid section order")
     raw_selected = document["selected_facts"]
@@ -304,7 +303,7 @@ def parse_plan(raw: str, catalog: FactCatalog) -> ModelPlan:
 
 def render(catalog: FactCatalog, plan: ModelPlan, locale: str) -> str:
     facts = {fact.fact_id: fact for fact in catalog.facts}
-    lines = [catalog.instrument, plan.connections[0]]
+    lines = [f"report={catalog.report_id}", plan.connections[0]]
     for section in plan.section_order:
         selected = [
             facts[item.fact_id]
@@ -318,7 +317,7 @@ def render(catalog: FactCatalog, plan: ModelPlan, locale: str) -> str:
             suffix = f"; as_of={fact.as_of}" if fact.as_of is not None else ""
             evidence = f"; evidence={fact.evidence_id}" if fact.evidence_id is not None else ""
             lines.append(f"- {fact.label}: {fact.value}{suffix}{evidence}")
-    lines.append(DISCLAIMER)
+    lines.append(FOOTERS[locale])
     return "\n".join(lines)
 
 
@@ -337,6 +336,7 @@ def _fallback(
         provider=model.provider,
         model=model.model,
         prompt_version=PROMPT_VERSION,
+        report_id=catalog.report_id,
         catalog_hash=catalog.catalog_hash,
         selected_fact_ids=tuple(fact.fact_id for fact in selected),
         fallback_reason=reason,
@@ -344,87 +344,19 @@ def _fallback(
     )
 
 
-def _fake_response(catalog: Mapping[str, Any]) -> str:
-    facts = catalog.get("facts")
-    if not isinstance(facts, list) or not facts:
-        return "{}"
-    selected = facts[:MAX_SELECTED_FACTS]
-    sections = list(dict.fromkeys(str(fact["section"]) for fact in selected))
-    return json.dumps(
-        {
-            "section_order": sections,
-            "selected_facts": [
-                {"fact_id": fact["fact_id"], "emphasis": "context"} for fact in selected
-            ],
-            "connections": ["確認できる事実を項目別に整理します。"],
-        },
-        ensure_ascii=False,
-        separators=(",", ":"),
-        sort_keys=True,
-    )
-
-
-def _catalog_from_prompt(prompt: str) -> Mapping[str, Any]:
-    document = json.loads(prompt)
-    catalog = document.get("catalog")
-    if not isinstance(catalog, Mapping):
-        raise ValueError("prompt does not contain a fact catalog")
-    return catalog
-
-
-def _leaf_values(
-    value: Mapping[str, Any], path: tuple[str, ...] = ()
-) -> list[tuple[tuple[str, ...], Any]]:
-    leaves: list[tuple[tuple[str, ...], Any]] = []
-    for key in sorted(value):
-        item = value[key]
-        next_path = (*path, str(key))
-        if isinstance(item, Mapping):
-            leaves.extend(_leaf_values(item, next_path))
-        elif isinstance(item, list):
-            for index, nested in enumerate(item):
-                list_path = (*next_path, str(index))
-                if isinstance(nested, Mapping):
-                    leaves.extend(_leaf_values(nested, list_path))
-                elif _is_scalar(nested):
-                    leaves.append((list_path, nested))
-        elif _is_scalar(item):
-            leaves.append((next_path, item))
-    return leaves
-
-
-def _is_scalar(value: object) -> bool:
-    return value is None or isinstance(value, (bool, int, float, str))
-
-
-def _canonical_scalar(value: object) -> str:
-    if value is None:
-        return "null"
-    if isinstance(value, bool):
-        return "true" if value else "false"
-    if isinstance(value, float) and not (float("-inf") < value < float("inf")):
-        raise ValueError("fact catalog cannot contain non-finite numbers")
-    return str(value)
-
-
-def _instrument_label(value: object) -> str:
-    if isinstance(value, str):
-        return _required_text(value, "instrument")
-    if isinstance(value, Mapping):
-        mic = _required_text(value.get("mic"), "instrument.mic")
-        symbol = _required_text(value.get("symbol"), "instrument.symbol")
-        return f"{mic}:{symbol}"
-    raise ValueError("instrument must be a string or mapping")
+def _evidence_value(direction: str, value: str | None, threshold: str | None) -> str:
+    parts = [direction]
+    if value is not None:
+        parts.append(f"value={value}")
+    if threshold is not None:
+        parts.append(f"threshold={threshold}")
+    return ";".join(parts)
 
 
 def _required_text(value: object, name: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{name} must be non-empty text")
     return value
-
-
-def _optional_text(value: object) -> str | None:
-    return value if isinstance(value, str) and value else None
 
 
 def _string_tuple(value: object, name: str) -> tuple[str, ...]:

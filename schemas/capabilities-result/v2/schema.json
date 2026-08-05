@@ -19,7 +19,10 @@
           "name": {"type": "string", "minLength": 1},
           "summary": {"type": "string", "minLength": 1},
           "options": {"$ref": "#/$defs/options"},
-          "output_schema": {"type": "string", "pattern": "^urn:marketsieve:schema:"},
+          "output_schema": {
+            "type": ["string", "null"],
+            "pattern": "^urn:marketsieve:schema:"
+          },
           "effects": {
             "type": "object",
             "required": ["network", "secrets", "optional_writes"],
@@ -28,7 +31,7 @@
               "secrets": {"type": "boolean"},
               "optional_writes": {
                 "type": "array",
-                "items": {"enum": ["log_file", "snapshot"]},
+                "items": {"enum": ["explanation", "log_file", "snapshot"]},
                 "uniqueItems": true
               }
             },

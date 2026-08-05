@@ -13,7 +13,7 @@ MarketSieveは、検証済みの市場情報から再現可能な分析、過去
 
 ## 現在の状態
 
-`develop`では0.3.0の基盤をPersonal Close Briefへ拡張しています。CSV、J-Quants、Alpha Vantage、FREDを独立した配布物として扱い、変更不能な検証済みスナップショット、価格・テクニカル・財務・valuation・risk・event・data qualityの総合確認、比較、レポート、説明専用Agentを提供します。FakeListLLMを既定とし、LM Studioと明示的に許可したOpenAI、Anthropic、Googleも同じgrounded pipelineを使用します。CLIは根拠と欠損理由を提示し、投資判断を推奨しません。
+`develop`では0.3.0の基盤をPersonal Close Briefへ拡張しています。CSV、J-Quants、Alpha Vantage、FREDを独立した配布物として扱い、変更不能な検証済みスナップショット、価格・テクニカル・財務・valuation・risk・event・data qualityの総合確認、比較、レポート、説明専用Agentを提供します。Agentは変更不能な判断レポートだけを読み、LM Studio、OpenAI、Anthropic、Googleのいずれかを明示した場合だけ動作します。説明は別成果物として保存され、レポートを変更しません。
 
 ## インストール
 
@@ -63,9 +63,11 @@ uv run marketsieve snapshot verify SNAPSHOT_ID --output json
 uv run marketsieve inspect XTKS:7203 --source-profile offline-jp --output json
 uv run marketsieve analyze rsi XTKS:7203 --period 14 --source-profile offline-jp --output json
 uv run marketsieve compare XTKS:7203 XTKS:6758 --source-profile offline-jp --output json
-uv run marketsieve report XTKS:7203 --source-profile offline-jp --format rich
-uv run marketsieve agent explain XTKS:7203 --source-profile offline-jp --output json
-uv run marketsieve --config marketsieve.toml agent explain XTKS:7203 --source-profile offline-jp --provider openai --dry-run --output json
+uv run marketsieve equity-report XTKS:7203 --source-profile offline-jp --format rich
+uv run marketsieve report list --output json
+uv run marketsieve report show latest --output json
+uv run marketsieve report export latest --format markdown
+uv run marketsieve --config marketsieve.toml report explain latest --provider openai --dry-run --output json
 ```
 
 ## アーキテクチャ

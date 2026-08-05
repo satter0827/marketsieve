@@ -19,8 +19,8 @@ notifications.
   fallback or provider merging.
 - **FND-04:** Verified immutable snapshots support offline inspection, analysis, comparison, and
   reporting.
-- **FND-05:** The optional agent can explain a bounded fact catalog through explicitly selected
-  local or cloud models.
+- **FND-05:** The optional agent can explain only an immutable decision-report fact catalog through
+  an explicitly selected local or cloud model. Explanation artifacts cannot modify report objects.
 - **FND-06:** Local and CI gates verify tests, dependency direction, distributions, and isolated
   installation on supported Python versions.
 - **FND-07:** FRED supplies explicit economic-series observations with observation, retrieval, and

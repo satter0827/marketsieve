@@ -25,6 +25,7 @@ def test_schemas_are_draft_2020_12_and_semantically_versioned() -> None:
         "indicator-result",
         "log-record",
         "report-result",
+        "report-list",
         "review-report",
         "snapshot-result",
         "source-result",

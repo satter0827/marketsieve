@@ -1,14 +1,14 @@
-"""Explicit, explanation-only agent use cases."""
+"""Explicit, explanation-only decision-report use cases."""
 
 from __future__ import annotations
 
 from collections.abc import Mapping
 from typing import Any, Protocol
 
+from marketsieve import DecisionReport
 from marketsieve_agent import (
     AnthropicModel,
     FactCatalog,
-    FakeModel,
     GoogleModel,
     LmStudioModel,
     OpenAIModel,
@@ -17,24 +17,30 @@ from marketsieve_agent import (
 from marketsieve_agent.pipeline import PROMPT_VERSION, build_prompt
 
 
-class SnapshotReader(Protocol):
-    def inspect(self, instrument: str, profile: str) -> dict[str, Any]: ...
-
-
 class AgentConfiguration(Protocol):
     def agent_provider(self, name: str) -> Any: ...
 
 
+class DecisionReportReader(Protocol):
+    def resolve(self, report_id: str) -> DecisionReport: ...
+
+
+class ExplanationWriter(Protocol):
+    def put(self, value: dict[str, Any]) -> dict[str, Any]: ...
+
+
 class AgentService:
-    """Build one selected model over one already-verified equity view."""
+    """Explain exactly one verified report through one explicit provider."""
 
     def __init__(
         self,
-        snapshots: SnapshotReader,
+        reports: DecisionReportReader,
+        explanations: ExplanationWriter,
         configuration: AgentConfiguration,
         environment: Mapping[str, str],
     ) -> None:
-        self._snapshots = snapshots
+        self._reports = reports
+        self._explanations = explanations
         self._configuration = configuration
         self._environment = environment
 
@@ -63,8 +69,7 @@ class AgentService:
 
     def explain(
         self,
-        instrument: str,
-        profile: str,
+        report_id: str,
         provider: str,
         locale: str,
         *,
@@ -72,8 +77,8 @@ class AgentService:
         allow_remote: bool,
         dry_run: bool,
     ) -> dict[str, Any]:
-        view = self._snapshots.inspect(instrument, profile)
-        catalog = FactCatalog.from_view(view)
+        report = self._reports.resolve(report_id)
+        catalog = FactCatalog.from_report(report)
         prompt = build_prompt(catalog, locale)
         if dry_run:
             model, endpoint = self._preview_details(provider, allow_remote=allow_remote)
@@ -84,19 +89,16 @@ class AgentService:
                 "provider": provider,
                 "model": model,
                 "endpoint": endpoint,
+                "report_id": report.report_id,
                 "prompt_version": PROMPT_VERSION,
                 "catalog_hash": catalog.catalog_hash,
                 "fact_count": len(catalog.facts),
                 "payload": prompt,
             }
         selected = self._model(provider, allow_cloud=allow_cloud, allow_remote=allow_remote)
-        result = explain(view, model=selected, locale=locale).as_document()
-        return {
-            **result,
-            "operation": "explain",
-            "instrument": instrument,
-            "source_profile": profile,
-        }
+        result = explain(report, model=selected, locale=locale).as_document()
+        artifact = self._explanations.put({**result, "operation": "explain"})
+        return artifact
 
     def _doctor_details(self, provider: str, *, allow_remote: bool) -> tuple[str, str | None]:
         model, endpoint = self._preview_details(provider, allow_remote=allow_remote)
@@ -105,8 +107,6 @@ class AgentService:
         return model, endpoint
 
     def _preview_details(self, provider: str, *, allow_remote: bool) -> tuple[str, str | None]:
-        if provider == "fake":
-            return FakeModel.model, None
         settings = self._configuration.agent_provider(provider)
         if provider == "lmstudio":
             endpoint = settings.endpoint or "http://127.0.0.1:1234/v1"
@@ -124,8 +124,6 @@ class AgentService:
         return settings.model, endpoints[provider]
 
     def _model(self, provider: str, *, allow_cloud: bool, allow_remote: bool) -> Any:
-        if provider == "fake":
-            return FakeModel()
         settings = self._configuration.agent_provider(provider)
         self._preview_details(provider, allow_remote=allow_remote)
         if provider == "lmstudio":
@@ -144,8 +142,4 @@ class AgentService:
             raise ValueError("agent provider is not supported")
         key = self._environment.get(credentials[provider], "")
         constructors = {"openai": OpenAIModel, "anthropic": AnthropicModel, "google": GoogleModel}
-        return constructors[provider](
-            model=settings.model,
-            api_key=key,
-            allow_cloud=allow_cloud,
-        )
+        return constructors[provider](model=settings.model, api_key=key, allow_cloud=allow_cloud)

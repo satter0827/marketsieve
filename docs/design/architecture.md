@@ -16,7 +16,7 @@ J-Quants API V2 acquisition, `marketsieve-source-alphavantage` implements explic
 acquisition, `marketsieve-source-fred` implements explicit FRED economic-series acquisition, and
 `marketsieve-cli` owns the executable application and immutable
 snapshot store.
-The optional `marketsieve-agent` distribution implements the FakeListLLM fact-selection pipeline,
+The optional `marketsieve-agent` distribution implements decision-report fact selection,
 deterministic safe fallback, and an injectable LM Studio OpenAI-compatible adapter. LM Studio uses
 one bounded non-streaming request, follows no redirects, and accepts only loopback endpoints unless
 remote access is separately allowed. OpenAI uses its fixed Responses endpoint only after explicit
@@ -24,9 +24,11 @@ cloud consent, disables storage and tools, and has an independent mocked-transpo
 Anthropic adapter separately implements the fixed Messages API, API-version, authentication, and
 text-block contract with the same consent and request bounds. Google uses the fixed Gemini
 Interactions endpoint, header-based authentication, JSON response format, and a completed
-single-text contract. The CLI loads this optional distribution only for `agent` commands, derives
-its fact catalog from the same verified offline inspection view, and never gives a model tools,
-source access, or calculation ownership.
+single-text contract. The CLI loads this optional distribution only for provider diagnostics and
+`report explain`, derives
+its fact catalog only from an immutable decision report, omits quantities and acquisition prices,
+and never gives a model tools, source access, or calculation ownership. The CLI persists model and
+template output below `.marketsieve/explanations` without modifying report objects.
 
 The `marketsieve_cli` package owns the command-line interface, offline diagnostics, use-case
 orchestration, and console presentation. It is independently installable and is never included in
@@ -239,8 +241,9 @@ sandbox boundary.
 
 Network acquisition and offline consumption are different use cases. `source fetch` and `source
 import` create immutable objects below `.marketsieve/data/objects`. Inspection, analysis,
-comparison, report rendering, and later agent rendering read verified snapshots and never trigger
-an implicit refresh. Mutable references are rebuildable indexes and are not evidence authorities.
+comparison and legacy equity rendering read verified snapshots and never trigger an implicit
+refresh. Model explanation reads a verified decision report instead. Mutable references are
+rebuildable indexes and are not evidence authorities.
 
 An equity view is a composition of independent instrument, price, technical, financial, valuation,
 risk, event, and data-quality sections. Each section owns status, completeness, missing reasons,
@@ -252,17 +255,17 @@ caches, and artifacts live below `.marketsieve`. Credentials enter only through 
 environment variables and are never copied into configuration, snapshots, logs, review evidence,
 or distributions.
 
-## Approved 0.3 target architecture
+## Model explanation boundary
 
-The optional `marketsieve-agent` distribution consumes the same validated section facts used by
-the CLI. LangChain and provider packages remain outside the SDK. A model chooses fact identifiers,
+The optional `marketsieve-agent` distribution consumes a validated decision report. Provider
+packages remain outside the SDK. A model chooses fact identifiers,
 section order, and bounded non-numeric connective text; a deterministic renderer inserts factual
 values and evidence. The agent owns no source, calculation, file, tool, delivery, or trading access.
 
-FakeListLLM validates the application pipeline but does not claim behavioral equivalence with chat
-providers. Each real provider has separate mocked-transport contract tests. LM Studio is local and
-loopback-only by default. Cloud use requires an explicit invocation flag and never becomes a
-fallback for a failed local or cloud provider.
+Test-local models validate the application pipeline without entering production selection. Each
+real provider has separate mocked-transport contract tests. LM Studio is local and loopback-only
+by default. Cloud use requires an explicit invocation flag and never becomes a fallback for a
+failed local or cloud provider.
 
 ## Decision report storage
 
@@ -304,8 +307,8 @@ write and checksum mechanics across data, portfolio, and report repositories; th
 schemas and validation remain separate.
 
 The production agent consumes a validated decision report. It cannot fetch data, read portfolio
-files, recalculate a decision, or replace a failed explanation with a different report. Fake model
-behavior belongs to tests only.
+files, recalculate a decision, or replace a failed explanation with a different report. Test-model
+behavior remains in tests only.
 
 The root workspace package catalog is the authority for public distribution names, paths, import
 packages, build order, and isolation checks. Build scripts and tests derive their package sets from

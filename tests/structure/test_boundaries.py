@@ -58,7 +58,6 @@ def test_agent_is_independent_from_cli_sources_and_io() -> None:
     assert not imports & {
         "click",
         "http",
-        "marketsieve",
         "marketsieve_cli",
         "marketsieve_extension_api",
         "marketsieve_source_csv",

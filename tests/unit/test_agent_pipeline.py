@@ -1,152 +1,211 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
+from datetime import UTC, datetime
+from decimal import Decimal
 from typing import Any
 
 import pytest
 
-from marketsieve_agent import FakeModel, explain
+from marketsieve import (
+    DecisionAction,
+    DecisionConfidence,
+    DecisionEvidence,
+    DecisionReport,
+    EvidenceDirection,
+    Holding,
+    InstrumentDecision,
+    MarketSession,
+    PortfolioSnapshot,
+)
+from marketsieve.domain import Instrument
+from marketsieve_agent import FactCatalog, explain
+from marketsieve_agent.pipeline import build_prompt
+
+AS_OF = datetime(2026, 8, 3, 6, tzinfo=UTC)
 
 
-def view() -> dict[str, Any]:
-    return {
-        "instrument": {"mic": "XTKS", "symbol": "7203"},
-        "source_profile": "japan",
-        "sections": {
-            "price": {
-                "status": "available",
-                "as_of": "2026-08-03T06:00:00+00:00",
-                "values": {"close": "2500", "currency": "JPY"},
-                "evidence_id": "price-evidence",
-            },
-            "risk": {
-                "status": "partial",
-                "as_of": "2026-08-03T06:00:00+00:00",
-                "values": {"maximum_drawdown": {"value": "-0.12"}},
-                "evidence_id": "risk-evidence",
-            },
-        },
-    }
+class StubModel:
+    provider = "fixture"
+    model = "stub"
+
+    def __init__(self, output: str) -> None:
+        self.output = output
+        self.prompts: list[str] = []
+
+    def invoke(self, prompt: str) -> str:
+        self.prompts.append(prompt)
+        return self.output
 
 
-def response(*, connection: str = "確認できる事実を整理します。") -> str:
+class ErrorModel:
+    provider = "fixture"
+    model = "error"
+
+    def __init__(self, error: Exception) -> None:
+        self.error = error
+
+    def invoke(self, prompt: str) -> str:
+        del prompt
+        raise self.error
+
+
+def report() -> DecisionReport:
+    instrument = Instrument.create(
+        symbol="7203",
+        mic="XTKS",
+        currency="JPY",
+        exchange_timezone="Asia/Tokyo",
+    )
+    settings = (("rsi_overbought", "70"),)
+    decision = InstrumentDecision(
+        instrument,
+        True,
+        DecisionAction.KEEP,
+        DecisionConfidence.MEDIUM,
+        (
+            DecisionEvidence(
+                "trend_above_sma60",
+                EvidenceDirection.SUPPORTING,
+                "2500",
+                "2400",
+                ("bars-evidence",),
+            ),
+        ),
+        None,
+        Decimal("0.05"),
+        Decimal("0.03"),
+        Decimal("1000000"),
+        (("per", "14.2"),),
+        ("close_below_sma60",),
+        "次の終値で傾向を確認する",
+        "balanced_medium_term",
+        "1.0.0",
+        settings,
+    )
+    portfolio = PortfolioSnapshot(
+        AS_OF,
+        (Holding(instrument, Decimal("10"), Decimal("2300"), "taxable"),),
+        (),
+        "fixture",
+    )
+    return DecisionReport(
+        "a" * 64,
+        "decision-report/v1",
+        MarketSession.JP_CLOSE,
+        AS_OF,
+        portfolio,
+        decision.policy_name,
+        decision.policy_version,
+        settings,
+        (decision,),
+        ("FRED系列は未取得",),
+    )
+
+
+def response(*, connection: str = "保存済みの判断根拠を整理します。") -> str:
     return json.dumps(
         {
-            "section_order": ["price"],
-            "selected_facts": [{"fact_id": "price.close", "emphasis": "context"}],
+            "section_order": ["XTKS:7203"],
+            "selected_facts": [{"fact_id": "decision.XTKS:7203.action", "emphasis": "context"}],
             "connections": [connection],
         },
         ensure_ascii=False,
     )
 
 
-def test_fake_is_default_and_renderer_owns_values_and_evidence() -> None:
-    result = explain(view())
+def test_explicit_model_selects_facts_but_renderer_owns_values_and_evidence() -> None:
+    result = explain(report(), model=StubModel(response()))
 
     assert result.status == "model"
-    assert result.provider == "fake"
-    assert "2500" in result.text
-    assert "price-evidence" in result.text
-    assert result.catalog_hash
-
-
-def test_explicit_fake_uses_the_same_parser_and_renderer() -> None:
-    result = explain(view(), model=FakeModel([response()]))
-
-    assert result.status == "model"
-    assert result.selected_fact_ids == ("price.close",)
+    assert result.provider == "fixture"
+    assert "keep" in result.text
+    assert result.report_id == "a" * 64
     assert result.as_document()["schema_version"] == "1.0.0"
 
 
-def test_invalid_json_uses_template_without_exposing_model_output() -> None:
-    result = explain(view(), model=FakeModel(["not-json"]))
+def test_catalog_uses_only_static_report_and_excludes_private_portfolio_values() -> None:
+    catalog = FactCatalog.from_report(report())
+    prompt = build_prompt(catalog, "ja")
+
+    assert catalog.report_id == "a" * 64
+    assert "bars-evidence" not in prompt
+    assert '"quantity"' not in prompt
+    assert "2300" not in prompt
+    assert "taxable" not in prompt
+
+
+@pytest.mark.parametrize(
+    ("output", "reason"),
+    (("not-json", "invalid_json"), ("{}", "invalid_model_output")),
+)
+def test_invalid_model_output_uses_template_without_exposing_output(
+    output: str, reason: str
+) -> None:
+    result = explain(report(), model=StubModel(output))
 
     assert result.status == "template"
-    assert result.fallback_reason == "invalid_json"
-    assert "not-json" not in result.text
+    assert result.fallback_reason == reason
+    assert output not in result.text
 
 
 def test_unknown_fact_uses_template() -> None:
     raw = json.loads(response())
-    raw["selected_facts"][0]["fact_id"] = "price.unknown"
+    raw["selected_facts"][0]["fact_id"] = "decision.XTKS:7203.unknown"
 
-    result = explain(view(), model=FakeModel([json.dumps(raw)]))
+    result = explain(report(), model=StubModel(json.dumps(raw)))
 
-    assert result.status == "template"
     assert result.fallback_reason == "invalid_model_output"
 
 
-def test_numeric_connection_uses_template() -> None:
-    result = explain(view(), model=FakeModel([response(connection="価格は二千五百円です 2500")]))
+@pytest.mark.parametrize(
+    "connection", ["価格は二千五百円です。", "Return is five percent.", "推奨します。"]
+)
+def test_numeric_or_advisory_connections_use_template(connection: str) -> None:
+    result = explain(report(), model=StubModel(response(connection=connection)))
 
     assert result.status == "template"
-    assert result.fallback_reason == "invalid_model_output"
-    assert "価格は" not in result.text
+    assert connection not in result.text
 
 
-@pytest.mark.parametrize("connection", ["価格は二千五百円です。", "Return is five percent."])
-def test_spelled_out_numeric_connection_uses_template(connection: str) -> None:
-    result = explain(view(), model=FakeModel([response(connection=connection)]))
+@pytest.mark.parametrize(
+    ("error", "reason"),
+    ((TimeoutError(), "model_timeout"), (RuntimeError("not exposed"), "model_unavailable")),
+)
+def test_provider_failures_use_template_without_exception_detail(
+    error: Exception, reason: str
+) -> None:
+    result = explain(report(), model=ErrorModel(error))
 
-    assert result.status == "template"
-
-
-def test_recommendation_connection_uses_template() -> None:
-    result = explain(view(), model=FakeModel([response(connection="買いを推奨します。")]))
-
-    assert result.status == "template"
-    assert "買い" not in result.text
-
-
-class TimeoutModel:
-    provider = "fake"
-    model = "timeout"
-
-    def invoke(self, prompt: str) -> str:
-        raise TimeoutError
-
-
-def test_timeout_uses_template() -> None:
-    result = explain(view(), model=TimeoutModel())
-
-    assert result.status == "template"
-    assert result.fallback_reason == "model_timeout"
+    assert result.fallback_reason == reason
+    assert "not exposed" not in result.text
 
 
 def test_catalog_hash_and_result_are_deterministic() -> None:
-    first = explain(view())
-    second = explain(view())
+    first = explain(report(), model=StubModel(response()))
+    second = explain(report(), model=StubModel(response()))
 
     assert first == second
 
 
-def test_english_template_supports_scalar_and_list_facts() -> None:
-    candidate = view()
-    candidate["instrument"] = "XTKS:7203"
-    candidate["sections"]["events"] = {
-        "values": {"items": [{"kind": "earnings"}, True, None]},
-        "as_of": None,
-        "evidence_id": None,
-    }
-
-    result = explain(candidate, model=FakeModel(["invalid"]), locale="en")
+def test_english_template_identifies_unchanged_report_values() -> None:
+    result = explain(report(), model=StubModel("invalid"), locale="en")
 
     assert result.status == "template"
-    assert "The validated facts" in result.text
-    assert "true" in result.text
-    assert "null" in result.text
+    assert "were not changed by the model" in result.text
 
 
 @pytest.mark.parametrize(
     "mutation",
     [
         lambda raw: raw.update({"extra": True}),
-        lambda raw: raw.update({"section_order": ["price", "price"]}),
+        lambda raw: raw.update({"section_order": ["XTKS:7203", "XTKS:7203"]}),
         lambda raw: raw.update({"section_order": ["unknown"]}),
         lambda raw: raw.update({"selected_facts": []}),
-        lambda raw: raw.update({"selected_facts": ["price.close"]}),
+        lambda raw: raw.update({"selected_facts": ["decision.XTKS:7203.action"]}),
         lambda raw: raw["selected_facts"].append(raw["selected_facts"][0]),
-        lambda raw: raw.update({"section_order": ["risk"]}),
+        lambda raw: raw.update({"section_order": ["report"]}),
         lambda raw: raw.update({"connections": []}),
         lambda raw: raw.update({"connections": ["one", "two"]}),
         lambda raw: raw.update({"connections": [""]}),
@@ -156,57 +215,21 @@ def test_invalid_plan_shapes_use_template(mutation: Any) -> None:
     raw = json.loads(response())
     mutation(raw)
 
-    result = explain(view(), model=FakeModel([json.dumps(raw)]))
+    result = explain(report(), model=StubModel(json.dumps(raw)))
 
     assert result.status == "template"
 
 
-@pytest.mark.parametrize(
-    "candidate",
-    [
-        {"instrument": "XTKS:7203", "source_profile": "japan"},
-        {"instrument": 1, "source_profile": "japan", "sections": {}},
-        {"instrument": "", "source_profile": "japan", "sections": {}},
-        {"instrument": "XTKS:7203", "source_profile": "", "sections": {}},
-    ],
-)
-def test_invalid_view_is_rejected_before_model_use(candidate: dict[str, Any]) -> None:
-    with pytest.raises(ValueError):
-        explain(candidate)
-
-
-def test_non_finite_fact_is_rejected() -> None:
-    candidate = view()
-    candidate["sections"]["price"]["values"]["close"] = float("inf")
-
-    with pytest.raises(ValueError, match="non-finite"):
-        explain(candidate)
-
-
-def test_invalid_locale_is_rejected() -> None:
+def test_invalid_report_and_locale_are_rejected_before_model_use() -> None:
+    with pytest.raises(TypeError, match="DecisionReport"):
+        explain({"report_id": "bad"}, model=StubModel(response()))  # type: ignore[arg-type]
     with pytest.raises(ValueError, match="locale"):
-        explain(view(), locale="fr")
+        explain(report(), model=StubModel(response()), locale="fr")
 
 
-class UnavailableModel:
-    provider = "fake"
-    model = "unavailable"
+def test_report_change_changes_catalog_even_when_report_id_is_invalidly_reused() -> None:
+    original = FactCatalog.from_report(report())
+    decision = report().decisions[0]
+    changed = replace(report(), decisions=(replace(decision, next_action="変更を確認する"),))
 
-    def invoke(self, prompt: str) -> str:
-        raise RuntimeError("not exposed")
-
-
-def test_unavailable_model_uses_template_without_exception_detail() -> None:
-    result = explain(view(), model=UnavailableModel())
-
-    assert result.fallback_reason == "model_unavailable"
-    assert "not exposed" not in result.text
-
-
-def test_empty_catalog_uses_template() -> None:
-    candidate = {"instrument": "XTKS:7203", "source_profile": "japan", "sections": {}}
-
-    result = explain(candidate)
-
-    assert result.status == "template"
-    assert result.selected_fact_ids == ()
+    assert FactCatalog.from_report(changed).catalog_hash != original.catalog_hash
