@@ -195,7 +195,6 @@ def test_capabilities_match_click_commands_and_validate_schema() -> None:
         "compare",
         "daily",
         "doctor",
-        "equity-report",
         "experiment compare",
         "experiment explain",
         "experiment run",
@@ -718,31 +717,6 @@ def test_report_commands_and_explicit_agent_share_one_immutable_report(
     assert fallback_document["status"] == "template"
     assert "provider detail" not in fallback_document["text"]
     assert "provider detail" not in fallback.stderr
-
-
-def test_report_projects_the_same_offline_equity_view(tmp_path: Path) -> None:
-    runner = CliRunner()
-    bundle = write_csv_bundle(tmp_path / "report-bundle")
-    with runner.isolated_filesystem():
-        assert runner.invoke(main, ["source", "import", str(bundle)]).exit_code == 0
-        report = runner.invoke(
-            main,
-            [
-                "equity-report",
-                "XTKS:7203",
-                "--source-profile",
-                "offline-jp",
-                "--format",
-                "json",
-            ],
-        )
-
-    assert report.exit_code == 0, report.output
-    document = json.loads(report.stdout)
-    validate("report-result", document, major=2)
-    assert document["sections"]["price"]["values"]["close"] == "112"
-    assert len(document["summary"]) == 7
-    assert "not investment advice" in document["disclaimer"]
 
 
 def test_jquants_doctor_and_fetch_use_only_explicit_profile(

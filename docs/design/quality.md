@@ -108,9 +108,9 @@ make evidence
 A failure is corrected and the affected checks are rerun. Environment or tool failures are reported
 as such and are not presented as successful test evidence.
 
-## Approved 0.2 and 0.3 acceptance additions
+## Workbench and Agent acceptance
 
-The target gate adds deterministic reference vectors for every indicator, ambient-decimal-context
+The gate includes deterministic reference vectors for every indicator, ambient-decimal-context
 tests, snapshot identity and atomicity tests, publication-versus-retrieval availability tests, and
 contract suites shared by CSV, J-Quants, Alpha Vantage, FRED, SEC, and EDINET. Network clients are
 injected.
@@ -140,7 +140,7 @@ release assets without printing matched values. CI also scans repository history
 credentials are removed from URLs, headers, exceptions, logs, subprocess environments, and stored
 request metadata.
 
-## 0.4.0 acceptance target
+## Personal Close Brief acceptance
 
 Personal Close Brief acceptance adds:
 

@@ -9,8 +9,8 @@ The current commands are offline and require no credentials:
 ```shell
 marketsieve doctor
 marketsieve capabilities
-marketsieve report
+marketsieve inspect XTKS:7203 --source-profile PROFILE
 ```
 
-See the repository documentation for the 0.2 data-workbench roadmap and supported installation
-procedure.
+See the repository documentation for current commands, plugin boundaries, and supported
+installation combinations.

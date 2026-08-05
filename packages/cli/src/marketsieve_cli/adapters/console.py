@@ -225,7 +225,6 @@ class ConsoleOutput:
         localized_title = {
             "Equity inspection": "株式情報",
             "Equity comparison": "株式比較",
-            "Equity report": "株式レポート",
             "Indicator analysis": "指標分析",
         }.get(title, title)
         self._console.print(

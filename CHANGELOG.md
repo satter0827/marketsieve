@@ -43,6 +43,8 @@ will follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Equity symbols now preserve uppercase dots and hyphens needed by U.S. class-share identifiers.
 - Public packages share version 0.7.0 and accept dependencies from the compatible 0.7 minor series
   so adapters can be developed and installed outside this workspace.
+- Removed the redundant `equity-report` command and its report-result schema. `inspect` remains the
+  canonical sectioned analysis, while durable investment output uses `decision-report/v1`.
 
 ## [0.3.0] - 2026-08-05
 

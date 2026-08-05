@@ -12,9 +12,9 @@ channels.
 
 ## Purpose
 
-MarketSieve will turn verified market facts into reproducible analyses, historical experiments,
-and evidence-backed reports. Reports will be delivered through replaceable channels without making
-the SDK depend on email, LINE, an LLM provider, or a database.
+MarketSieve turns verified market facts into reproducible analyses, historical experiments, and
+evidence-backed reports. Replaceable application boundaries keep the SDK independent from email,
+LINE, LLM providers, and databases.
 
 ## Current status
 
@@ -95,7 +95,6 @@ uv run marketsieve snapshot verify SNAPSHOT_ID --output json
 uv run marketsieve inspect XTKS:7203 --source-profile offline-jp --output json
 uv run marketsieve analyze rsi XTKS:7203 --period 14 --source-profile offline-jp --output json
 uv run marketsieve compare XTKS:7203 XTKS:6758 --source-profile offline-jp --output json
-uv run marketsieve equity-report XTKS:7203 --source-profile offline-jp --format rich
 uv run marketsieve report list --output json
 uv run marketsieve report show latest --output json
 uv run marketsieve report export latest --format markdown
@@ -121,8 +120,8 @@ uv run marketsieve portfolio import holdings.csv --broker canonical \
 uv run marketsieve portfolio show
 ```
 
-MarketSieve stores normalized content and the input digest, not the source CSV. Rakuten CSV support
-will be based on an anonymized real fixture rather than guessed columns.
+MarketSieve stores normalized content and the input digest, not the source CSV. Rakuten CSV import
+is unavailable until an anonymized real fixture establishes its format.
 
 ## Architecture
 

@@ -30,7 +30,7 @@ notifications.
 - **FND-09:** Financial trends select only compatible annual observations known at the requested
   instant and retain deterministic period, metric, and evidence identities.
 
-## 0.4.0 Personal Close Brief target
+## Personal Close Brief
 
 - **PCB-01:** A portfolio snapshot represents holdings and watch items without brokerage-specific
   types in the SDK.
@@ -44,8 +44,6 @@ notifications.
   instrument does not update a latest-report reference.
 - **PCB-06:** Human output leads with the conclusion, items needing attention, changes, and the next
   action. No-action days are successful outcomes.
-- **PCB-07:** A Rakuten importer normalizes only formats established by anonymized real fixtures and
-  stores neither the source CSV nor personal identifiers.
 - **PCB-08:** An agent explanation consumes an immutable decision report and cannot alter its
   decisions, values, evidence, or identity.
 - **PCB-09:** External adapters can be independently developed and installed against a versioned
@@ -65,7 +63,7 @@ notifications.
 - New public capability contracts require a working implementation and executable conformance
   tests in the same change.
 
-## Exclusions through 0.7.0
+## Current exclusions
 
 - Order placement and brokerage automation
 - Browser automation and session handling
