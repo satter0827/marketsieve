@@ -18,6 +18,7 @@ The Offline Analysis Preview tests:
 - stable evidence and results for identical inputs;
 - stable decision-report JSON and Markdown for identical inputs;
 - canonical report reconstruction, tamper detection, and all-indeterminate latest protection;
+- FRED pagination, missing observations, revision bounds, rate limits, and injected transport;
 - the source contracts against synthetic transports;
 - stable snapshot, section, comparison, report, and evidence identities for identical inputs;
 - Japanese and English Rich, text, and schema-valid JSON projections;
@@ -102,9 +103,9 @@ as such and are not presented as successful test evidence.
 
 The target gate adds deterministic reference vectors for every indicator, ambient-decimal-context
 tests, snapshot identity and atomicity tests, publication-versus-retrieval availability tests, and
-contract suites shared by CSV, J-Quants, and Alpha Vantage. Network clients are injected. Default
-tests use synthetic responses and never require accounts, credentials, wall-clock timing, or
-network access. Live provider checks use an explicit marker and manual credentials.
+contract suites shared by CSV, J-Quants, Alpha Vantage, and FRED. Network clients are injected.
+Default tests use synthetic responses and never require accounts, credentials, wall-clock timing,
+or network access. Live provider checks use an explicit marker and manual credentials.
 
 CLI acceptance covers Japanese and English Rich and text projections, versioned JSON, partial
 sections, incompatible comparison warnings, installed plugin metadata without plugin import, and
@@ -135,7 +136,6 @@ Personal Close Brief acceptance adds:
 - partial-instrument success and all-instrument failure behavior in daily orchestration;
 - Japanese, U.S., daylight-saving, non-trading-day, stale-data, and future-data cases;
 - portfolio normalization without retained source files or personal identifiers;
-- FRED pagination, missing observations, revision bounds, rate limits, and injected transport;
 - conclusion-first Japanese and English Rich, text, quiet, JSON, and Markdown projections;
 - proof that model success or failure cannot alter a static report;
 - wheel-installed external adapter discovery and public conformance tests.

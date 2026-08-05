@@ -14,6 +14,7 @@ from marketsieve.decision import (
     InstrumentDecision,
     MarketSession,
 )
+from marketsieve.economic import EconomicObservation, EconomicSeries
 from marketsieve.portfolio import (
     Holding,
     PersonalInvestmentContext,
@@ -31,6 +32,8 @@ __all__ = [
     "DecisionEvidence",
     "DecisionPolicy",
     "DecisionReport",
+    "EconomicObservation",
+    "EconomicSeries",
     "EvidenceDirection",
     "Holding",
     "InstrumentDecision",

@@ -245,6 +245,8 @@ def test_csv_import_snapshot_and_price_inspect_are_one_offline_path(tmp_path: Pa
         item for item in source_document["sources"] if item["name"] == "alphavantage"
     )
     assert alphavantage["data_kinds"] == ["daily_bars", "financials", "events"]
+    fred = next(item for item in source_document["sources"] if item["name"] == "fred")
+    assert fred["data_kinds"] == ["economic_series"]
     validate("source-result", import_document)
     assert import_document["observations"] == 2
     for result in (listed, shown, verified):

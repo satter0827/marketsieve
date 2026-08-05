@@ -103,6 +103,18 @@ of events that happened in a period. Missing accounting standard or other requir
 the section partial even when every mapped concept is present. Each normalized fact retains the
 source, dataset, and source-version provenance of its immutable acquisition.
 
+## Economic series
+
+An economic observation contains an observation date, a finite decimal value, and the inclusive
+real-time start and end dates for which that revision is valid. An economic series selects one
+explicit provider series identifier and one knowledge date. Every included revision
+must be valid on that knowledge date.
+
+Observations are unique and ordered by observation date. A provider's missing-value marker is
+stored as an explicit missing observation date and is never converted to zero or carried forward.
+Retrieval time and response identity belong to the acquisition result rather than the economic
+value. The same observation date cannot be both valued and missing.
+
 ## Indicator semantics
 
 The implemented indicator catalog contains SMA, EMA, RSI, MACD, ATR, period return, and maximum drawdown.

@@ -24,12 +24,14 @@ all-sources = [
     "marketsieve-source-csv==0.3.0",
     "marketsieve-source-jquants==0.3.0",
     "marketsieve-source-alphavantage==0.3.0",
+    "marketsieve-source-fred==0.3.0",
 ]
 all = [
     "marketsieve-agent==0.3.0",
     "marketsieve-source-csv==0.3.0",
     "marketsieve-source-jquants==0.3.0",
     "marketsieve-source-alphavantage==0.3.0",
+    "marketsieve-source-fred==0.3.0",
 ]
 
 [project.scripts]
@@ -57,3 +59,4 @@ marketsieve-extension-api = { workspace = true }
 marketsieve-source-csv = { workspace = true }
 marketsieve-source-jquants = { workspace = true }
 marketsieve-source-alphavantage = { workspace = true }
+marketsieve-source-fred = { workspace = true }

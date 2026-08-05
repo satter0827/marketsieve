@@ -9,7 +9,10 @@ from marketsieve_cli.adapters import plugins
 from marketsieve_extension_api import (
     DailyBarFetchRequest,
     DailyBarSourceConfiguration,
+    EconomicSeriesFetchRequest,
+    EconomicSeriesSourceConfiguration,
     ImportedDailyBars,
+    ImportedEconomicSeries,
     SourceDiagnostic,
 )
 
@@ -29,6 +32,16 @@ class FakeFetcher:
         return SourceDiagnostic(True, "ready", str(configuration))
 
     def fetch(self, request: DailyBarFetchRequest) -> ImportedDailyBars:
+        raise NotImplementedError(request)
+
+
+class FakeEconomicFetcher:
+    def doctor_economic_series(
+        self, configuration: EconomicSeriesSourceConfiguration
+    ) -> SourceDiagnostic:
+        return SourceDiagnostic(True, "ready", str(configuration))
+
+    def fetch_economic_series(self, request: EconomicSeriesFetchRequest) -> ImportedEconomicSeries:
         raise NotImplementedError(request)
 
 
@@ -58,6 +71,19 @@ class FakeFetchEntryPoint:
         return FakeFetcher
 
 
+class FakeEconomicEntryPoint:
+    name = "fixture"
+    value = "fixture:FakeEconomicFetcher"
+    dist = FakeDistribution()
+
+    def __init__(self) -> None:
+        self.loaded = False
+
+    def load(self) -> type[FakeEconomicFetcher]:
+        self.loaded = True
+        return FakeEconomicFetcher
+
+
 def test_source_listing_does_not_import_plugin_code(monkeypatch: pytest.MonkeyPatch) -> None:
     entry = FakeEntryPoint()
     monkeypatch.setattr(
@@ -69,6 +95,7 @@ def test_source_listing_does_not_import_plugin_code(monkeypatch: pytest.MonkeyPa
     monkeypatch.setattr(plugins, "fetcher_entry_points", lambda: cast(Any, ()))
     monkeypatch.setattr(plugins, "financial_entry_points", lambda: cast(Any, ()))
     monkeypatch.setattr(plugins, "event_entry_points", lambda: cast(Any, ()))
+    monkeypatch.setattr(plugins, "economic_series_entry_points", lambda: cast(Any, ()))
 
     installed = plugins.SourcePluginRegistry().installed()
 
@@ -123,3 +150,15 @@ def test_fetch_capability_is_read_without_loading_plugin(monkeypatch: pytest.Mon
     assert plugins.SourcePluginRegistry().can_fetch("fixture") is True
     assert plugins.SourcePluginRegistry().can_fetch("csv") is False
     assert entry.loaded is False
+
+
+def test_explicit_economic_series_plugin_uses_its_small_contract(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    entry = FakeEconomicEntryPoint()
+    monkeypatch.setattr(plugins, "source_entry_points", lambda **_: cast(Any, (entry,)))
+
+    fetcher = plugins.SourcePluginRegistry().load_economic_series_fetcher("fixture")
+
+    assert isinstance(fetcher, FakeEconomicFetcher)
+    assert entry.loaded is True

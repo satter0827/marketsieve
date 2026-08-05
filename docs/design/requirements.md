@@ -13,9 +13,9 @@ notifications.
 ## Implemented foundation
 
 - **FND-01:** `marketsieve` is a typed, I/O-independent public SDK.
-- **FND-02:** Market identity, time, daily bars, financial facts, events, indicators, provenance,
-  and evidence use deterministic public semantics.
-- **FND-03:** CSV, J-Quants, and Alpha Vantage are explicit acquisition paths with no implicit
+- **FND-02:** Market identity, time, daily bars, financial facts, events, economic series,
+  indicators, provenance, and evidence use deterministic public semantics.
+- **FND-03:** CSV, J-Quants, Alpha Vantage, and FRED are explicit acquisition paths with no implicit
   fallback or provider merging.
 - **FND-04:** Verified immutable snapshots support offline inspection, analysis, comparison, and
   reporting.
@@ -23,6 +23,8 @@ notifications.
   local or cloud models.
 - **FND-06:** Local and CI gates verify tests, dependency direction, distributions, and isolated
   installation on supported Python versions.
+- **FND-07:** FRED supplies explicit economic-series observations with observation, retrieval, and
+  revision time semantics.
 
 ## 0.4.0 Personal Close Brief target
 
@@ -40,11 +42,9 @@ notifications.
   action. No-action days are successful outcomes.
 - **PCB-07:** A Rakuten importer normalizes only formats established by anonymized real fixtures and
   stores neither the source CSV nor personal identifiers.
-- **PCB-08:** FRED supplies explicit economic-series observations with observation, retrieval, and
-  revision time semantics.
-- **PCB-09:** An agent explanation consumes an immutable decision report and cannot alter its
+- **PCB-08:** An agent explanation consumes an immutable decision report and cannot alter its
   decisions, values, evidence, or identity.
-- **PCB-10:** External adapters can be independently developed and installed against a versioned
+- **PCB-09:** External adapters can be independently developed and installed against a versioned
   extension API with public conformance tests.
 
 ## Product constraints

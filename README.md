@@ -18,8 +18,9 @@ the SDK depend on email, LINE, an LLM provider, or a database.
 
 ## Current status
 
-`0.3.0` is the release candidate on `develop`. It provides the complete data workbench:
-independent CSV, J-Quants, and Alpha Vantage sources; immutable verified snapshots; price,
+`develop` extends the 0.3.0 foundation toward Personal Close Brief. It currently provides the data
+workbench:
+independent CSV, J-Quants, Alpha Vantage, and FRED sources; immutable verified snapshots; price,
 financial, and event inspection; seven deterministic technical indicators; and an explanation-only
 Agent. FakeListLLM is the default. LM Studio and explicitly consented OpenAI, Anthropic, or Google
 calls use the same grounded pipeline. The CLI presents evidence and missing-data reasons, not an
@@ -34,8 +35,8 @@ Python 3.12 through 3.14 is supported. Development uses Python 3.13 and
 make sync
 ```
 
-The SDK, extension API, CLI, Agent, CSV source, J-Quants source, and Alpha Vantage source build as
-independent artifacts:
+The SDK, extension API, CLI, Agent, CSV source, J-Quants source, Alpha Vantage source, and FRED
+source build as independent artifacts:
 
 ```shell
 make build

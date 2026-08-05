@@ -10,6 +10,12 @@ from marketsieve_extension_api.daily import (
     InstrumentProfile,
     SourceDiagnostic,
 )
+from marketsieve_extension_api.economic import (
+    EconomicSeriesFetcher,
+    EconomicSeriesFetchRequest,
+    EconomicSeriesSourceConfiguration,
+    ImportedEconomicSeries,
+)
 from marketsieve_extension_api.fundamentals import (
     Consolidation,
     CorporateEvent,
@@ -34,12 +40,16 @@ __all__ = [
     "DailyBarFetchRequest",
     "DailyBarFetcher",
     "DailyBarSourceConfiguration",
+    "EconomicSeriesFetchRequest",
+    "EconomicSeriesFetcher",
+    "EconomicSeriesSourceConfiguration",
     "EventFetcher",
     "FactFetchRequest",
     "FinancialFact",
     "FinancialFetcher",
     "FinancialPeriod",
     "ImportedDailyBars",
+    "ImportedEconomicSeries",
     "ImportedEvents",
     "ImportedFinancials",
     "InstrumentProfile",
