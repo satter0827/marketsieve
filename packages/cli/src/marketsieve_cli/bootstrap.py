@@ -103,6 +103,22 @@ def build_experiment_service() -> ExperimentService:
     )
 
 
+def build_experiment_agent_service(config_path: Path | None = None) -> object:
+    """Build the optional grounded experiment explanation workflow."""
+
+    from marketsieve_cli.application.experiment_agent import ExperimentAgentService
+
+    return ExperimentAgentService(
+        ExperimentStore(Path(".marketsieve/experiments")),
+        ExplanationStore(
+            Path(".marketsieve/experiments/explanations"),
+            schema="experiment-explanation/v1",
+        ),
+        Configuration.resolve(config_path),
+        os.environ,
+    )
+
+
 def import_portfolio(path: Path, *, broker: str, as_of: str) -> dict[str, object]:
     """Import one explicit broker-neutral portfolio file."""
 

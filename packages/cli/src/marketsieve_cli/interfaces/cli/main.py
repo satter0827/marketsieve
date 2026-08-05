@@ -16,6 +16,7 @@ from marketsieve_cli.bootstrap import (
     build_console_output,
     build_daily_brief_service,
     build_diagnostics_service,
+    build_experiment_agent_service,
     build_experiment_service,
     build_snapshot_service,
     build_weekly_brief_service,
@@ -42,6 +43,10 @@ COMMAND_METADATA: dict[str, dict[str, Any]] = {
     "experiment compare": {
         "output_schema": "urn:marketsieve:schema:experiment-comparison:1.0.0",
         "effects": {"network": False, "secrets": False, "optional_writes": []},
+    },
+    "experiment explain": {
+        "output_schema": "urn:marketsieve:schema:experiment-explanation:1.0.0",
+        "effects": {"network": True, "secrets": True, "optional_writes": ["explanation"]},
     },
     "agent doctor": {
         "output_schema": "urn:marketsieve:schema:agent-result:1.0.0",
@@ -371,6 +376,51 @@ def experiment_compare(
         console.emit_error("experiment_compare_failed", str(error))
         raise click.exceptions.Exit(1) from None
     console.emit_document(document, title="Experiment comparison")
+
+
+@experiment.command("explain")
+@click.argument("run_id")
+@click.option(
+    "--provider",
+    type=click.Choice(("lmstudio", "openai", "anthropic", "google")),
+    required=True,
+)
+@click.option("--allow-cloud", is_flag=True, help="Allow this invocation to contact a cloud model.")
+@click.option("--allow-remote", is_flag=True, help="Allow a non-loopback LM Studio endpoint.")
+@output_option
+@click.pass_context
+def experiment_explain(
+    context: click.Context,
+    run_id: str,
+    provider: str,
+    allow_cloud: bool,
+    allow_remote: bool,
+    output_mode: str,
+) -> None:
+    """Explain stored experiment facts through one explicitly selected model."""
+
+    console = _console(context, output_mode)
+    try:
+        service = build_experiment_agent_service(context.obj["config_path"])
+        document = service.explain(  # type: ignore[attr-defined]
+            run_id,
+            provider,
+            context.obj["locale"],
+            allow_cloud=allow_cloud,
+            allow_remote=allow_remote,
+        )
+    except ImportError:
+        console.emit_error("agent_not_installed", "install the marketsieve-cli agent extra")
+        raise click.exceptions.Exit(1) from None
+    except (LookupError, RuntimeError, TypeError, ValueError, OSError) as error:
+        console.emit_error("experiment_agent_failed", str(error))
+        raise click.exceptions.Exit(1) from None
+    if document.get("status") == "template":
+        console.emit_warning(
+            "agent_template_fallback",
+            f"model output was not used ({document['validation']['reason']})",
+        )
+    console.emit_document(document, title="Experiment explanation")
 
 
 @main.command("equity-report")

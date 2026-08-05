@@ -117,6 +117,10 @@ end = "2025-12-31"
 `marketsieve experiment run strategy.toml` performs no acquisition. Runs are stored below
 `.marketsieve/experiments/objects`. Execution costs are optional, but commission, tax, and FX rates
 must be supplied together; no net-profit metric is calculated in the current implementation.
+`marketsieve experiment explain RUN_ID --provider PROVIDER` is the only Strategy Lab command that
+may contact a model. It stores the exact credential-free prompt, selected provider and model
+settings, raw model output, validation result, and deterministic fact rendering separately below
+`.marketsieve/experiments/explanations`. It never rewrites an experiment run.
 
 ## Unsupported operation
 
