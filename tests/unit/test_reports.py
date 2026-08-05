@@ -6,6 +6,7 @@ from dataclasses import replace
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
+from typing import cast
 
 import pytest
 from jsonschema import Draft202012Validator
@@ -158,6 +159,30 @@ def test_report_document_matches_published_schema() -> None:
     Draft202012Validator(schema, format_checker=Draft202012Validator.FORMAT_CHECKER).validate(
         report_document(_report())
     )
+
+
+def test_weekly_report_keeps_screening_candidates_separate_and_static() -> None:
+    base = _report(session=MarketSession.WEEKLY)
+    candidate = next(item for item in base.decisions if not item.held)
+    report = create_report(
+        MarketSession.WEEKLY,
+        base.as_of,
+        base.portfolio,
+        base.decisions,
+        diagnostics=base.diagnostics,
+        input_report_ids=base.input_report_ids,
+        candidate_decisions=(candidate,),
+        screening_report_ids=("3" * 64,),
+    )
+
+    document = report_document(report)
+    markdown = render_markdown(report)
+
+    decisions = cast(list[object], document["decisions"])
+    assert document["candidate_decisions"] == [decisions[0]]
+    assert document["screening_report_ids"] == ["3" * 64]
+    assert "### 残った候補" in markdown
+    assert "- XNAS:AAPL: 買い候補" in markdown
 
 
 def test_report_store_writes_authority_projection_and_latest_reference(tmp_path: Path) -> None:

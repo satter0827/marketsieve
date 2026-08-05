@@ -221,6 +221,8 @@ class DecisionReport:
     diagnostics: tuple[str, ...] = ()
     previous_report_id: str | None = None
     input_report_ids: tuple[str, ...] = ()
+    candidate_decisions: tuple[InstrumentDecision, ...] = ()
+    screening_report_ids: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if len(self.report_id) != 64 or any(c not in "0123456789abcdef" for c in self.report_id):
@@ -282,6 +284,69 @@ class DecisionReport:
             raise ValueError("weekly reports require exactly two input report IDs")
         if self.session is not MarketSession.WEEKLY and self.input_report_ids:
             raise ValueError("daily reports must not contain input report IDs")
+        if any(not isinstance(item, InstrumentDecision) for item in self.candidate_decisions):
+            raise TypeError("candidate decisions must use InstrumentDecision")
+        candidate_identities = tuple(
+            (item.instrument.mic, item.instrument.symbol) for item in self.candidate_decisions
+        )
+        if len(candidate_identities) != len(set(candidate_identities)):
+            raise ValueError("candidate decisions must have unique instruments")
+        if any(
+            item.held
+            or item.action
+            not in {
+                DecisionAction.BUY_CANDIDATE,
+                DecisionAction.WAIT_FOR_PULLBACK,
+                DecisionAction.WAIT_FOR_EARNINGS,
+            }
+            for item in self.candidate_decisions
+        ):
+            raise ValueError("candidate decisions must be eligible and not held")
+        if self.candidate_decisions != tuple(
+            sorted(self.candidate_decisions, key=candidate_order_key)
+        ):
+            raise ValueError("candidate decisions must use the stable screening order")
+        if any(
+            (item.policy_name, item.policy_version, item.policy_settings)
+            != (self.policy_name, self.policy_version, self.policy_settings)
+            for item in self.candidate_decisions
+        ):
+            raise ValueError("candidate decisions must use the report policy")
+        if (
+            self.screening_report_ids != tuple(sorted(self.screening_report_ids))
+            or len(self.screening_report_ids) != len(set(self.screening_report_ids))
+            or len(self.screening_report_ids) > 2
+            or any(
+                len(value) != 64 or any(character not in "0123456789abcdef" for character in value)
+                for value in self.screening_report_ids
+            )
+        ):
+            raise ValueError("screening report IDs must be unique sorted lowercase SHA-256 digests")
+        if self.session is not MarketSession.WEEKLY and (
+            self.candidate_decisions or self.screening_report_ids
+        ):
+            raise ValueError("daily reports must not contain screening results")
+        if bool(self.candidate_decisions) and not self.screening_report_ids:
+            raise ValueError("candidate decisions require screening report IDs")
+
+
+def candidate_order_key(
+    decision: InstrumentDecision,
+) -> tuple[int, int, int, str, str]:
+    """Return the documented transparent ordering key for one eligible candidate."""
+
+    action = {
+        DecisionAction.BUY_CANDIDATE: 0,
+        DecisionAction.WAIT_FOR_PULLBACK: 1,
+        DecisionAction.WAIT_FOR_EARNINGS: 2,
+    }[decision.action]
+    confidence = {
+        DecisionConfidence.HIGH: 0,
+        DecisionConfidence.MEDIUM: 1,
+        DecisionConfidence.LOW: 2,
+    }[decision.confidence]
+    supporting = sum(item.direction is EvidenceDirection.SUPPORTING for item in decision.evidence)
+    return action, confidence, -supporting, decision.instrument.mic, decision.instrument.symbol
 
 
 @runtime_checkable

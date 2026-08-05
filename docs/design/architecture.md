@@ -434,3 +434,11 @@ instruments use the same decision policy but cannot enter candidate results. Scr
 content-addressed canonical JSON below `.marketsieve/screening/reports`, with market-specific latest
 references. `screen show` resolves an exact ID, a market latest reference, or the newest latest
 report across both markets.
+
+The weekly use case reads, but never refreshes, the latest market-specific screening reports. It
+accepts only reports within the configured weekly age window. Candidate decisions and their source
+screening IDs are stored separately from portfolio decisions in `decision-report/v1`; candidate
+discovery therefore cannot replace or reclassify a holding decision. A candidate that is held in
+the weekly portfolio is excluded. Missing, future, stale, or limited screening input remains visible
+as a deterministic diagnostic. The Markdown projection shows portfolio attention and `残った候補`
+as separate subsections.

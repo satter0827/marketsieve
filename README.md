@@ -31,7 +31,8 @@ amendments and company-relative valuation ranges built only from explicitly acqu
 history. The Agent reads only an immutable decision report and requires an explicit LM Studio,
 OpenAI, Anthropic, or Google provider. Its output is stored separately and cannot change a report.
 Bounded Japanese and U.S. universes can be updated explicitly, then screened offline from verified
-local price snapshots. Candidate order exposes its inputs and never uses an opaque score.
+local price snapshots. Candidate order exposes its inputs and never uses an opaque score. The
+weekend briefing includes fresh stored candidates in a section separate from portfolio decisions.
 
 ## Installation
 

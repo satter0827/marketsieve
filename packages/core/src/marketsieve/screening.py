@@ -12,9 +12,9 @@ from marketsieve._time import as_utc
 from marketsieve.analysis.indicators import canonical_decimal
 from marketsieve.decision import (
     DecisionAction,
-    DecisionConfidence,
     EvidenceDirection,
     InstrumentDecision,
+    candidate_order_key,
 )
 from marketsieve.domain import Instrument
 
@@ -23,11 +23,6 @@ _ACTION_PRIORITY = {
     DecisionAction.BUY_CANDIDATE: 0,
     DecisionAction.WAIT_FOR_PULLBACK: 1,
     DecisionAction.WAIT_FOR_EARNINGS: 2,
-}
-_CONFIDENCE_PRIORITY = {
-    DecisionConfidence.HIGH: 0,
-    DecisionConfidence.MEDIUM: 1,
-    DecisionConfidence.LOW: 2,
 }
 
 
@@ -347,11 +342,4 @@ class BalancedCandidateScreen:
 
 
 def _candidate_order(candidate: ScreenCandidate) -> tuple[int, int, int, str, str]:
-    decision = candidate.decision
-    return (
-        _ACTION_PRIORITY[decision.action],
-        _CONFIDENCE_PRIORITY[decision.confidence],
-        -candidate.supporting_evidence_count,
-        decision.instrument.mic,
-        decision.instrument.symbol,
-    )
+    return candidate_order_key(candidate.decision)

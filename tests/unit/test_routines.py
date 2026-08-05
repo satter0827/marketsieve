@@ -8,12 +8,15 @@ from pathlib import Path
 import pytest
 
 from marketsieve import (
+    BalancedCandidateScreen,
     DecisionAction,
     FinancialObservation,
     FinancialTrendReport,
     Holding,
+    InstrumentUniverse,
     MarketSession,
     PortfolioSnapshot,
+    ScreeningReport,
     WatchItem,
     analyze_financial_history,
 )
@@ -303,6 +306,72 @@ def test_weekly_combines_exact_daily_inputs_without_acquisition(tmp_path: Path) 
     assert weekly.input_report_ids == tuple(sorted((jp.report_id, us.report_id)))
     assert [item.instrument.currency for item in weekly.decisions] == ["USD", "JPY"]
     assert reports.latest(MarketSession.WEEKLY) == weekly
+
+
+@dataclass
+class ScreeningReader:
+    report: ScreeningReport
+
+    def latest_report(self, market: str) -> ScreeningReport:
+        if market != "us":
+            raise LookupError("not available")
+        return self.report
+
+
+def test_weekly_integrates_fresh_screening_without_changing_portfolio_decisions(
+    tmp_path: Path,
+) -> None:
+    reports, as_of = _daily_inputs(tmp_path)
+    us = reports.latest(MarketSession.US_CLOSE)
+    candidate = next(item for item in us.decisions if not item.held)
+    universe = InstrumentUniverse.create(
+        market="us",
+        source_profile="us",
+        as_of=as_of,
+        instruments=(candidate.instrument,),
+        source_ids=("a" * 64,),
+    )
+    screening = BalancedCandidateScreen().screen(
+        universe, (candidate,), as_of=as_of, diagnostics=("limited_source",)
+    )
+
+    weekly = WeeklyBriefService(
+        reports, Configuration(), create_report, ScreeningReader(screening)
+    ).run(as_of=as_of + timedelta(days=1))
+
+    assert weekly.screening_report_ids == (screening.report_id,)
+    assert weekly.candidate_decisions == (candidate,)
+    assert weekly.decisions == tuple(
+        sorted(
+            reports.latest(MarketSession.JP_CLOSE).decisions + us.decisions,
+            key=lambda item: (item.instrument.mic, item.instrument.symbol),
+        )
+    )
+    assert "us:screening:limited_source" in weekly.diagnostics
+
+
+def test_weekly_skips_stale_screening_with_an_explicit_diagnostic(tmp_path: Path) -> None:
+    reports, as_of = _daily_inputs(tmp_path)
+    candidate = next(
+        item for item in reports.latest(MarketSession.US_CLOSE).decisions if not item.held
+    )
+    stale_as_of = as_of - timedelta(days=8)
+    universe = InstrumentUniverse.create(
+        market="us",
+        source_profile="us",
+        as_of=stale_as_of,
+        instruments=(candidate.instrument,),
+        source_ids=("a" * 64,),
+    )
+    screening = BalancedCandidateScreen().screen(universe, (candidate,), as_of=stale_as_of)
+
+    weekly = WeeklyBriefService(
+        reports, Configuration(), create_report, ScreeningReader(screening)
+    ).run(as_of=as_of + timedelta(days=1))
+
+    assert weekly.candidate_decisions == ()
+    assert weekly.screening_report_ids == ()
+    assert "us:screening_report_stale" in weekly.diagnostics
 
 
 def test_weekly_rejects_stale_or_missing_inputs_with_recovery_command(tmp_path: Path) -> None:

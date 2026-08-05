@@ -13,6 +13,7 @@ from marketsieve.decision import (
     EvidenceDirection,
     InstrumentDecision,
     MarketSession,
+    candidate_order_key,
 )
 from marketsieve.economic import EconomicObservation, EconomicSeries
 from marketsieve.experiment import (
@@ -82,6 +83,7 @@ __all__ = [
     "WatchItem",
     "__version__",
     "analyze_financial_history",
+    "candidate_order_key",
     "compare_experiments",
     "run_experiment",
 ]

@@ -31,6 +31,8 @@ will follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Explicit `screen update`, offline `screen run`, and `screen show` workflows with bounded
   configuration, immutable universe and report objects, atomic latest references, partial-data
   diagnostics, and held-instrument separation.
+- Offline weekly reports include fresh stored screening candidates and source report IDs in a
+  separate `残った候補` section without changing portfolio decisions or acquiring new data.
 
 ### Changed
 
