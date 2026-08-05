@@ -15,6 +15,7 @@ I/O-independent SDK. `marketsieve-extension-api` defines the implemented daily-b
 J-Quants API V2 acquisition, `marketsieve-source-alphavantage` implements explicit Alpha Vantage
 acquisition, `marketsieve-source-fred` implements explicit FRED economic-series acquisition,
 `marketsieve-source-sec` implements explicit SEC filing and company-fact acquisition, and
+`marketsieve-source-edinet` implements explicit EDINET filing and XBRL-derived acquisition.
 `marketsieve-cli` owns the executable application and immutable
 snapshot store.
 The optional `marketsieve-agent` distribution implements decision-report fact selection,
@@ -102,7 +103,7 @@ installations without an operating-system timezone database.
 Analysis and synthetic modules do not reference one another; the application combines them through
 the daily-source contract.
 Sources that perform file or network I/O are separate distributions. CSV, J-Quants, Alpha
-Vantage, FRED, and SEC are working sources.
+Vantage, FRED, SEC, and EDINET are working sources.
 
 ## CSV acquisition and snapshot path
 
@@ -218,6 +219,25 @@ unambiguous amendment link when the original filing is present in the same resul
 US-GAAP and IFRS company facts retain taxonomy tags, units, periods, values, and accession links.
 The adapter maps only named standard concepts, rejects conflicting duplicates, and never derives
 cash flow or other values inside the source.
+
+## EDINET acquisition path
+
+`marketsieve-source-edinet` reads only the official EDINET v2 document-list and document endpoints.
+A profile supplies one EDINET code, supported periodic-report type codes, date and document bounds,
+and no provider URL. The adapter never infers an EDINET code from a ticker or executes an
+issuer-specific taxonomy rule.
+
+The API key enters through `EDINET_API_KEY` and is sent only as the official
+`Subscription-Key` query parameter. Responses retain only cryptographic identity, normalized
+filings, and facts. Redirects, authentication failures, application-level errors, rate limits,
+oversized responses, unsafe ZIP paths, expansion bounds, encoding errors, and conflicting facts
+stop the request without retry or fallback.
+
+One list request is made for every explicitly requested calendar date. Matching documents must
+belong to the configured EDINET code, have XBRL-derived CSV, remain viewable, and fit the configured
+document budget. Each filing preserves document ID, Japanese submission instant, parent-document
+link, period, and type. Standard J-GAAP, IFRS, and US-GAAP rows retain the provider element ID,
+current-period scope, consolidated or non-consolidated basis, unit, value, and filing link.
 
 Source registration, priority, fallback, authentication, retries, rate-limit handling, caching,
 and provider-symbol mapping belong to the application or adapter packages. A source must not:

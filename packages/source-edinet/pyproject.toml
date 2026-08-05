@@ -1,0 +1,33 @@
+[project]
+name = "marketsieve-source-edinet"
+version = "0.3.0"
+description = "EDINET filing and XBRL-derived financial source for MarketSieve."
+readme = "README.md"
+requires-python = ">=3.12,<3.15"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "MarketSieve contributors" }]
+dependencies = [
+    "marketsieve==0.3.0",
+    "marketsieve-extension-api==0.3.0",
+]
+
+[project.entry-points."marketsieve.sources"]
+edinet = "marketsieve_source_edinet:EdinetSource"
+
+[project.entry-points."marketsieve.sources.financials.fetchers"]
+edinet = "marketsieve_source_edinet:EdinetSource"
+
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/marketsieve_source_edinet"]
+
+[tool.hatch.build.targets.sdist]
+only-include = ["LICENSE", "README.md", "pyproject.toml", "src"]
+
+[tool.uv.sources]
+marketsieve = { workspace = true }
+marketsieve-extension-api = { workspace = true }
