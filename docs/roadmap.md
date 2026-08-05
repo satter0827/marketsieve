@@ -8,8 +8,6 @@ design and release history, not in this file.
 1. Add minimal portfolio input and a Rakuten importer based on anonymized real fixtures.
 2. Add one-command Japanese close, U.S. close, and weekly report workflows.
 3. Replace generic JSON-shaped terminal output with conclusion-first Close Brief projections.
-4. Make model explanation an optional consumer of a static report and remove FakeListLLM from
-   production behavior.
 
 ## 0.5.0 Official Fundamentals
 

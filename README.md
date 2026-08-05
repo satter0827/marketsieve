@@ -22,9 +22,8 @@ the SDK depend on email, LINE, an LLM provider, or a database.
 workbench:
 independent CSV, J-Quants, Alpha Vantage, and FRED sources; immutable verified snapshots; price,
 financial, and event inspection; seven deterministic technical indicators; and an explanation-only
-Agent. FakeListLLM is the default. LM Studio and explicitly consented OpenAI, Anthropic, or Google
-calls use the same grounded pipeline. The CLI presents evidence and missing-data reasons, not an
-investment recommendation.
+Agent. The Agent reads only an immutable decision report and requires an explicit LM Studio,
+OpenAI, Anthropic, or Google provider. Its output is stored separately and cannot change a report.
 
 ## Installation
 
@@ -81,9 +80,11 @@ uv run marketsieve snapshot verify SNAPSHOT_ID --output json
 uv run marketsieve inspect XTKS:7203 --source-profile offline-jp --output json
 uv run marketsieve analyze rsi XTKS:7203 --period 14 --source-profile offline-jp --output json
 uv run marketsieve compare XTKS:7203 XTKS:6758 --source-profile offline-jp --output json
-uv run marketsieve report XTKS:7203 --source-profile offline-jp --format rich
-uv run marketsieve agent explain XTKS:7203 --source-profile offline-jp --output json
-uv run marketsieve --config marketsieve.toml agent explain XTKS:7203 --source-profile offline-jp --provider openai --dry-run --output json
+uv run marketsieve equity-report XTKS:7203 --source-profile offline-jp --format rich
+uv run marketsieve report list --output json
+uv run marketsieve report show latest --output json
+uv run marketsieve report export latest --format markdown
+uv run marketsieve --config marketsieve.toml report explain latest --provider openai --dry-run --output json
 ```
 
 ## Architecture

@@ -16,19 +16,23 @@ from marketsieve_cli.bootstrap import (
     build_console_output,
     build_diagnostics_service,
     build_snapshot_service,
+    list_decision_reports,
+    project_decision_report,
+    read_decision_report,
+    render_decision_report,
     sdk_version,
 )
 
 OUTPUT_CHOICES = ("auto", "rich", "text", "json")
 CAPABILITIES_SCHEMA_VERSION = "2.0.0"
-COMMAND_METADATA = {
+COMMAND_METADATA: dict[str, dict[str, Any]] = {
     "agent doctor": {
         "output_schema": "urn:marketsieve:schema:agent-result:1.0.0",
         "effects": {"network": False, "secrets": False, "optional_writes": []},
     },
-    "agent explain": {
+    "report explain": {
         "output_schema": "urn:marketsieve:schema:agent-result:1.0.0",
-        "effects": {"network": True, "secrets": True, "optional_writes": []},
+        "effects": {"network": True, "secrets": True, "optional_writes": ["explanation"]},
     },
     "capabilities": {
         "output_schema": "urn:marketsieve:schema:capabilities-result:2.0.0",
@@ -38,9 +42,21 @@ COMMAND_METADATA = {
         "output_schema": "urn:marketsieve:schema:doctor-result:1.0.0",
         "effects": {"network": False, "secrets": False, "optional_writes": ["log_file"]},
     },
-    "report": {
+    "equity-report": {
         "output_schema": "urn:marketsieve:schema:report-result:2.0.0",
         "effects": {"network": False, "secrets": False, "optional_writes": ["log_file"]},
+    },
+    "report list": {
+        "output_schema": "urn:marketsieve:schema:report-list:1.0.0",
+        "effects": {"network": False, "secrets": False, "optional_writes": []},
+    },
+    "report show": {
+        "output_schema": "urn:marketsieve:schema:decision-report:1.0.0",
+        "effects": {"network": False, "secrets": False, "optional_writes": []},
+    },
+    "report export": {
+        "output_schema": None,
+        "effects": {"network": False, "secrets": False, "optional_writes": []},
     },
     "compare": {
         "output_schema": "urn:marketsieve:schema:comparison-result:1.0.0",
@@ -179,7 +195,7 @@ def doctor(context: click.Context, output_mode: str) -> None:
         raise click.exceptions.Exit(1)
 
 
-@main.command()
+@main.command("equity-report")
 @click.argument("instrument")
 @click.option("--source-profile", required=True, help="Select the exact stored source profile.")
 @click.option(
@@ -191,14 +207,14 @@ def doctor(context: click.Context, output_mode: str) -> None:
 )
 @output_option
 @click.pass_context
-def report(
+def equity_report(
     context: click.Context,
     instrument: str,
     source_profile: str,
     report_format: str,
     output_mode: str,
 ) -> None:
-    """Project one stored equity view as a durable offline report."""
+    """Project one legacy equity view without creating a decision report."""
 
     selected_output = report_format if output_mode == "auto" else output_mode
     console = _console(context, selected_output)
@@ -207,20 +223,77 @@ def report(
             instrument, source_profile
         )
     except (LookupError, RuntimeError, TypeError, ValueError, OSError) as error:
-        console.emit_error("report_failed", str(error))
+        console.emit_error("equity_report_failed", str(error))
         raise click.exceptions.Exit(1) from None
     console.emit_document(document, title="Equity report")
 
 
 @main.group()
+def report() -> None:
+    """Read and explain immutable decision reports."""
+
+
+@report.command("list")
+@output_option
+@click.pass_context
+def report_list(context: click.Context, output_mode: str) -> None:
+    """List stored decision reports without contacting a provider."""
+
+    console = _console(context, output_mode)
+    try:
+        document = list_decision_reports()
+    except (LookupError, TypeError, ValueError, OSError) as error:
+        console.emit_error("report_list_failed", str(error))
+        raise click.exceptions.Exit(1) from None
+    console.emit_document(
+        document,
+        title="Decision reports",
+    )
+
+
+@report.command("show")
+@click.argument("report_id")
+@output_option
+@click.pass_context
+def report_show(context: click.Context, report_id: str, output_mode: str) -> None:
+    """Show an exact report ID or the newest stored report."""
+
+    console = _console(context, output_mode)
+    try:
+        document = read_decision_report(report_id) if output_mode == "json" else None
+        markdown = project_decision_report(report_id) if output_mode != "json" else None
+    except (LookupError, TypeError, ValueError, OSError) as error:
+        console.emit_error("report_show_failed", str(error))
+        raise click.exceptions.Exit(1) from None
+    if output_mode == "json":
+        assert document is not None
+        console.emit_document(document, title="Decision report")
+    else:
+        assert markdown is not None
+        click.echo(markdown, nl=False)
+
+
+@report.command("export")
+@click.argument("report_id")
+@click.option("--format", "export_format", type=click.Choice(("markdown",)), default="markdown")
+def report_export(report_id: str, export_format: str) -> None:
+    """Export a verified projection of an exact or latest report."""
+
+    del export_format
+    try:
+        markdown = render_decision_report(report_id)
+    except (LookupError, TypeError, ValueError, OSError) as error:
+        raise click.ClickException(str(error)) from None
+    click.echo(markdown, nl=False)
+
+
+@main.group()
 def agent() -> None:
-    """Explain verified equity facts without adding market values."""
+    """Check explicitly configured explanation providers."""
 
 
 @agent.command("doctor")
-@click.argument(
-    "provider", type=click.Choice(("fake", "lmstudio", "openai", "anthropic", "google"))
-)
+@click.argument("provider", type=click.Choice(("lmstudio", "openai", "anthropic", "google")))
 @click.option("--allow-remote", is_flag=True, help="Allow a non-loopback LM Studio endpoint.")
 @output_option
 @click.pass_context
@@ -241,38 +314,34 @@ def agent_doctor(
         raise click.exceptions.Exit(1)
 
 
-@agent.command("explain")
-@click.argument("instrument")
-@click.option("--source-profile", required=True, help="Select the exact stored source profile.")
+@report.command("explain")
+@click.argument("report_id")
 @click.option(
     "--provider",
-    type=click.Choice(("fake", "lmstudio", "openai", "anthropic", "google")),
-    default="fake",
-    show_default=True,
+    type=click.Choice(("lmstudio", "openai", "anthropic", "google")),
+    required=True,
 )
 @click.option("--allow-cloud", is_flag=True, help="Allow this invocation to contact a cloud model.")
 @click.option("--allow-remote", is_flag=True, help="Allow a non-loopback LM Studio endpoint.")
 @click.option("--dry-run", is_flag=True, help="Show the credential-free payload without a request.")
 @output_option
 @click.pass_context
-def agent_explain(
+def report_explain(
     context: click.Context,
-    instrument: str,
-    source_profile: str,
+    report_id: str,
     provider: str,
     allow_cloud: bool,
     allow_remote: bool,
     dry_run: bool,
     output_mode: str,
 ) -> None:
-    """Explain one verified view through exactly one selected provider."""
+    """Explain one immutable report through exactly one selected provider."""
 
     console = _console(context, output_mode)
     try:
         service = build_agent_service(context.obj["config_path"])
         document = service.explain(  # type: ignore[attr-defined]
-            instrument,
-            source_profile,
+            report_id,
             provider,
             context.obj["locale"],
             allow_cloud=allow_cloud,

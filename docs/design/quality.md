@@ -113,13 +113,13 @@ execution of only the selected source profile. Package acceptance builds and ins
 extension API, CLI, and each source independently before verifying their wheelhouse combinations on
 Python 3.12 through 3.14.
 
-Agent acceptance uses FakeListLLM for ordinary tests and mocked transports for each real provider.
+Agent acceptance uses test-local models for ordinary tests and mocked transports for each real provider.
 It covers invalid schemas, unknown facts, numeric additions, recommendation language, timeouts,
 cloud consent, loopback restrictions, and deterministic fallback. Fake tests prove orchestration
 and safety behavior, not provider model behavior.
 
-CLI acceptance additionally verifies Fake as the default, a credential-free cloud dry-run over the
-same catalog hash, configuration-only local doctor, and refusal of cloud execution without consent.
+CLI acceptance additionally verifies that provider selection is mandatory, cloud dry-run is
+credential-free, local doctor is configuration-only, and cloud execution is refused without consent.
 
 Secret acceptance scans tracked files, the reviewed diff, generated evidence, distributions, and
 release assets without printing matched values. CI also scans repository history. Tests ensure
@@ -140,5 +140,4 @@ Personal Close Brief acceptance adds:
 - proof that model success or failure cannot alter a static report;
 - wheel-installed external adapter discovery and public conformance tests.
 
-User-facing FakeListLLM acceptance is removed when the target ships. Test doubles continue to prove
-bounded agent behavior without entering production provider selection.
+Test doubles prove bounded agent behavior without entering production provider selection.
