@@ -383,3 +383,11 @@ behavior remains in tests only.
 The root workspace package catalog is the authority for public distribution names, paths, import
 packages, build order, and isolation checks. Build scripts and tests derive their package sets from
 that catalog instead of maintaining independent lists.
+
+## Strategy Lab architecture
+
+The SDK owns immutable experiment specifications, replay windows, decisions, metrics, comparisons,
+and the pure replay function. The replay engine accepts already validated daily bars and has no
+filesystem, configuration, provider, model, or network dependency. Application code owns TOML
+input, snapshot resolution, content-addressed run storage, projections, and optional model
+explanations.

@@ -15,6 +15,16 @@ from marketsieve.decision import (
     MarketSession,
 )
 from marketsieve.economic import EconomicObservation, EconomicSeries
+from marketsieve.experiment import (
+    ExperimentComparison,
+    ExperimentMetric,
+    ExperimentRun,
+    ExperimentSpec,
+    ReplayDecision,
+    ReplayWindow,
+    compare_experiments,
+    run_experiment,
+)
 from marketsieve.financial import (
     FinancialMetric,
     FinancialObservation,
@@ -42,6 +52,10 @@ __all__ = [
     "EconomicObservation",
     "EconomicSeries",
     "EvidenceDirection",
+    "ExperimentComparison",
+    "ExperimentMetric",
+    "ExperimentRun",
+    "ExperimentSpec",
     "FinancialMetric",
     "FinancialObservation",
     "FinancialPeriodView",
@@ -51,7 +65,11 @@ __all__ = [
     "MarketSession",
     "PersonalInvestmentContext",
     "PortfolioSnapshot",
+    "ReplayDecision",
+    "ReplayWindow",
     "WatchItem",
     "__version__",
     "analyze_financial_history",
+    "compare_experiments",
+    "run_experiment",
 ]

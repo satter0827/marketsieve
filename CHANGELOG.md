@@ -19,6 +19,8 @@ will follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - An independently installable EDINET source for filing lists and standard XBRL-derived facts.
 - Daily Close Brief integration for knowledge-time-correct financial trends, known earnings dates,
   filing amendments, and company-relative valuation ranges.
+- Immutable experiment specifications, knowledge-time-correct policy replay, deterministic metrics,
+  and run comparison in the public SDK.
 
 ## [0.3.0] - 2026-08-05
 
