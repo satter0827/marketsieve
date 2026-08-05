@@ -19,7 +19,7 @@ from marketsieve_extension_api import ImportedDailyBars, ImportedEvents, Importe
 
 SNAPSHOT_SCHEMA = "marketsieve-snapshot/v1"
 NORMALIZED_SCHEMA = "marketsieve-normalized-daily-bars/v1"
-INSTRUMENT_KEY = re.compile(r"^[A-Z0-9]{4}:[A-Z0-9]+$")
+INSTRUMENT_KEY = re.compile(r"^[A-Z0-9]{4}:[A-Z0-9][A-Z0-9.-]*$")
 SNAPSHOT_KINDS = frozenset({"daily_bars", "financials", "events"})
 
 

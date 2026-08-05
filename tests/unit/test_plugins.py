@@ -13,7 +13,11 @@ from marketsieve_extension_api import (
     EconomicSeriesSourceConfiguration,
     ImportedDailyBars,
     ImportedEconomicSeries,
+    ImportedInstrumentUniverse,
+    InstrumentUniverseFetcher,
+    InstrumentUniverseImporter,
     SourceDiagnostic,
+    UniverseRequest,
 )
 
 
@@ -42,6 +46,16 @@ class FakeEconomicFetcher:
         return SourceDiagnostic(True, "ready", str(configuration))
 
     def fetch_economic_series(self, request: EconomicSeriesFetchRequest) -> ImportedEconomicSeries:
+        raise NotImplementedError(request)
+
+
+class FakeUniverseImporter:
+    def import_universe(self, path: Path, request: UniverseRequest) -> ImportedInstrumentUniverse:
+        raise NotImplementedError(path, request)
+
+
+class FakeUniverseFetcher:
+    def fetch_universe(self, request: UniverseRequest) -> ImportedInstrumentUniverse:
         raise NotImplementedError(request)
 
 
@@ -96,6 +110,8 @@ def test_source_listing_does_not_import_plugin_code(monkeypatch: pytest.MonkeyPa
     monkeypatch.setattr(plugins, "financial_entry_points", lambda: cast(Any, ()))
     monkeypatch.setattr(plugins, "event_entry_points", lambda: cast(Any, ()))
     monkeypatch.setattr(plugins, "economic_series_entry_points", lambda: cast(Any, ()))
+    monkeypatch.setattr(plugins, "universe_importer_entry_points", lambda: cast(Any, ()))
+    monkeypatch.setattr(plugins, "universe_fetcher_entry_points", lambda: cast(Any, ()))
 
     installed = plugins.SourcePluginRegistry().installed()
 
@@ -162,3 +178,37 @@ def test_explicit_economic_series_plugin_uses_its_small_contract(
 
     assert isinstance(fetcher, FakeEconomicFetcher)
     assert entry.loaded is True
+
+
+@pytest.mark.parametrize(
+    ("entry_type", "group_name", "loader_name", "contract"),
+    (
+        (
+            FakeUniverseImporter,
+            "universe_importer_entry_points",
+            "load_universe_importer",
+            InstrumentUniverseImporter,
+        ),
+        (
+            FakeUniverseFetcher,
+            "universe_fetcher_entry_points",
+            "load_universe_fetcher",
+            InstrumentUniverseFetcher,
+        ),
+    ),
+)
+def test_explicit_universe_capability_loads_from_its_own_entry_point(
+    monkeypatch: pytest.MonkeyPatch,
+    entry_type: type[FakeUniverseImporter] | type[FakeUniverseFetcher],
+    group_name: str,
+    loader_name: str,
+    contract: type[InstrumentUniverseImporter] | type[InstrumentUniverseFetcher],
+) -> None:
+    entry = FakeEntryPoint()
+    entry.value = f"fixture:{entry_type.__name__}"
+    monkeypatch.setattr(entry, "load", lambda: entry_type)
+    monkeypatch.setattr(plugins, group_name, lambda: cast(Any, (entry,)))
+
+    loaded = getattr(plugins.SourcePluginRegistry(), loader_name)("fixture")
+
+    assert isinstance(loaded, contract)

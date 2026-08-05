@@ -10,12 +10,11 @@ design and release history, not in this file.
 
 ## 0.7.0 Screening Workbench
 
-1. Add explicit Japanese and U.S. instrument-universe import and acquisition capabilities.
-2. Add a typed balanced candidate screen without arbitrary expression evaluation.
-3. Enforce configured acquisition and processing budgets without silently changing the universe.
-4. Persist deterministic screening reports with stable, explainable ordering.
-5. Integrate screening candidates into the weekly report without changing held-instrument decisions.
-6. Prepare verified GitHub Release and PyPI Trusted Publishing paths for all public distributions.
+1. Persist deterministic universe and screening objects with rebuildable latest references.
+2. Add explicit update, offline run, and show commands with configured acquisition and processing
+   budgets.
+3. Integrate screening candidates into the weekly report without changing held-instrument decisions.
+4. Prepare verified GitHub Release and PyPI Trusted Publishing paths for all public distributions.
 
 ## Later outcomes
 

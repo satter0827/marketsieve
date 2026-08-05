@@ -18,6 +18,9 @@ sec = "marketsieve_source_sec:SecSource"
 [project.entry-points."marketsieve.sources.financials.fetchers"]
 sec = "marketsieve_source_sec:SecSource"
 
+[project.entry-points."marketsieve.sources.instrument_universe.fetchers"]
+sec = "marketsieve_source_sec:SecSource"
+
 [build-system]
 requires = ["hatchling>=1.27,<2"]
 build-backend = "hatchling.build"

@@ -38,11 +38,19 @@ from marketsieve.portfolio import (
     PortfolioSnapshot,
     WatchItem,
 )
+from marketsieve.screening import (
+    BalancedCandidateScreen,
+    InstrumentUniverse,
+    ScreenCandidate,
+    ScreeningReport,
+    ScreenPolicy,
+)
 
 __version__ = version("marketsieve")
 
 __all__ = [
     "AnalysisContext",
+    "BalancedCandidateScreen",
     "BalancedMediumTermPolicy",
     "DecisionAction",
     "DecisionConfidence",
@@ -62,11 +70,15 @@ __all__ = [
     "FinancialTrendReport",
     "Holding",
     "InstrumentDecision",
+    "InstrumentUniverse",
     "MarketSession",
     "PersonalInvestmentContext",
     "PortfolioSnapshot",
     "ReplayDecision",
     "ReplayWindow",
+    "ScreenCandidate",
+    "ScreenPolicy",
+    "ScreeningReport",
     "WatchItem",
     "__version__",
     "analyze_financial_history",

@@ -15,6 +15,7 @@ from typing import Any, Protocol
 from urllib.error import HTTPError, URLError
 from urllib.request import HTTPRedirectHandler, OpenerDirector, Request, build_opener
 
+from marketsieve.domain import Instrument
 from marketsieve_extension_api import (
     AvailabilityBasis,
     Consolidation,
@@ -24,13 +25,17 @@ from marketsieve_extension_api import (
     FinancialFetcher,
     FinancialPeriod,
     ImportedFinancials,
+    ImportedInstrumentUniverse,
+    InstrumentUniverseFetcher,
     Revision,
     SourceConfiguration,
     SourceDiagnostic,
+    UniverseRequest,
 )
 
 SUBMISSIONS_URL = "https://data.sec.gov/submissions"
 COMPANY_FACTS_URL = "https://data.sec.gov/api/xbrl/companyfacts"
+COMPANY_TICKERS_EXCHANGE_URL = "https://www.sec.gov/files/company_tickers_exchange.json"
 USER_AGENT_ENV = "SEC_USER_AGENT"
 SOURCE_VERSION = "sec-edgar-data-v1"
 DEFAULT_FORMS = ("10-K", "10-K/A", "10-Q", "10-Q/A", "20-F", "20-F/A", "40-F", "40-F/A")
@@ -104,7 +109,7 @@ class UrllibTransport:
             raise RuntimeError("SEC request failed before receiving a response") from None
 
 
-class SecSource(FinancialFetcher):
+class SecSource(FinancialFetcher, InstrumentUniverseFetcher):
     """Fetch one explicitly identified SEC filer without authentication or fallback."""
 
     def __init__(
@@ -178,6 +183,81 @@ class SecSource(FinancialFetcher):
             missing,
             filings,
         )
+
+    def fetch_universe(self, request: UniverseRequest) -> ImportedInstrumentUniverse:
+        if request.market != "us":
+            raise ValueError("SEC instrument universe supports only the us market")
+        timeout = self._universe_timeout(request.settings)
+        headers = {"Accept": "application/json", "User-Agent": self._user_agent()}
+        bodies: list[bytes] = []
+        document = self._get_json(COMPANY_TICKERS_EXCHANGE_URL, headers, timeout, bodies)
+        fields = document.get("fields")
+        rows = document.get("data")
+        if fields != ["cik", "name", "ticker", "exchange"]:
+            raise ValueError("SEC company ticker fields do not match the supported contract")
+        if not isinstance(rows, list) or any(not isinstance(row, list) for row in rows):
+            raise ValueError("SEC company ticker data must be an array of arrays")
+        exchange_mics = {"Nasdaq": "XNAS", "NYSE": "XNYS", "NYSE American": "XASE"}
+        instruments: list[Instrument] = []
+        skipped = 0
+        for row in rows:
+            if len(row) != 4 or not isinstance(row[2], str) or not isinstance(row[3], str):
+                skipped += 1
+                continue
+            mic = exchange_mics.get(row[3])
+            if mic is None:
+                skipped += 1
+                continue
+            try:
+                instruments.append(
+                    Instrument.create(
+                        symbol=row[2].upper(),
+                        mic=mic,
+                        currency="USD",
+                        exchange_timezone="America/New_York",
+                    )
+                )
+            except ValueError:
+                skipped += 1
+        ordered = tuple(sorted(instruments, key=lambda item: (item.mic, item.symbol)))
+        identities = tuple((item.mic, item.symbol) for item in ordered)
+        if len(identities) != len(set(identities)):
+            raise ValueError("SEC returned duplicate instrument identities")
+        if not ordered:
+            raise ValueError("SEC returned no supported US exchange instruments")
+        selected = ordered[: request.limit]
+        return ImportedInstrumentUniverse(
+            request=request,
+            source_name="sec",
+            source_version=SOURCE_VERSION,
+            dataset="company_tickers_exchange",
+            retrieved_at=self._clock(),
+            instruments=selected,
+            source_hash=hashlib.sha256(bodies[0]).hexdigest(),
+            provider_total=len(ordered),
+            truncated=len(ordered) > len(selected),
+            diagnostics=tuple(
+                message
+                for condition, message in (
+                    (skipped > 0, f"unsupported_rows_skipped:{skipped}"),
+                    (len(ordered) > len(selected), f"limit_reached:{request.limit}"),
+                )
+                if condition
+            ),
+        )
+
+    @staticmethod
+    def _universe_timeout(settings: Mapping[str, str]) -> float:
+        unknown = set(settings) - {"timeout_seconds"}
+        if unknown:
+            raise ValueError(f"unsupported SEC universe setting: {sorted(unknown)[0]}")
+        try:
+            timeout = float(settings.get("timeout_seconds", "10"))
+        except ValueError as error:
+            raise ValueError("SEC timeout_seconds must be numeric") from error
+        if not 0 < timeout <= 60:
+            raise ValueError("SEC timeout_seconds must be greater than zero and at most 60")
+        return timeout
 
     @staticmethod
     def _validate_instrument(request: FactFetchRequest) -> None:

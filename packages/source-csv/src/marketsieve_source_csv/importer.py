@@ -12,10 +12,16 @@ from typing import Any
 
 from marketsieve.data.daily import Adjustment, DailyBar, Provenance
 from marketsieve.domain import Instrument
-from marketsieve_extension_api import AvailabilityBasis, ImportedDailyBars
+from marketsieve_extension_api import (
+    AvailabilityBasis,
+    ImportedDailyBars,
+    ImportedInstrumentUniverse,
+    UniverseRequest,
+)
 
 MANIFEST_SCHEMA = "marketsieve-csv-daily-bars/v1"
 CSV_FIELDS = ("trading_date", "open", "high", "low", "close", "volume", "published_at")
+UNIVERSE_FIELDS = ("symbol", "mic", "currency", "timezone", "as_of")
 
 
 def _aware_datetime(value: object, field: str) -> datetime:
@@ -141,3 +147,63 @@ class CsvDailyBarImporter:
             )
         except (InvalidOperation, TypeError, ValueError, KeyError) as error:
             raise ValueError(f"invalid daily-bar value on CSV line {line}") from error
+
+
+class CsvInstrumentUniverseImporter:
+    """Import one explicit, timestamped instrument-universe CSV."""
+
+    def import_universe(self, path: Path, request: UniverseRequest) -> ImportedInstrumentUniverse:
+        source = path.resolve()
+        if not source.is_file() or path.is_symlink():
+            raise ValueError("instrument-universe CSV must be a regular file")
+        raw = source.read_bytes()
+        try:
+            text = raw.decode("utf-8-sig")
+        except UnicodeDecodeError as error:
+            raise ValueError("instrument-universe CSV must be UTF-8") from error
+        reader = csv.DictReader(text.splitlines())
+        if tuple(reader.fieldnames or ()) != UNIVERSE_FIELDS:
+            raise ValueError(
+                f"instrument-universe CSV columns must be exactly: {', '.join(UNIVERSE_FIELDS)}"
+            )
+        rows = tuple(reader)
+        if not rows:
+            raise ValueError("instrument-universe CSV must contain at least one row")
+        instruments: list[Instrument] = []
+        as_of: datetime | None = None
+        for line, row in enumerate(rows, start=2):
+            try:
+                row_as_of = _aware_datetime(row["as_of"], f"line {line} as_of")
+                if as_of is None:
+                    as_of = row_as_of
+                elif row_as_of != as_of:
+                    raise ValueError("all universe rows must use the same as_of timestamp")
+                instruments.append(
+                    Instrument.create(
+                        symbol=row["symbol"],
+                        mic=row["mic"],
+                        currency=row["currency"],
+                        exchange_timezone=row["timezone"],
+                    )
+                )
+            except (KeyError, TypeError, ValueError) as error:
+                raise ValueError(f"invalid instrument-universe value on CSV line {line}") from error
+        ordered = tuple(sorted(instruments, key=lambda item: (item.mic, item.symbol)))
+        identities = tuple((item.mic, item.symbol) for item in ordered)
+        if len(identities) != len(set(identities)):
+            raise ValueError("instrument-universe CSV contains duplicate instruments")
+        if as_of is None:  # pragma: no cover - rows above establish this invariant
+            raise AssertionError("non-empty universe has no as_of")
+        selected = ordered[: request.limit]
+        return ImportedInstrumentUniverse(
+            request=request,
+            source_name="csv",
+            source_version="instrument-universe-csv-v1",
+            dataset=source.name,
+            retrieved_at=as_of,
+            instruments=selected,
+            source_hash=hashlib.sha256(raw).hexdigest(),
+            provider_total=len(ordered),
+            truncated=len(ordered) > len(selected),
+            diagnostics=(f"limit_reached:{request.limit}",) if len(ordered) > len(selected) else (),
+        )

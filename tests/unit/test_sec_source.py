@@ -13,8 +13,10 @@ from marketsieve_extension_api import (
     FactFetchRequest,
     FinancialFetcher,
     FinancialPeriod,
+    InstrumentUniverseFetcher,
     Revision,
     SourceConfiguration,
+    UniverseRequest,
 )
 from marketsieve_source_sec import SecSource
 from marketsieve_source_sec import source as sec_module
@@ -121,6 +123,26 @@ def request(settings: dict[str, str] | None = None) -> FactFetchRequest:
     )
 
 
+def test_fetches_bounded_us_exchange_universe_with_class_share_symbol() -> None:
+    document = {
+        "fields": ["cik", "name", "ticker", "exchange"],
+        "data": [
+            [1, "Berkshire", "BRK.B", "NYSE"],
+            [2, "Microsoft", "MSFT", "Nasdaq"],
+            [3, "Unsupported", "OTC", "OTC"],
+        ],
+    }
+    provider = source([response(document)])
+
+    imported = provider.fetch_universe(UniverseRequest("sec-us", "us", 1, {}))
+
+    assert isinstance(provider, InstrumentUniverseFetcher)
+    assert [(item.mic, item.symbol) for item in imported.instruments] == [("XNAS", "MSFT")]
+    assert imported.provider_total == 2
+    assert imported.truncated is True
+    assert imported.diagnostics == ("unsupported_rows_skipped:1", "limit_reached:1")
+
+
 def source(
     responses: list[HttpResponse],
     *,
@@ -133,6 +155,50 @@ def source(
         clock=lambda: clock or datetime(2026, 8, 1, tzinfo=UTC),
         sleeper=lambda _: None,
     )
+
+
+@pytest.mark.parametrize(
+    ("universe_request", "message"),
+    (
+        (UniverseRequest("sec-us", "jp", 1, {}), "us market"),
+        (UniverseRequest("sec-us", "us", 1, {"unknown": "1"}), "unsupported"),
+        (UniverseRequest("sec-us", "us", 1, {"timeout_seconds": "bad"}), "numeric"),
+        (UniverseRequest("sec-us", "us", 1, {"timeout_seconds": "0"}), "at most 60"),
+    ),
+)
+def test_sec_universe_rejects_wrong_market_or_settings(
+    universe_request: UniverseRequest, message: str
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        source([]).fetch_universe(universe_request)
+
+
+@pytest.mark.parametrize(
+    ("document", "message"),
+    (
+        ({"fields": [], "data": []}, "fields"),
+        (
+            {"fields": ["cik", "name", "ticker", "exchange"], "data": {}},
+            "array of arrays",
+        ),
+        (
+            {"fields": ["cik", "name", "ticker", "exchange"], "data": [[1]]},
+            "no supported",
+        ),
+        (
+            {
+                "fields": ["cik", "name", "ticker", "exchange"],
+                "data": [[1, "One", "MSFT", "Nasdaq"], [2, "Two", "MSFT", "Nasdaq"]],
+            },
+            "duplicate",
+        ),
+    ),
+)
+def test_sec_universe_rejects_changed_or_ambiguous_provider_data(
+    document: dict[str, object], message: str
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        source([response(document)]).fetch_universe(UniverseRequest("sec-us", "us", 100, {}))
 
 
 def test_fetches_filings_and_current_period_facts_with_exact_publication_time() -> None:
