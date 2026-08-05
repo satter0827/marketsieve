@@ -14,6 +14,7 @@ import click
 from marketsieve_cli.bootstrap import (
     build_agent_service,
     build_console_output,
+    build_daily_brief_service,
     build_diagnostics_service,
     build_snapshot_service,
     import_portfolio,
@@ -43,6 +44,10 @@ COMMAND_METADATA: dict[str, dict[str, Any]] = {
     "doctor": {
         "output_schema": "urn:marketsieve:schema:doctor-result:1.0.0",
         "effects": {"network": False, "secrets": False, "optional_writes": ["log_file"]},
+    },
+    "daily": {
+        "output_schema": "urn:marketsieve:schema:decision-report:1.0.0",
+        "effects": {"network": True, "secrets": True, "optional_writes": ["snapshot", "report"]},
     },
     "equity-report": {
         "output_schema": "urn:marketsieve:schema:report-result:2.0.0",
@@ -243,6 +248,31 @@ def portfolio_show(context: click.Context, output_mode: str) -> None:
         console.emit_error("portfolio_show_failed", str(error))
         raise click.exceptions.Exit(1) from None
     console.emit_document(document, title="Portfolio")
+
+
+@main.command()
+@click.argument("market", type=click.Choice(("jp", "us")))
+@click.option(
+    "--as-of",
+    default=None,
+    help="Use an explicit ISO 8601 knowledge time; defaults to the current time.",
+)
+@output_option
+@click.pass_context
+def daily(context: click.Context, market: str, as_of: str | None, output_mode: str) -> None:
+    """Acquire one market and create its immutable Close Brief."""
+
+    console = _console(context, output_mode)
+    try:
+        instant = datetime.now().astimezone() if as_of is None else datetime.fromisoformat(as_of)
+        report = build_daily_brief_service(context.obj["config_path"]).run(market, as_of=instant)
+    except (LookupError, OSError, RuntimeError, TypeError, ValueError) as error:
+        console.emit_error("daily_failed", str(error))
+        raise click.exceptions.Exit(1) from None
+    if output_mode == "json":
+        console.emit_document(read_decision_report(report.report_id), title="Decision report")
+    else:
+        click.echo(project_decision_report(report.report_id), nl=False)
 
 
 @main.command("equity-report")

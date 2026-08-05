@@ -23,7 +23,8 @@ workbench:
 independent CSV, J-Quants, Alpha Vantage, FRED, SEC, and EDINET sources; immutable verified
 snapshots; price,
 financial, and event inspection; seven deterministic technical indicators; and an explanation-only
-Agent. The Agent reads only an immutable decision report and requires an explicit LM Studio,
+Agent. Configured `daily jp` and `daily us` commands explicitly acquire portfolio instruments and
+write immutable Close Brief reports. The Agent reads only an immutable decision report and requires an explicit LM Studio,
 OpenAI, Anthropic, or Google provider. Its output is stored separately and cannot change a report.
 
 ## Installation
@@ -56,8 +57,8 @@ sources.
 ## CLI
 
 The public `marketsieve-cli` distribution depends on, but is not included in, the SDK wheel. Read
-commands are offline. Only an explicit provider fetch reads its provider credential from the
-environment and accesses the network.
+commands are offline. Explicit `source fetch` and `daily` acquisition read the selected provider
+credential from the environment and access the network.
 
 ```shell
 uv run marketsieve --version
@@ -85,6 +86,7 @@ uv run marketsieve equity-report XTKS:7203 --source-profile offline-jp --format 
 uv run marketsieve report list --output json
 uv run marketsieve report show latest --output json
 uv run marketsieve report export latest --format markdown
+uv run marketsieve --config marketsieve.toml daily jp
 uv run marketsieve --config marketsieve.toml report explain latest --provider openai --dry-run --output json
 ```
 

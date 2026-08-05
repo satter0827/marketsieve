@@ -335,15 +335,19 @@ Markdown uses `rendered/<report_id>.md`, and session references use
 A report containing only indeterminate decisions remains inspectable but does not advance a latest
 reference. Reads reconstruct and validate SDK values and reject non-canonical or modified content.
 
-## Remaining 0.4.0 Personal Close Brief target architecture
+## Personal Close Brief application architecture
 
 The CLI currently imports one strict broker-neutral UTF-8 CSV into a brokerage-neutral portfolio
 snapshot and a content-addressed local store. It retains only normalized values and the source
 SHA-256 digest. The source file is never copied below `.marketsieve`. The extension API adds
 portfolio import only with a working Rakuten package. Its implemented
 economic-series capability is provided by the independently installable FRED package. The CLI owns
-source selection and report orchestration in addition to its implemented content-addressed storage
-and Markdown presentation.
+source selection and report orchestration in addition to content-addressed storage and Markdown
+presentation. The implemented daily service selects one currency-qualified market from the latest
+portfolio, explicitly fetches each instrument through one configured profile, filters observations
+to the command knowledge time, evaluates the shared policy, and stores the report. A failed
+instrument is evaluated with empty price history and remains visibly indeterminate; an all-failed
+run stores diagnostic evidence without advancing the session reference.
 
 Application use cases replace the growing snapshot-service orchestration surface. Acquisition,
 portfolio import, daily reporting, weekly reporting, report lookup, and model explanation have

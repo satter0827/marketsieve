@@ -227,7 +227,7 @@ Canonical CSV uses the exact header
 `kind,mic,symbol,currency,timezone,quantity,average_acquisition_price,account_type`.
 `holding` rows require positive quantity, acquisition price, and a non-empty account type. `watch`
 rows require those three fields to be empty. Instruments are equities identified by MIC, symbol,
-currency, and IANA timezone. Input order does not affect the normalized portfolio identity.
+currency, and IANA timezone. Normalized holdings and watch items use a stable instrument order.
 
 `daily` explicitly acquires through configured profiles, validates snapshots, evaluates every held
 or watched instrument in the selected market, stores one immutable report, and renders it. An

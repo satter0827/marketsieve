@@ -191,6 +191,7 @@ def test_capabilities_match_click_commands_and_validate_schema() -> None:
         "analyze sma",
         "capabilities",
         "compare",
+        "daily",
         "doctor",
         "equity-report",
         "inspect",

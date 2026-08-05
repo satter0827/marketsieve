@@ -7,7 +7,8 @@ immutable CSV snapshots, explicit J-Quants price, financial-summary, dividend, a
 acquisition, and explicit Alpha Vantage price, profile, financial-statement, earnings, dividend,
 and split acquisition. It also builds and discovers independently installable FRED economic-series
 plus SEC and EDINET filing adapters on Python 3.12 through 3.14. Python 3.13 is the primary
-development version.
+development version. The `daily jp` and `daily us` routines explicitly acquire configured price
+history, evaluate the latest local portfolio, and persist an immutable Close Brief.
 
 ```shell
 make sync
@@ -65,8 +66,24 @@ explicitly for machine consumers.
 The decision-report adapter stores canonical JSON below `.marketsieve/reports/objects`, generated
 Markdown below `.marketsieve/reports/rendered`, and atomic per-session latest references below
 `.marketsieve/reports/refs`. An all-indeterminate report is retained for diagnosis but never
-replaces a usable latest reference. Routine commands start using this store when the remaining
-Personal Close Brief orchestration is implemented.
+replaces a usable latest reference. Daily routines use this store directly.
+
+Daily source selection is explicit and non-secret:
+
+```toml
+[routines.jp]
+source_profile = "japan"
+lookback_days = 400
+
+[routines.us]
+source_profile = "united-states"
+lookback_days = 400
+```
+
+`lookback_days` accepts 60 through 2,000 calendar days and defaults to 400. The routine uses the
+selected source profile for every instrument in that market and does not fall back to another
+provider. `--as-of` accepts an explicit offset-aware timestamp for reproducible operation; without
+it, the CLI uses the invocation time.
 
 Failures identify whether input validation, analysis prerequisites, or an internal contract caused
 the operation to stop. They do not expose environment secrets or silently switch data sources.
