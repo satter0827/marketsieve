@@ -13,7 +13,7 @@ MarketSieveは、検証済みの市場情報から再現可能な分析、過去
 
 ## 現在の状態
 
-`develop`では0.3.0の基盤をPersonal Close Briefへ拡張しています。CSV、J-Quants、Alpha Vantage、FRED、SEC、EDINETを独立した配布物として扱い、変更不能な検証済みスナップショット、価格・テクニカル・財務・valuation・risk・event・data qualityの総合確認、比較、レポート、説明専用Agentを提供します。設定済みの`daily jp`と`daily us`は、ポートフォリオ銘柄を明示的に取得し、変更不能なClose Briefを保存します。`weekly`は有効な日米レポートをオフラインで週末作戦会議へまとめます。Agentは変更不能な判断レポートだけを読み、LM Studio、OpenAI、Anthropic、Googleのいずれかを明示した場合だけ動作します。説明は別成果物として保存され、レポートを変更しません。
+`develop`では0.3.0の基盤をPersonal Close Briefへ拡張しています。CSV、J-Quants、Alpha Vantage、FRED、SEC、EDINETを独立した配布物として扱い、変更不能な検証済みスナップショット、価格・テクニカル・財務・valuation・risk・event・data qualityの総合確認、比較、レポート、説明専用Agentを提供します。設定済みの`daily jp`と`daily us`は、ポートフォリオ銘柄を明示的に取得し、変更不能なClose Briefを保存します。`weekly`は有効な日米レポートをオフラインで週末作戦会議へまとめます。日米の銘柄集合は上限を指定して明示的に更新し、検証済みのローカル価格からオフラインで候補を抽出できます。候補の順序は根拠を確認でき、不透明な総合点を使いません。Agentは変更不能な判断レポートだけを読み、LM Studio、OpenAI、Anthropic、Googleのいずれかを明示した場合だけ動作します。説明は別成果物として保存され、レポートを変更しません。
 
 ## インストール
 
@@ -69,6 +69,9 @@ uv run marketsieve report show latest --output json
 uv run marketsieve report export latest --format markdown
 uv run marketsieve --config marketsieve.toml daily jp
 uv run marketsieve --config marketsieve.toml weekly
+uv run marketsieve --config marketsieve.toml screen update jp --output json
+uv run marketsieve --config marketsieve.toml screen run jp --output json
+uv run marketsieve --config marketsieve.toml screen show latest --market jp --output json
 uv run marketsieve --config marketsieve.toml report explain latest --provider openai --dry-run --output json
 ```
 

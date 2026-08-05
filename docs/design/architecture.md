@@ -421,3 +421,16 @@ Candidate order is action priority, confidence priority, descending supporting-e
 then MIC and symbol. Supporting evidence count is exposed directly and is not a hidden aggregate
 score. Processing and display limits are positive explicit inputs. Reaching either limit produces a
 diagnostic, and a decision outside the processed universe is rejected.
+
+The CLI separates acquisition from evaluation. `screen update jp|us` executes the configured
+instrument-universe `import` or `fetch` operation with an explicit acquisition limit. It stores the
+normalized universe below `.marketsieve/screening/universes` as canonical JSON and atomically
+updates the market-specific latest reference. The operation is never inferred from the plugin.
+
+`screen run jp|us` reads that universe, verified daily-bar snapshots, and the latest portfolio when
+present. It performs no network request. Missing or unusable price data produces an indeterminate
+decision and a stable diagnostic; it does not silently remove the processed instrument. Held
+instruments use the same decision policy but cannot enter candidate results. Screening reports are
+content-addressed canonical JSON below `.marketsieve/screening/reports`, with market-specific latest
+references. `screen show` resolves an exact ID, a market latest reference, or the newest latest
+report across both markets.

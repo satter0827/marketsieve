@@ -25,13 +25,28 @@ from marketsieve_cli.bootstrap import (
     project_decision_report,
     read_decision_report,
     read_portfolio,
+    read_screening,
     render_decision_report,
+    run_screening,
     sdk_version,
+    update_screening,
 )
 
 OUTPUT_CHOICES = ("auto", "rich", "text", "json")
 CAPABILITIES_SCHEMA_VERSION = "2.0.0"
 COMMAND_METADATA: dict[str, dict[str, Any]] = {
+    "screen update": {
+        "output_schema": "urn:marketsieve:schema:instrument-universe:1.0.0",
+        "effects": {"network": True, "secrets": True, "optional_writes": ["universe"]},
+    },
+    "screen run": {
+        "output_schema": "urn:marketsieve:schema:screening-report:1.0.0",
+        "effects": {"network": False, "secrets": False, "optional_writes": ["screening_report"]},
+    },
+    "screen show": {
+        "output_schema": "urn:marketsieve:schema:screening-report:1.0.0",
+        "effects": {"network": False, "secrets": False, "optional_writes": []},
+    },
     "experiment run": {
         "output_schema": "urn:marketsieve:schema:experiment-run:1.0.0",
         "effects": {"network": False, "secrets": False, "optional_writes": ["experiment"]},
@@ -320,6 +335,68 @@ def weekly(context: click.Context, as_of: str | None, output_mode: str) -> None:
         console.emit_document(read_decision_report(report.report_id), title="Decision report")
     else:
         click.echo(project_decision_report(report.report_id), nl=False)
+
+
+@main.group()
+def screen() -> None:
+    """Update bounded universes and screen verified local data."""
+
+
+@screen.command("update")
+@click.argument("market", type=click.Choice(("jp", "us")))
+@output_option
+@click.pass_context
+def screen_update(context: click.Context, market: str, output_mode: str) -> None:
+    """Explicitly import or fetch one configured bounded universe."""
+
+    console = _console(context, output_mode)
+    try:
+        document = update_screening(context.obj["config_path"], market)
+    except (LookupError, OSError, RuntimeError, TypeError, ValueError) as error:
+        console.emit_error("screen_update_failed", str(error))
+        raise click.exceptions.Exit(1) from None
+    console.emit_document(document, title="Instrument universe")
+
+
+@screen.command("run")
+@click.argument("market", type=click.Choice(("jp", "us")))
+@click.option(
+    "--as-of",
+    default=None,
+    help="Use an explicit ISO 8601 knowledge time; defaults to the current time.",
+)
+@output_option
+@click.pass_context
+def screen_run(context: click.Context, market: str, as_of: str | None, output_mode: str) -> None:
+    """Screen verified local snapshots without network access."""
+
+    console = _console(context, output_mode)
+    try:
+        instant = datetime.now().astimezone() if as_of is None else datetime.fromisoformat(as_of)
+        document = run_screening(context.obj["config_path"], market, as_of=instant)
+    except (LookupError, OSError, RuntimeError, TypeError, ValueError) as error:
+        console.emit_error("screen_run_failed", str(error))
+        raise click.exceptions.Exit(1) from None
+    console.emit_document(document, title="Screening report")
+
+
+@screen.command("show")
+@click.argument("report_id")
+@click.option("--market", type=click.Choice(("jp", "us")), default=None)
+@output_option
+@click.pass_context
+def screen_show(
+    context: click.Context, report_id: str, market: str | None, output_mode: str
+) -> None:
+    """Show an exact report or the newest stored screening result."""
+
+    console = _console(context, output_mode)
+    try:
+        document = read_screening(context.obj["config_path"], report_id, market=market)
+    except (LookupError, OSError, TypeError, ValueError) as error:
+        console.emit_error("screen_show_failed", str(error))
+        raise click.exceptions.Exit(1) from None
+    console.emit_document(document, title="Screening report")
 
 
 @main.group()

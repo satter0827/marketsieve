@@ -275,6 +275,7 @@ class ScreenPolicy(Protocol):
         as_of: datetime,
         processing_limit: int = 100,
         display_limit: int = 20,
+        diagnostics: tuple[str, ...] = (),
     ) -> ScreeningReport: ...
 
 
@@ -293,6 +294,7 @@ class BalancedCandidateScreen:
         as_of: datetime,
         processing_limit: int = 100,
         display_limit: int = 20,
+        diagnostics: tuple[str, ...] = (),
     ) -> ScreeningReport:
         if processing_limit <= 0 or display_limit <= 0:
             raise ValueError("screening limits must be positive")
@@ -313,7 +315,7 @@ class BalancedCandidateScreen:
             if not item.held and item.action in _ACTION_PRIORITY
         )
         ordered = tuple(sorted(eligible, key=_candidate_order))
-        diagnostics = tuple(
+        limit_diagnostics = tuple(
             message
             for condition, message in (
                 (
@@ -335,7 +337,7 @@ class BalancedCandidateScreen:
             "processed_count": len(decisions),
             "eligible_count": len(ordered),
             "candidates": visible,
-            "diagnostics": diagnostics,
+            "diagnostics": tuple(sorted(set(diagnostics) | set(limit_diagnostics))),
         }
         for name, value in values.items():
             object.__setattr__(partial, name, value)

@@ -23,10 +23,16 @@ from marketsieve_cli.adapters.reports import (
     create_report,
     report_document,
 )
+from marketsieve_cli.adapters.screening import (
+    ScreeningStore,
+    screening_document,
+    universe_document,
+)
 from marketsieve_cli.adapters.snapshots import SnapshotStore
 from marketsieve_cli.application.diagnostics import DiagnosticsService
 from marketsieve_cli.application.experiments import ExperimentService
 from marketsieve_cli.application.routines import DailyBriefService, WeeklyBriefService
+from marketsieve_cli.application.screening import ScreeningService
 from marketsieve_cli.application.snapshots import SnapshotService
 from marketsieve_cli.observability import configure_logger
 
@@ -101,6 +107,38 @@ def build_experiment_service() -> ExperimentService:
         SnapshotStore(Path(".marketsieve/data")),
         ExperimentStore(Path(".marketsieve/experiments")),
     )
+
+
+def build_screening_service(config_path: Path | None = None) -> ScreeningService:
+    """Build explicit universe acquisition and offline screening workflows."""
+
+    return ScreeningService(
+        SourcePluginRegistry(),
+        SnapshotStore(Path(".marketsieve/data")),
+        build_portfolio_store(),
+        ScreeningStore(Path(".marketsieve/screening")),
+        Configuration.resolve(config_path),
+    )
+
+
+def update_screening(config_path: Path | None, market: str) -> dict[str, object]:
+    """Acquire, persist, and project one bounded instrument universe."""
+
+    return universe_document(build_screening_service(config_path).update(market))
+
+
+def run_screening(config_path: Path | None, market: str, *, as_of: datetime) -> dict[str, object]:
+    """Run and project one offline screening operation."""
+
+    return screening_document(build_screening_service(config_path).run(market, as_of=as_of))
+
+
+def read_screening(
+    config_path: Path | None, report_id: str, *, market: str | None
+) -> dict[str, object]:
+    """Read and project one verified screening report."""
+
+    return screening_document(build_screening_service(config_path).show(report_id, market=market))
 
 
 def build_experiment_agent_service(config_path: Path | None = None) -> object:

@@ -133,6 +133,20 @@ def test_screen_reports_display_bound_and_rejects_invalid_invocations() -> None:
         )
 
 
+def test_screen_includes_sorted_input_diagnostics_in_content_identity() -> None:
+    source = universe("AAA")
+    value = decision("AAA", DecisionAction.BUY_CANDIDATE, DecisionConfidence.HIGH, 1)
+
+    report = BalancedCandidateScreen().screen(
+        source,
+        (value,),
+        as_of=source.as_of,
+        diagnostics=("z_unavailable", "a_limited", "z_unavailable"),
+    )
+
+    assert report.diagnostics == ("a_limited", "z_unavailable")
+
+
 def test_universe_rejects_invalid_identity_and_content() -> None:
     source = universe("AAA")
 

@@ -30,6 +30,8 @@ dates when those optional source capabilities are configured. They also show kno
 amendments and company-relative valuation ranges built only from explicitly acquired local
 history. The Agent reads only an immutable decision report and requires an explicit LM Studio,
 OpenAI, Anthropic, or Google provider. Its output is stored separately and cannot change a report.
+Bounded Japanese and U.S. universes can be updated explicitly, then screened offline from verified
+local price snapshots. Candidate order exposes its inputs and never uses an opaque score.
 
 ## Installation
 
@@ -96,6 +98,9 @@ uv run marketsieve experiment run strategy.toml --output json
 uv run marketsieve experiment show RUN_ID --output json
 uv run marketsieve experiment compare LEFT_RUN_ID RIGHT_RUN_ID --output json
 uv run marketsieve experiment explain RUN_ID --provider lmstudio --output json
+uv run marketsieve --config marketsieve.toml screen update jp --output json
+uv run marketsieve --config marketsieve.toml screen run jp --output json
+uv run marketsieve --config marketsieve.toml screen show latest --market jp --output json
 uv run marketsieve --config marketsieve.toml report explain latest --provider openai --dry-run --output json
 ```
 
