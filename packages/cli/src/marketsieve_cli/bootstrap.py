@@ -10,6 +10,7 @@ from typing import Any, TextIO
 from marketsieve import __version__
 from marketsieve_cli.adapters.config import Configuration
 from marketsieve_cli.adapters.console import ConsoleOutput, OutputMode
+from marketsieve_cli.adapters.experiments import ExperimentStore
 from marketsieve_cli.adapters.explanations import ExplanationStore
 from marketsieve_cli.adapters.plugins import SourcePluginRegistry
 from marketsieve_cli.adapters.portfolios import (
@@ -24,6 +25,7 @@ from marketsieve_cli.adapters.reports import (
 )
 from marketsieve_cli.adapters.snapshots import SnapshotStore
 from marketsieve_cli.application.diagnostics import DiagnosticsService
+from marketsieve_cli.application.experiments import ExperimentService
 from marketsieve_cli.application.routines import DailyBriefService, WeeklyBriefService
 from marketsieve_cli.application.snapshots import SnapshotService
 from marketsieve_cli.observability import configure_logger
@@ -90,6 +92,15 @@ def build_weekly_brief_service(config_path: Path | None = None) -> WeeklyBriefSe
 
     configuration = Configuration.resolve(config_path)
     return WeeklyBriefService(build_report_store(), configuration, create_report)
+
+
+def build_experiment_service() -> ExperimentService:
+    """Build the offline Strategy Lab workflow."""
+
+    return ExperimentService(
+        SnapshotStore(Path(".marketsieve/data")),
+        ExperimentStore(Path(".marketsieve/experiments")),
+    )
 
 
 def import_portfolio(path: Path, *, broker: str, as_of: str) -> dict[str, object]:

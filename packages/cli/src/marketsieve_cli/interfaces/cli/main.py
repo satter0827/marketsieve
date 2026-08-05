@@ -16,6 +16,7 @@ from marketsieve_cli.bootstrap import (
     build_console_output,
     build_daily_brief_service,
     build_diagnostics_service,
+    build_experiment_service,
     build_snapshot_service,
     build_weekly_brief_service,
     import_portfolio,
@@ -30,6 +31,18 @@ from marketsieve_cli.bootstrap import (
 OUTPUT_CHOICES = ("auto", "rich", "text", "json")
 CAPABILITIES_SCHEMA_VERSION = "2.0.0"
 COMMAND_METADATA: dict[str, dict[str, Any]] = {
+    "experiment run": {
+        "output_schema": "urn:marketsieve:schema:experiment-run:1.0.0",
+        "effects": {"network": False, "secrets": False, "optional_writes": ["experiment"]},
+    },
+    "experiment show": {
+        "output_schema": "urn:marketsieve:schema:experiment-run:1.0.0",
+        "effects": {"network": False, "secrets": False, "optional_writes": []},
+    },
+    "experiment compare": {
+        "output_schema": "urn:marketsieve:schema:experiment-comparison:1.0.0",
+        "effects": {"network": False, "secrets": False, "optional_writes": []},
+    },
     "agent doctor": {
         "output_schema": "urn:marketsieve:schema:agent-result:1.0.0",
         "effects": {"network": False, "secrets": False, "optional_writes": []},
@@ -302,6 +315,62 @@ def weekly(context: click.Context, as_of: str | None, output_mode: str) -> None:
         console.emit_document(read_decision_report(report.report_id), title="Decision report")
     else:
         click.echo(project_decision_report(report.report_id), nl=False)
+
+
+@main.group()
+def experiment() -> None:
+    """Replay and compare deterministic decision policies offline."""
+
+
+@experiment.command("run")
+@click.argument("spec", type=click.Path(path_type=Path, dir_okay=False, exists=True))
+@output_option
+@click.pass_context
+def experiment_run(context: click.Context, spec: Path, output_mode: str) -> None:
+    """Run one fixed strategy specification against verified snapshots."""
+
+    console = _console(context, output_mode)
+    try:
+        document = build_experiment_service().run(spec)
+    except (KeyError, LookupError, OSError, TypeError, ValueError) as error:
+        console.emit_error("experiment_run_failed", str(error))
+        raise click.exceptions.Exit(1) from None
+    console.emit_document(document, title="Experiment run")
+
+
+@experiment.command("show")
+@click.argument("run_id")
+@output_option
+@click.pass_context
+def experiment_show(context: click.Context, run_id: str, output_mode: str) -> None:
+    """Show one immutable experiment run without network access."""
+
+    console = _console(context, output_mode)
+    try:
+        document = build_experiment_service().show(run_id)
+    except (LookupError, OSError, TypeError, ValueError) as error:
+        console.emit_error("experiment_show_failed", str(error))
+        raise click.exceptions.Exit(1) from None
+    console.emit_document(document, title="Experiment run")
+
+
+@experiment.command("compare")
+@click.argument("left_run_id")
+@click.argument("right_run_id")
+@output_option
+@click.pass_context
+def experiment_compare(
+    context: click.Context, left_run_id: str, right_run_id: str, output_mode: str
+) -> None:
+    """Compare deterministic metrics from two stored runs."""
+
+    console = _console(context, output_mode)
+    try:
+        document = build_experiment_service().compare(left_run_id, right_run_id)
+    except (LookupError, OSError, TypeError, ValueError) as error:
+        console.emit_error("experiment_compare_failed", str(error))
+        raise click.exceptions.Exit(1) from None
+    console.emit_document(document, title="Experiment comparison")
 
 
 @main.command("equity-report")

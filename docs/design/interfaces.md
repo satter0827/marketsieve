@@ -260,3 +260,16 @@ The unchanged section contains only instruments whose action and confidence both
 
 Advanced acquisition and inspection commands move below `marketsieve data`. Their semantics remain
 available, but the old top-level command paths are not preserved.
+
+Strategy Lab reads one explicit TOML specification and verified snapshot IDs:
+
+```shell
+marketsieve experiment run strategy.toml
+marketsieve experiment show RUN_ID
+marketsieve experiment compare LEFT_RUN_ID RIGHT_RUN_ID
+```
+
+All three commands are offline. `run` writes `experiment-run/v1` below
+`.marketsieve/experiments/objects`; identical specifications and snapshots produce the same run ID
+and bytes. `show` and `compare` do not recalculate a run. The output labels whether complete cost
+assumptions were supplied and never presents forward return as net profit.

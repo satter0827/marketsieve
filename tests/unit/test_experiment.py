@@ -152,3 +152,31 @@ def test_comparison_uses_right_minus_left() -> None:
         compare_experiments(left, incompatible)
     with pytest.raises(ValueError, match="SHA-256"):
         ExperimentRun("bad", left.spec, left.decisions, left.metrics)
+
+
+def test_experiment_value_objects_reject_ambiguous_or_invalid_values() -> None:
+    policy = BalancedMediumTermPolicy()
+    history = bars()
+    with pytest.raises(TypeError, match="dates"):
+        ReplayWindow(history[0].available_at, history[-1].trading_date)
+    with pytest.raises(ValueError, match="identity"):
+        replace(spec(), policy_name="")
+    with pytest.raises(ValueError, match="unique sorted"):
+        replace(spec(), datasets=(("B", "1"), ("A", "2")))
+    with pytest.raises(ValueError, match="between zero and one"):
+        replace(
+            spec(),
+            execution_costs=(
+                ("commission_rate", "2"),
+                ("fx_cost_rate", "0"),
+                ("tax_rate", "0"),
+            ),
+        )
+    with pytest.raises(ValueError, match="finite and identified"):
+        replace(
+            run_experiment(spec(), policy, (("a" * 64, JP_INSTRUMENT, history),)).metrics[0],
+            name="",
+        )
+    with pytest.raises(ValueError, match="unique sorted"):
+        valid = run_experiment(spec(), policy, (("a" * 64, JP_INSTRUMENT, history),))
+        replace(valid, metrics=tuple(reversed(valid.metrics)))
