@@ -25,7 +25,7 @@ from marketsieve_cli.adapters.reports import (
 )
 from marketsieve_cli.adapters.snapshots import SnapshotStore
 from marketsieve_cli.application.diagnostics import DiagnosticsService
-from marketsieve_cli.application.routines import DailyBriefService
+from marketsieve_cli.application.routines import DailyBriefService, WeeklyBriefService
 from marketsieve_cli.application.snapshots import SnapshotService
 from marketsieve_cli.observability import configure_logger
 
@@ -84,6 +84,13 @@ def build_daily_brief_service(config_path: Path | None = None) -> DailyBriefServ
         configuration,
         create_report,
     )
+
+
+def build_weekly_brief_service(config_path: Path | None = None) -> WeeklyBriefService:
+    """Build the offline weekly Close Brief workflow."""
+
+    configuration = Configuration.resolve(config_path)
+    return WeeklyBriefService(build_report_store(), configuration, create_report)
 
 
 def import_portfolio(path: Path, *, broker: str, as_of: str) -> dict[str, object]:

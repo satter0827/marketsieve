@@ -78,12 +78,20 @@ lookback_days = 400
 [routines.us]
 source_profile = "united-states"
 lookback_days = 400
+
+[routines.weekly]
+max_age_days = 7
 ```
 
 `lookback_days` accepts 60 through 2,000 calendar days and defaults to 400. The routine uses the
 selected source profile for every instrument in that market and does not fall back to another
 provider. `--as-of` accepts an explicit offset-aware timestamp for reproducible operation; without
 it, the CLI uses the invocation time.
+
+`marketsieve weekly` is offline. It combines only the current `jp-latest` and `us-latest` reports
+when neither is future-dated or older than the configured limit. It never refreshes data or
+recalculates daily decisions. A missing or stale side returns the exact daily command needed before
+the weekend briefing can be created.
 
 Failures identify whether input validation, analysis prerequisites, or an internal contract caused
 the operation to stop. They do not expose environment secrets or silently switch data sources.

@@ -13,7 +13,8 @@
     "policy",
     "decisions",
     "diagnostics",
-    "previous_report_id"
+    "previous_report_id",
+    "input_report_ids"
   ],
   "properties": {
     "report_id": { "$ref": "#/$defs/digest" },
@@ -34,8 +35,21 @@
     },
     "previous_report_id": {
       "oneOf": [{ "$ref": "#/$defs/digest" }, { "type": "null" }]
+    },
+    "input_report_ids": {
+      "type": "array",
+      "uniqueItems": true,
+      "maxItems": 2,
+      "items": { "$ref": "#/$defs/digest" }
     }
   },
+  "allOf": [
+    {
+      "if": { "properties": { "session": { "const": "weekly" } } },
+      "then": { "properties": { "input_report_ids": { "minItems": 2, "maxItems": 2 } } },
+      "else": { "properties": { "input_report_ids": { "maxItems": 0 } } }
+    }
+  ],
   "$defs": {
     "digest": {
       "type": "string",

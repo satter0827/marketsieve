@@ -228,6 +228,7 @@ class DecisionReport:
     decisions: tuple[InstrumentDecision, ...]
     diagnostics: tuple[str, ...] = ()
     previous_report_id: str | None = None
+    input_report_ids: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if len(self.report_id) != 64 or any(c not in "0123456789abcdef" for c in self.report_id):
@@ -276,6 +277,19 @@ class DecisionReport:
             or any(c not in "0123456789abcdef" for c in self.previous_report_id)
         ):
             raise ValueError("previous report ID must be a lowercase SHA-256 digest")
+        if (
+            self.input_report_ids != tuple(sorted(self.input_report_ids))
+            or len(self.input_report_ids) != len(set(self.input_report_ids))
+            or any(
+                len(value) != 64 or any(character not in "0123456789abcdef" for character in value)
+                for value in self.input_report_ids
+            )
+        ):
+            raise ValueError("input report IDs must be unique sorted lowercase SHA-256 digests")
+        if self.session is MarketSession.WEEKLY and len(self.input_report_ids) != 2:
+            raise ValueError("weekly reports require exactly two input report IDs")
+        if self.session is not MarketSession.WEEKLY and self.input_report_ids:
+            raise ValueError("daily reports must not contain input report IDs")
 
 
 @runtime_checkable

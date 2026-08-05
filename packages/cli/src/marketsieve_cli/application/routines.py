@@ -47,6 +47,8 @@ class DecisionReportRepository(Protocol):
 class RoutineConfiguration(Protocol):
     def daily_profile(self, market: str) -> tuple[str, int]: ...
 
+    def weekly_max_age_days(self) -> int: ...
+
 
 MARKET_CURRENCY = {"jp": "JPY", "us": "USD"}
 MARKET_SESSION = {"jp": MarketSession.JP_CLOSE, "us": MarketSession.US_CLOSE}
@@ -179,3 +181,92 @@ class DailyBriefService:
         with localcontext() as context:
             context.prec = 28
             return {identity: value / total for identity, value in values.items()}
+
+
+class WeeklyBriefService:
+    """Combine eligible daily reports without acquisition or recalculation."""
+
+    def __init__(
+        self,
+        reports: DecisionReportRepository,
+        configuration: RoutineConfiguration,
+        report_factory: Callable[..., DecisionReport],
+    ) -> None:
+        self._reports = reports
+        self._configuration = configuration
+        self._report_factory = report_factory
+
+    def run(self, *, as_of: datetime) -> DecisionReport:
+        if as_of.tzinfo is None or as_of.utcoffset() is None:
+            raise ValueError("weekly as_of must include a UTC offset")
+        maximum_age = timedelta(days=self._configuration.weekly_max_age_days())
+        daily_reports = tuple(
+            self._eligible(session, market, as_of, maximum_age)
+            for session, market in (
+                (MarketSession.JP_CLOSE, "jp"),
+                (MarketSession.US_CLOSE, "us"),
+            )
+        )
+        identities = {
+            (item.policy_name, item.policy_version, item.policy_settings) for item in daily_reports
+        }
+        if len(identities) != 1:
+            raise ValueError("daily reports use incompatible decision policies")
+        portfolio = PortfolioSnapshot(
+            max(item.portfolio.as_of for item in daily_reports),
+            tuple(
+                sorted(
+                    (holding for item in daily_reports for holding in item.portfolio.holdings),
+                    key=lambda item: (item.instrument.mic, item.instrument.symbol),
+                )
+            ),
+            tuple(
+                sorted(
+                    (watch for item in daily_reports for watch in item.portfolio.watch_items),
+                    key=lambda item: (item.instrument.mic, item.instrument.symbol),
+                )
+            ),
+            "weekly_reports",
+        )
+        decisions = tuple(
+            sorted(
+                (decision for item in daily_reports for decision in item.decisions),
+                key=lambda item: (item.instrument.mic, item.instrument.symbol),
+            )
+        )
+        try:
+            previous_report_id = self._reports.latest(MarketSession.WEEKLY).report_id
+        except LookupError:
+            previous_report_id = None
+        report = self._report_factory(
+            MarketSession.WEEKLY,
+            as_of,
+            portfolio,
+            decisions,
+            diagnostics=tuple(
+                sorted({diagnostic for item in daily_reports for diagnostic in item.diagnostics})
+            ),
+            previous_report_id=previous_report_id,
+            input_report_ids=tuple(sorted(item.report_id for item in daily_reports)),
+        )
+        return self._reports.put(report)
+
+    def _eligible(
+        self,
+        session: MarketSession,
+        market: str,
+        as_of: datetime,
+        maximum_age: timedelta,
+    ) -> DecisionReport:
+        try:
+            report = self._reports.latest(session)
+        except LookupError:
+            raise LookupError(
+                f"eligible {market} close report does not exist; run 'marketsieve daily {market}'"
+            ) from None
+        age = as_of.astimezone(UTC) - report.as_of.astimezone(UTC)
+        if age < timedelta(0):
+            raise ValueError(f"{market} close report is newer than weekly as_of")
+        if age > maximum_age:
+            raise LookupError(f"{market} close report is stale; run 'marketsieve daily {market}'")
+        return report

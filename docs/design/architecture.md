@@ -349,6 +349,12 @@ to the command knowledge time, evaluates the shared policy, and stores the repor
 instrument is evaluated with empty price history and remains visibly indeterminate; an all-failed
 run stores diagnostic evidence without advancing the session reference.
 
+The weekly service performs no acquisition. It reads the explicit Japanese-close and U.S.-close
+latest references, rejects missing, future, or stale inputs, and combines their decisions without
+recalculation. The weekly report records both sorted input report IDs in its canonical JSON; those
+IDs therefore participate in the report digest. Daily reports cannot claim input report IDs, and a
+weekly report requires exactly two.
+
 Application use cases replace the growing snapshot-service orchestration surface. Acquisition,
 portfolio import, daily reporting, weekly reporting, report lookup, and model explanation have
 separate inputs and results. A small application-local content-addressed store may share atomic
