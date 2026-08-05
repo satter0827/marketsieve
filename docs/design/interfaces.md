@@ -248,5 +248,9 @@ limitations, and detailed evidence in that order. `--quiet` retains the conclusi
 items, and next action. JSON returns the canonical English-keyed decision-report contract without
 localized decorative prose.
 
+The change section compares action and confidence against the exact `previous_report_id` object.
+It marks a newly reviewed instrument as new and a removed instrument as outside the current target.
+The unchanged section contains only instruments whose action and confidence both remain equal.
+
 Advanced acquisition and inspection commands move below `marketsieve data`. Their semantics remain
 available, but the old top-level command paths are not preserved.

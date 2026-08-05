@@ -7,7 +7,6 @@ design and release history, not in this file.
 
 1. Add a Rakuten importer based on anonymized real fixtures and map it to the implemented canonical
    portfolio model.
-2. Replace generic JSON-shaped terminal output with conclusion-first Close Brief projections.
 
 ## 0.5.0 Official Fundamentals
 
