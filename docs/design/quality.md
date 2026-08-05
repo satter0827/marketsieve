@@ -21,6 +21,8 @@ The Offline Analysis Preview tests:
 - FRED pagination, missing observations, revision bounds, rate limits, and injected transport;
 - SEC filing-history pages, amendments, publication times, XBRL duplicates, fair-access failures,
   and injected transport;
+- EDINET daily lists, parent-document corrections, XBRL-derived TSV scope, ZIP safety, credentials,
+  and injected transport;
 - the source contracts against synthetic transports;
 - stable snapshot, section, comparison, report, and evidence identities for identical inputs;
 - Japanese and English Rich, text, and schema-valid JSON projections;
@@ -105,7 +107,8 @@ as such and are not presented as successful test evidence.
 
 The target gate adds deterministic reference vectors for every indicator, ambient-decimal-context
 tests, snapshot identity and atomicity tests, publication-versus-retrieval availability tests, and
-contract suites shared by CSV, J-Quants, Alpha Vantage, FRED, and SEC. Network clients are injected.
+contract suites shared by CSV, J-Quants, Alpha Vantage, FRED, SEC, and EDINET. Network clients are
+injected.
 Default tests use synthetic responses and never require accounts, credentials, wall-clock timing,
 or network access. Live provider checks use an explicit marker and manual credentials.
 

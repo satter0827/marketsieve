@@ -168,6 +168,14 @@ organization and contact email required for network access. `doctor` validates b
 a request. `--start` and `--end` select filing dates, and the stored facts retain the exact SEC
 acceptance time for knowledge-as-of use.
 
+### Implemented EDINET commands
+
+The same `source doctor` and `source fetch --kind financials` commands accept an EDINET profile for
+XTKS instruments. The profile supplies an `edinet_code`, supported document type codes, and explicit
+date and document budgets. `EDINET_API_KEY` is the only credential input. `doctor` validates the
+profile and credential presence without a request. Fetch creates filing-linked financial snapshots
+from official XBRL-derived TSV data and never performs ticker-to-issuer lookup.
+
 ## Agent explanation
 
 ```shell

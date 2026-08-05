@@ -26,6 +26,7 @@ all-sources = [
     "marketsieve-source-alphavantage==0.3.0",
     "marketsieve-source-fred==0.3.0",
     "marketsieve-source-sec==0.3.0",
+    "marketsieve-source-edinet==0.3.0",
 ]
 all = [
     "marketsieve-agent==0.3.0",
@@ -34,6 +35,7 @@ all = [
     "marketsieve-source-alphavantage==0.3.0",
     "marketsieve-source-fred==0.3.0",
     "marketsieve-source-sec==0.3.0",
+    "marketsieve-source-edinet==0.3.0",
 ]
 
 [project.scripts]
@@ -63,3 +65,4 @@ marketsieve-source-jquants = { workspace = true }
 marketsieve-source-alphavantage = { workspace = true }
 marketsieve-source-fred = { workspace = true }
 marketsieve-source-sec = { workspace = true }
+marketsieve-source-edinet = { workspace = true }

@@ -6,7 +6,8 @@ MarketSieve currently supports local development, public distribution builds, of
 immutable CSV snapshots, explicit J-Quants price, financial-summary, dividend, and earnings
 acquisition, and explicit Alpha Vantage price, profile, financial-statement, earnings, dividend,
 and split acquisition. It also builds and discovers independently installable FRED economic-series
-and SEC filing adapters on Python 3.12 through 3.14. Python 3.13 is the primary development version.
+plus SEC and EDINET filing adapters on Python 3.12 through 3.14. Python 3.13 is the primary
+development version.
 
 ```shell
 make sync
@@ -154,6 +155,15 @@ request-policy change. See the
 [official EDGAR data API](https://www.sec.gov/search-filings/edgar-application-programming-interfaces)
 and the
 [fair-access guidance](https://www.sec.gov/search-filings/edgar-search-assistance/accessing-edgar-data).
+
+EDINET uses only `https://api.edinet-fsa.go.jp/api/v2/documents.json` and
+`https://api.edinet-fsa.go.jp/api/v2/documents/{docID}`. It reads `EDINET_API_KEY` from the invoking
+environment and sends it only as `Subscription-Key`. Historical list requests are sequential and
+bounded to 31 dates and 100 selected documents. The adapter uses official type 5 ZIP files, which
+contain XBRL-derived UTF-16 tab-separated values, and does not retain the archive. The official
+[EDINET API v2 specification](https://disclosure2dl.edinet-fsa.go.jp/guide/static/disclosure/download/ESE140206.pdf)
+and [operation guide](https://disclosure2dl.edinet-fsa.go.jp/guide/static/disclosure/WZEK0110.html)
+were reviewed on 2026-08-06 and are rechecked before a release or request-policy change.
 
 Content-addressed objects are written to a temporary sibling directory, verified, and atomically
 renamed. Raw responses are retained only when the adapter's approved terms policy permits local

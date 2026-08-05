@@ -17,6 +17,7 @@ FORBIDDEN_SDK_IMPORTS = {
     "marketsieve_source_alphavantage",
     "marketsieve_source_fred",
     "marketsieve_source_sec",
+    "marketsieve_source_edinet",
     "os",
     "smtplib",
     "sqlite3",
@@ -66,6 +67,7 @@ def test_agent_is_independent_from_cli_sources_and_io() -> None:
         "marketsieve_source_alphavantage",
         "marketsieve_source_fred",
         "marketsieve_source_sec",
+        "marketsieve_source_edinet",
         "os",
     }
 
@@ -77,6 +79,7 @@ def test_extension_and_source_packages_follow_inward_dependencies() -> None:
     alphavantage_source = ROOT / "packages/source-alphavantage/src/marketsieve_source_alphavantage"
     fred_source = ROOT / "packages/source-fred/src/marketsieve_source_fred"
     sec_source = ROOT / "packages/source-sec/src/marketsieve_source_sec"
+    edinet_source = ROOT / "packages/source-edinet/src/marketsieve_source_edinet"
     extension_imports = set().union(*(imported_roots(path) for path in extension.rglob("*.py")))
     csv_imports = set().union(*(imported_roots(path) for path in csv_source.rglob("*.py")))
     jquants_imports = set().union(*(imported_roots(path) for path in jquants_source.rglob("*.py")))
@@ -85,6 +88,7 @@ def test_extension_and_source_packages_follow_inward_dependencies() -> None:
     )
     fred_imports = set().union(*(imported_roots(path) for path in fred_source.rglob("*.py")))
     sec_imports = set().union(*(imported_roots(path) for path in sec_source.rglob("*.py")))
+    edinet_imports = set().union(*(imported_roots(path) for path in edinet_source.rglob("*.py")))
 
     assert "marketsieve" in extension_imports
     assert (
@@ -95,6 +99,7 @@ def test_extension_and_source_packages_follow_inward_dependencies() -> None:
         | alphavantage_imports
         | fred_imports
         | sec_imports
+        | edinet_imports
     )
     assert "marketsieve_source_csv" not in extension_imports
     assert "marketsieve_extension_api" in csv_imports
@@ -102,6 +107,7 @@ def test_extension_and_source_packages_follow_inward_dependencies() -> None:
     assert "marketsieve_extension_api" in alphavantage_imports
     assert "marketsieve_extension_api" in fred_imports
     assert "marketsieve_extension_api" in sec_imports
+    assert "marketsieve_extension_api" in edinet_imports
 
 
 def test_analysis_and_synthetic_sources_do_not_reference_each_other() -> None:

@@ -10,6 +10,7 @@ dependencies = [
     "marketsieve-source-alphavantage",
     "marketsieve-source-fred",
     "marketsieve-source-sec",
+    "marketsieve-source-edinet",
 ]
 
 [dependency-groups]
@@ -41,6 +42,7 @@ members = [
     "packages/source-alphavantage",
     "packages/source-fred",
     "packages/source-sec",
+    "packages/source-edinet",
 ]
 
 [tool.uv.sources]
@@ -51,6 +53,7 @@ marketsieve-source-jquants = { workspace = true }
 marketsieve-source-alphavantage = { workspace = true }
 marketsieve-source-fred = { workspace = true }
 marketsieve-source-sec = { workspace = true }
+marketsieve-source-edinet = { workspace = true }
 
 [[tool.marketsieve.public-packages]]
 distribution = "marketsieve"
@@ -106,6 +109,12 @@ path = "packages/source-sec"
 module = "marketsieve_source_sec"
 role = "adapter"
 
+[[tool.marketsieve.public-packages]]
+distribution = "marketsieve-source-edinet"
+path = "packages/source-edinet"
+module = "marketsieve_source_edinet"
+role = "adapter"
+
 [tool.pytest.ini_options]
 addopts = "-q --strict-config --strict-markers"
 cache_dir = ".marketsieve/cache/pytest"
@@ -125,6 +134,7 @@ src = [
     "packages/source-alphavantage/src",
     "packages/source-fred/src",
     "packages/source-sec/src",
+    "packages/source-edinet/src",
     "scripts",
     "tests",
 ]
@@ -148,6 +158,7 @@ files = [
     "packages/source-alphavantage/src",
     "packages/source-fred/src",
     "packages/source-sec/src",
+    "packages/source-edinet/src",
     "scripts",
     "tests",
 ]
@@ -158,7 +169,7 @@ warn_unused_ignores = true
 [tool.coverage.run]
 branch = true
 data_file = ".marketsieve/coverage/data"
-source = ["marketsieve", "marketsieve_agent", "marketsieve_cli", "marketsieve_extension_api", "marketsieve_source_csv", "marketsieve_source_jquants", "marketsieve_source_alphavantage", "marketsieve_source_fred", "marketsieve_source_sec"]
+source = ["marketsieve", "marketsieve_agent", "marketsieve_cli", "marketsieve_extension_api", "marketsieve_source_csv", "marketsieve_source_jquants", "marketsieve_source_alphavantage", "marketsieve_source_fred", "marketsieve_source_sec", "marketsieve_source_edinet"]
 omit = ["*/marketsieve_cli/__main__.py"]
 
 [tool.coverage.report]
@@ -170,7 +181,7 @@ skip_covered = true
 output = ".marketsieve/coverage/coverage.json"
 
 [tool.importlinter]
-root_packages = ["marketsieve", "marketsieve_agent", "marketsieve_cli", "marketsieve_extension_api", "marketsieve_source_csv", "marketsieve_source_jquants", "marketsieve_source_alphavantage", "marketsieve_source_fred", "marketsieve_source_sec"]
+root_packages = ["marketsieve", "marketsieve_agent", "marketsieve_cli", "marketsieve_extension_api", "marketsieve_source_csv", "marketsieve_source_jquants", "marketsieve_source_alphavantage", "marketsieve_source_fred", "marketsieve_source_sec", "marketsieve_source_edinet"]
 
 [[tool.importlinter.contracts]]
 name = "Application dependencies point inward"
@@ -186,6 +197,7 @@ layers = [
     "marketsieve_source_alphavantage",
     "marketsieve_source_fred",
     "marketsieve_source_sec",
+    "marketsieve_source_edinet",
     "marketsieve_extension_api",
     "marketsieve",
 ]
@@ -207,7 +219,7 @@ forbidden_modules = ["marketsieve_cli"]
 name = "Extension API is independent from implementations"
 type = "forbidden"
 source_modules = ["marketsieve_extension_api"]
-forbidden_modules = ["marketsieve_cli", "marketsieve_source_csv", "marketsieve_source_jquants", "marketsieve_source_alphavantage", "marketsieve_source_fred", "marketsieve_source_sec"]
+forbidden_modules = ["marketsieve_cli", "marketsieve_source_csv", "marketsieve_source_jquants", "marketsieve_source_alphavantage", "marketsieve_source_fred", "marketsieve_source_sec", "marketsieve_source_edinet"]
 
 [[tool.importlinter.contracts]]
 name = "CSV source does not depend on the CLI"
@@ -237,4 +249,10 @@ forbidden_modules = ["marketsieve_cli"]
 name = "SEC source does not depend on the CLI"
 type = "forbidden"
 source_modules = ["marketsieve_source_sec"]
+forbidden_modules = ["marketsieve_cli"]
+
+[[tool.importlinter.contracts]]
+name = "EDINET source does not depend on the CLI"
+type = "forbidden"
+source_modules = ["marketsieve_source_edinet"]
 forbidden_modules = ["marketsieve_cli"]
