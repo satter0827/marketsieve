@@ -27,6 +27,8 @@ notifications.
   revision time semantics.
 - **FND-08:** Financial acquisitions preserve filing identity, amendment linkage, public time, and
   fact-to-filing provenance so historical analysis can exclude facts not yet available.
+- **FND-09:** Financial trends select only compatible annual observations known at the requested
+  instant and retain deterministic period, metric, and evidence identities.
 
 ## 0.4.0 Personal Close Brief target
 

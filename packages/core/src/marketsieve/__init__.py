@@ -15,6 +15,13 @@ from marketsieve.decision import (
     MarketSession,
 )
 from marketsieve.economic import EconomicObservation, EconomicSeries
+from marketsieve.financial import (
+    FinancialMetric,
+    FinancialObservation,
+    FinancialPeriodView,
+    FinancialTrendReport,
+    analyze_financial_history,
+)
 from marketsieve.portfolio import (
     Holding,
     PersonalInvestmentContext,
@@ -35,6 +42,10 @@ __all__ = [
     "EconomicObservation",
     "EconomicSeries",
     "EvidenceDirection",
+    "FinancialMetric",
+    "FinancialObservation",
+    "FinancialPeriodView",
+    "FinancialTrendReport",
     "Holding",
     "InstrumentDecision",
     "MarketSession",
@@ -42,4 +53,5 @@ __all__ = [
     "PortfolioSnapshot",
     "WatchItem",
     "__version__",
+    "analyze_financial_history",
 ]

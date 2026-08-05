@@ -109,6 +109,10 @@ The target gate adds deterministic reference vectors for every indicator, ambien
 tests, snapshot identity and atomicity tests, publication-versus-retrieval availability tests, and
 contract suites shared by CSV, J-Quants, Alpha Vantage, FRED, SEC, and EDINET. Network clients are
 injected.
+Financial-history tests cover knowledge-time exclusion, later restatement selection, compatible
+period matching, conflicting observations, stable identities, derived amounts and ratios, and
+explicit missing results. CLI tests confirm the typed calculation projects into the financial
+section without transferring calculation ownership to the application.
 Default tests use synthetic responses and never require accounts, credentials, wall-clock timing,
 or network access. Live provider checks use an explicit marker and manual credentials.
 

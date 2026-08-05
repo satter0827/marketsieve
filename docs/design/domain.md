@@ -113,6 +113,21 @@ of events that happened in a period. Missing accounting standard or other requir
 the section partial even when every mapped concept is present. Each normalized fact retains the
 source, dataset, and source-version provenance of its immutable acquisition.
 
+The SDK financial-history calculation accepts normalized observations with explicit availability
+and evidence identities. It first excludes observations unavailable at the requested knowledge
+instant. It then selects annual periods with known boundaries, accounting standard, consolidation,
+revision state, and currency. A later known observation for the same concept and period supersedes
+an earlier value for calculation without deleting either observation from acquisition evidence.
+Conflicting values with the same availability instant are invalid.
+
+The current and immediately preceding periods must use the same accounting standard,
+consolidation basis, and currency. The preceding period must end before the current period starts.
+The calculation derives free cash flow, revenue and EPS growth, operating and net margins, ROE,
+ROA, equity ratio, and debt-to-equity only when their compatible inputs exist. Missing results use
+stable machine-readable reasons. Period values, selected evidence IDs, metric definitions, and the
+knowledge instant form a deterministic financial-trend identity. The CLI projects this typed result
+into report sections; it does not own the calculations.
+
 ## Economic series
 
 An economic observation contains an observation date, a finite decimal value, and the inclusive
