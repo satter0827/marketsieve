@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:marketsieve:schema:screening-report:1.0.0",
+  "title": "MarketSieve screening report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "report_id", "universe_id", "as_of", "policy", "processed_count", "eligible_count", "candidates", "diagnostics"],
+  "properties": {
+    "schema": {"const": "screening-report/v1"},
+    "report_id": {"$ref": "#/$defs/digest"},
+    "universe_id": {"$ref": "#/$defs/digest"},
+    "as_of": {"type": "string", "format": "date-time"},
+    "policy": {
+      "type": "object", "additionalProperties": false, "required": ["name", "version"],
+      "properties": {"name": {"type": "string", "minLength": 1}, "version": {"type": "string", "minLength": 1}}
+    },
+    "processed_count": {"type": "integer", "minimum": 0},
+    "eligible_count": {"type": "integer", "minimum": 0},
+    "candidates": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["decision", "supporting_evidence_count"],
+        "properties": {"decision": {"$ref": "#/$defs/decision"}, "supporting_evidence_count": {"type": "integer", "minimum": 0}}
+      }
+    },
+    "diagnostics": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}}
+  },
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "decision": {
+      "type": "object", "additionalProperties": false,
+      "required": ["instrument", "held", "action", "confidence", "evidence", "next_earnings_date", "revenue_growth", "eps_growth", "free_cash_flow", "valuation", "fundamentals", "invalidation_conditions", "next_action", "policy"],
+      "properties": {
+        "instrument": {
+          "type": "object", "additionalProperties": false,
+          "required": ["symbol", "mic", "currency", "timezone", "type"],
+          "properties": {
+            "symbol": {"type": "string", "minLength": 1}, "mic": {"type": "string", "pattern": "^[A-Z0-9]{4}$"},
+            "currency": {"type": "string", "pattern": "^[A-Z]{3}$"}, "timezone": {"type": "string", "minLength": 1}, "type": {"const": "equity"}
+          }
+        },
+        "held": {"const": false},
+        "action": {"enum": ["buy_candidate", "wait_for_pullback", "wait_for_earnings"]},
+        "confidence": {"enum": ["high", "medium", "low"]},
+        "evidence": {"type": "array", "items": {"type": "object"}},
+        "next_earnings_date": {"type": ["string", "null"]}, "revenue_growth": {"type": ["string", "null"]},
+        "eps_growth": {"type": ["string", "null"]}, "free_cash_flow": {"type": ["string", "null"]},
+        "valuation": {"type": "object"}, "fundamentals": {"type": "object"},
+        "invalidation_conditions": {"type": "array", "items": {"type": "string"}},
+        "next_action": {"type": "string", "minLength": 1}, "policy": {"type": "object"}
+      }
+    }
+  }
+}

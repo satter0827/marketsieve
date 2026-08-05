@@ -19,6 +19,10 @@ plugin = "jquants"
 # Add dividend only when the selected J-Quants plan permits the Premium endpoint.
 event_types = "earnings"
 
+[source_profiles.japan.instrument_universe]
+plugin = "jquants"
+operation = "fetch"
+
 [source_profiles.us]
 currency = "USD"
 timezone = "America/New_York"
@@ -38,3 +42,19 @@ plugin = "alphavantage"
 
 [source_profiles.us.events.settings]
 event_types = "earnings,dividend,split"
+
+[source_profiles.us.instrument_universe]
+plugin = "sec"
+operation = "fetch"
+
+[screening.jp]
+source_profile = "japan"
+acquisition_limit = 100
+processing_limit = 100
+display_limit = 20
+
+[screening.us]
+source_profile = "us"
+acquisition_limit = 100
+processing_limit = 100
+display_limit = 20

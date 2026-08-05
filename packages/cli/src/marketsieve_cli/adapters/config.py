@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from marketsieve_cli.contracts import ScreeningConfiguration
+
 
 @dataclass(frozen=True, slots=True)
 class SourceProfile:
@@ -34,6 +36,15 @@ class SourceProfile:
 class SourceBinding:
     plugin: str
     settings: dict[str, str]
+    operation: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ScreeningProfile:
+    source_profile: str
+    acquisition_limit: int
+    processing_limit: int
+    display_limit: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,6 +57,9 @@ class AgentProvider:
 DEFAULT_DAILY_LOOKBACK_DAYS = 400
 DEFAULT_FINANCIAL_LOOKBACK_DAYS = 1500
 DEFAULT_WEEKLY_MAX_AGE_DAYS = 7
+DEFAULT_SCREEN_ACQUISITION_LIMIT = 100
+DEFAULT_SCREEN_PROCESSING_LIMIT = 100
+DEFAULT_SCREEN_DISPLAY_LIMIT = 20
 
 
 class Configuration:
@@ -93,13 +107,27 @@ class Configuration:
         if not isinstance(currency, str) or not isinstance(timezone, str):
             raise ValueError(f"source profile {name!r} must declare currency and timezone")
         sources: dict[str, SourceBinding] = {}
-        for kind in ("daily_bars", "financials", "events"):
+        for kind in ("daily_bars", "financials", "events", "instrument_universe"):
             source = value.get(kind)
             if source is None:
                 continue
             if not isinstance(source, dict) or not isinstance(source.get("plugin"), str):
                 raise ValueError(f"source profile {name!r} {kind}.plugin must be a string")
             settings = source.get("settings", {})
+            operation = source.get("operation")
+            unknown = set(source) - {"plugin", "settings", "operation"}
+            if unknown:
+                raise ValueError(f"source profile {name!r} {kind} contains unsupported settings")
+            if operation is not None and operation not in {"import", "fetch"}:
+                raise ValueError(
+                    f"source profile {name!r} {kind}.operation must be import or fetch"
+                )
+            if kind == "instrument_universe" and operation is None:
+                raise ValueError(
+                    f"source profile {name!r} instrument_universe.operation is required"
+                )
+            if kind != "instrument_universe" and operation is not None:
+                raise ValueError(f"source profile {name!r} {kind}.operation is not supported")
             if not isinstance(settings, dict) or any(
                 not isinstance(key, str) or not isinstance(item, (str, int, float))
                 for key, item in settings.items()
@@ -108,6 +136,7 @@ class Configuration:
             sources[kind] = SourceBinding(
                 plugin=source["plugin"],
                 settings={key: str(item) for key, item in settings.items()},
+                operation=operation,
             )
         if not sources:
             raise ValueError(f"source profile {name!r} must configure at least one data kind")
@@ -192,3 +221,62 @@ class Configuration:
         if not isinstance(maximum, int) or isinstance(maximum, bool) or not 1 <= maximum <= 14:
             raise ValueError("weekly max_age_days must be an integer from 1 through 14")
         return maximum
+
+    def screening_profile(self, market: str) -> ScreeningProfile:
+        """Return one explicit universe profile and bounded screening budgets."""
+
+        if market not in {"jp", "us"}:
+            raise ValueError("market must be jp or us")
+        screening = self._document().get("screening")
+        if not isinstance(screening, dict):
+            raise LookupError("screening is not configured; add [screening.jp] and [screening.us]")
+        value = screening.get(market)
+        if not isinstance(value, dict) or not isinstance(value.get("source_profile"), str):
+            raise LookupError(f"screening profile {market!r} must declare source_profile")
+        unknown = set(value) - {
+            "source_profile",
+            "acquisition_limit",
+            "processing_limit",
+            "display_limit",
+        }
+        if unknown:
+            raise ValueError(f"screening profile {market!r} contains unsupported settings")
+        acquisition = self._bounded_screen_limit(
+            value.get("acquisition_limit", DEFAULT_SCREEN_ACQUISITION_LIMIT),
+            "acquisition_limit",
+            1000,
+        )
+        processing = self._bounded_screen_limit(
+            value.get("processing_limit", DEFAULT_SCREEN_PROCESSING_LIMIT),
+            "processing_limit",
+            1000,
+        )
+        display = self._bounded_screen_limit(
+            value.get("display_limit", DEFAULT_SCREEN_DISPLAY_LIMIT),
+            "display_limit",
+            100,
+        )
+        return ScreeningProfile(value["source_profile"], acquisition, processing, display)
+
+    def screening_configuration(self, market: str) -> ScreeningConfiguration:
+        """Resolve one complete screening operation without leaking configuration structure."""
+
+        screening = self.screening_profile(market)
+        profile = self.source_profile(screening.source_profile)
+        binding = profile.binding("instrument_universe")
+        assert binding.operation is not None
+        return ScreeningConfiguration(
+            source_profile=profile.name,
+            plugin=binding.plugin,
+            operation=binding.operation,
+            settings=dict(binding.settings),
+            acquisition_limit=screening.acquisition_limit,
+            processing_limit=screening.processing_limit,
+            display_limit=screening.display_limit,
+        )
+
+    @staticmethod
+    def _bounded_screen_limit(value: object, name: str, maximum: int) -> int:
+        if not isinstance(value, int) or isinstance(value, bool) or not 1 <= value <= maximum:
+            raise ValueError(f"screening {name} must be an integer from 1 through {maximum}")
+        return value

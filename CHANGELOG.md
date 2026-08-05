@@ -28,6 +28,9 @@ will follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   implementations, explicit limits, content identity, and visible truncation diagnostics.
 - A deterministic balanced candidate screen with eligible actions, transparent evidence counts,
   stable ordering, and no arbitrary expression or opaque score.
+- Explicit `screen update`, offline `screen run`, and `screen show` workflows with bounded
+  configuration, immutable universe and report objects, atomic latest references, partial-data
+  diagnostics, and held-instrument separation.
 
 ### Changed
 

@@ -26,11 +26,13 @@ def test_schemas_are_draft_2020_12_and_semantically_versioned() -> None:
         "experiment-run",
         "inspect-result",
         "indicator-result",
+        "instrument-universe",
         "portfolio-result",
         "log-record",
         "report-result",
         "report-list",
         "review-report",
+        "screening-report",
         "snapshot-result",
         "source-result",
     }

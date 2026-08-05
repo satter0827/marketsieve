@@ -10,11 +10,8 @@ design and release history, not in this file.
 
 ## 0.7.0 Screening Workbench
 
-1. Persist deterministic universe and screening objects with rebuildable latest references.
-2. Add explicit update, offline run, and show commands with configured acquisition and processing
-   budgets.
-3. Integrate screening candidates into the weekly report without changing held-instrument decisions.
-4. Prepare verified GitHub Release and PyPI Trusted Publishing paths for all public distributions.
+1. Integrate screening candidates into the weekly report without changing held-instrument decisions.
+2. Prepare verified GitHub Release and PyPI Trusted Publishing paths for all public distributions.
 
 ## Later outcomes
 

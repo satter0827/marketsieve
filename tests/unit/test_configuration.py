@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from marketsieve_cli.adapters.config import Configuration
+from marketsieve_cli.adapters.config import Configuration, ScreeningProfile
 
 
 def test_explicit_configuration_resolves_one_exact_profile(tmp_path: Path) -> None:
@@ -136,6 +136,49 @@ def test_weekly_routine_age_has_a_low_burden_default_and_bounds(tmp_path: Path) 
     path.write_text("[routines.weekly]\nmax_age_days = 15\n", encoding="utf-8")
     with pytest.raises(ValueError, match="1 through 14"):
         Configuration(path).weekly_max_age_days()
+
+
+def test_screening_configuration_is_explicit_and_bounded(tmp_path: Path) -> None:
+    path = tmp_path / "screening.toml"
+    path.write_text(
+        "[source_profiles.offline-us]\n"
+        'currency = "USD"\n'
+        'timezone = "America/New_York"\n'
+        "[source_profiles.offline-us.instrument_universe]\n"
+        'plugin = "csv"\n'
+        'operation = "import"\n'
+        "[source_profiles.offline-us.instrument_universe.settings]\n"
+        'path = "universe.csv"\n'
+        "[screening.us]\n"
+        'source_profile = "offline-us"\n'
+        "acquisition_limit = 80\n"
+        "display_limit = 10\n",
+        encoding="utf-8",
+    )
+    configuration = Configuration(path)
+
+    profile = configuration.source_profile("offline-us")
+    assert profile.binding("instrument_universe").operation == "import"
+    assert configuration.screening_profile("us") == ScreeningProfile("offline-us", 80, 100, 10)
+
+    path.write_text('[screening.us]\nsource_profile = "offline-us"\ndisplay_limit = 101\n')
+    with pytest.raises(ValueError, match="display_limit"):
+        Configuration(path).screening_profile("us")
+
+
+def test_universe_source_requires_explicit_operation(tmp_path: Path) -> None:
+    path = tmp_path / "source.toml"
+    path.write_text(
+        "[source_profiles.us]\n"
+        'currency = "USD"\n'
+        'timezone = "America/New_York"\n'
+        "[source_profiles.us.instrument_universe]\n"
+        'plugin = "sec"\n',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="operation is required"):
+        Configuration(path).source_profile("us")
 
     path.write_text("routines = 1\n", encoding="utf-8")
     with pytest.raises(ValueError, match="routines configuration"):

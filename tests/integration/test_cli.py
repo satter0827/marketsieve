@@ -207,6 +207,9 @@ def test_capabilities_match_click_commands_and_validate_schema() -> None:
         "report export",
         "report list",
         "report show",
+        "screen run",
+        "screen show",
+        "screen update",
         "snapshot list",
         "snapshot show",
         "snapshot verify",
@@ -315,6 +318,64 @@ def test_experiment_commands_project_service_documents(
     assert json.loads(results[1].stdout) == run_document
     assert json.loads(results[2].stdout) == comparison_document
     assert json.loads(results[3].stdout) == explanation_document
+
+
+def test_screen_commands_project_explicit_update_and_offline_results(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    universe_document: dict[str, object] = {
+        "schema": "instrument-universe/v1",
+        "universe_id": "a" * 64,
+    }
+    report_document: dict[str, object] = {
+        "schema": "screening-report/v1",
+        "report_id": "b" * 64,
+    }
+
+    def stub_update(config_path: Path | None, market: str) -> dict[str, object]:
+        assert config_path is None
+        assert market == "us"
+        return universe_document
+
+    def stub_run(config_path: Path | None, market: str, *, as_of: datetime) -> dict[str, object]:
+        assert config_path is None
+        assert market == "us"
+        assert as_of == datetime.fromisoformat("2026-08-02T12:00:00+00:00")
+        return report_document
+
+    def stub_read(
+        config_path: Path | None, report_id: str, *, market: str | None
+    ) -> dict[str, object]:
+        assert config_path is None
+        assert (report_id, market) == ("latest", "us")
+        return report_document
+
+    cli_module = importlib.import_module("marketsieve_cli.interfaces.cli.main")
+    monkeypatch.setattr(cli_module, "update_screening", stub_update)
+    monkeypatch.setattr(cli_module, "run_screening", stub_run)
+    monkeypatch.setattr(cli_module, "read_screening", stub_read)
+    runner = CliRunner()
+    results = (
+        runner.invoke(main, ["screen", "update", "us", "--output", "json"]),
+        runner.invoke(
+            main,
+            [
+                "screen",
+                "run",
+                "us",
+                "--as-of",
+                "2026-08-02T12:00:00+00:00",
+                "--output",
+                "json",
+            ],
+        ),
+        runner.invoke(main, ["screen", "show", "latest", "--market", "us", "--output", "json"]),
+    )
+
+    assert all(result.exit_code == 0 for result in results)
+    assert json.loads(results[0].stdout) == universe_document
+    assert json.loads(results[1].stdout) == report_document
+    assert json.loads(results[2].stdout) == report_document
 
 
 def test_experiment_commands_report_service_failures_without_tracebacks(
