@@ -97,7 +97,12 @@ def build_weekly_brief_service(config_path: Path | None = None) -> WeeklyBriefSe
     """Build the offline weekly Close Brief workflow."""
 
     configuration = Configuration.resolve(config_path)
-    return WeeklyBriefService(build_report_store(), configuration, create_report)
+    return WeeklyBriefService(
+        build_report_store(),
+        configuration,
+        create_report,
+        ScreeningStore(Path(".marketsieve/screening")),
+    )
 
 
 def build_experiment_service() -> ExperimentService:

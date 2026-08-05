@@ -10,8 +10,7 @@ design and release history, not in this file.
 
 ## 0.7.0 Screening Workbench
 
-1. Integrate screening candidates into the weekly report without changing held-instrument decisions.
-2. Prepare verified GitHub Release and PyPI Trusted Publishing paths for all public distributions.
+1. Prepare verified GitHub Release and PyPI Trusted Publishing paths for all public distributions.
 
 ## Later outcomes
 
