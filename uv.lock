@@ -10,6 +10,7 @@ members = [
     "marketsieve-extension-api",
     "marketsieve-source-alphavantage",
     "marketsieve-source-csv",
+    "marketsieve-source-fred",
     "marketsieve-source-jquants",
     "marketsieve-workspace",
 ]
@@ -748,11 +749,13 @@ all = [
     { name = "marketsieve-agent" },
     { name = "marketsieve-source-alphavantage" },
     { name = "marketsieve-source-csv" },
+    { name = "marketsieve-source-fred" },
     { name = "marketsieve-source-jquants" },
 ]
 all-sources = [
     { name = "marketsieve-source-alphavantage" },
     { name = "marketsieve-source-csv" },
+    { name = "marketsieve-source-fred" },
     { name = "marketsieve-source-jquants" },
 ]
 
@@ -767,6 +770,8 @@ requires-dist = [
     { name = "marketsieve-source-alphavantage", marker = "extra == 'all-sources'", editable = "packages/source-alphavantage" },
     { name = "marketsieve-source-csv", marker = "extra == 'all'", editable = "packages/source-csv" },
     { name = "marketsieve-source-csv", marker = "extra == 'all-sources'", editable = "packages/source-csv" },
+    { name = "marketsieve-source-fred", marker = "extra == 'all'", editable = "packages/source-fred" },
+    { name = "marketsieve-source-fred", marker = "extra == 'all-sources'", editable = "packages/source-fred" },
     { name = "marketsieve-source-jquants", marker = "extra == 'all'", editable = "packages/source-jquants" },
     { name = "marketsieve-source-jquants", marker = "extra == 'all-sources'", editable = "packages/source-jquants" },
     { name = "rich", specifier = ">=14,<15" },
@@ -815,6 +820,21 @@ requires-dist = [
 ]
 
 [[package]]
+name = "marketsieve-source-fred"
+version = "0.3.0"
+source = { editable = "packages/source-fred" }
+dependencies = [
+    { name = "marketsieve" },
+    { name = "marketsieve-extension-api" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "marketsieve", editable = "packages/core" },
+    { name = "marketsieve-extension-api", editable = "packages/extension-api" },
+]
+
+[[package]]
 name = "marketsieve-source-jquants"
 version = "0.3.0"
 source = { editable = "packages/source-jquants" }
@@ -838,6 +858,7 @@ dependencies = [
     { name = "marketsieve-cli" },
     { name = "marketsieve-source-alphavantage" },
     { name = "marketsieve-source-csv" },
+    { name = "marketsieve-source-fred" },
     { name = "marketsieve-source-jquants" },
 ]
 
@@ -861,6 +882,7 @@ requires-dist = [
     { name = "marketsieve-cli", editable = "packages/cli" },
     { name = "marketsieve-source-alphavantage", editable = "packages/source-alphavantage" },
     { name = "marketsieve-source-csv", editable = "packages/source-csv" },
+    { name = "marketsieve-source-fred", editable = "packages/source-fred" },
     { name = "marketsieve-source-jquants", editable = "packages/source-jquants" },
 ]
 

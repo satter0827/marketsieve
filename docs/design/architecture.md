@@ -13,7 +13,8 @@ The root workspace catalog declares every public distribution, and all entries s
 I/O-independent SDK. `marketsieve-extension-api` defines the implemented daily-bar import contract,
 `marketsieve-source-csv` implements local import, `marketsieve-source-jquants` implements explicit
 J-Quants API V2 acquisition, `marketsieve-source-alphavantage` implements explicit Alpha Vantage
-acquisition, and `marketsieve-cli` owns the executable application and immutable
+acquisition, `marketsieve-source-fred` implements explicit FRED economic-series acquisition, and
+`marketsieve-cli` owns the executable application and immutable
 snapshot store.
 The optional `marketsieve-agent` distribution implements the FakeListLLM fact-selection pipeline,
 deterministic safe fallback, and an injectable LM Studio OpenAI-compatible adapter. LM Studio uses
@@ -97,8 +98,8 @@ demonstration support. The SDK depends on `tzdata` so exchange timezones remain 
 installations without an operating-system timezone database.
 Analysis and synthetic modules do not reference one another; the application combines them through
 the daily-source contract.
-Sources that perform file or network I/O are separate distributions. CSV, J-Quants, and Alpha
-Vantage are working sources.
+Sources that perform file or network I/O are separate distributions. CSV, J-Quants, Alpha
+Vantage, and FRED are working sources.
 
 ## CSV acquisition and snapshot path
 
@@ -178,6 +179,21 @@ scale, provider field, and normalized concept. Earnings schedules without a prov
 timestamp use retrieval availability. Split events come only from the explicitly selected
 `SPLITS` endpoint and are never inferred from adjusted-price factors; an unselected or unavailable
 event kind remains missing.
+
+## FRED acquisition path
+
+`marketsieve-source-fred` implements only the official HTTPS
+`fred/series/observations` endpoint. One request fixes the series ID, observation range, historical
+knowledge date, raw-level transformation, ascending order, and page size. The same knowledge date
+is sent as both real-time bounds. Provider rows retain their inclusive real-time revision interval,
+and rows outside the requested observation or knowledge bounds are rejected.
+
+The adapter reads `FRED_API_KEY` from the invoking environment and never stores it in a request or
+result. Pagination must reach the provider's declared count without duplicates, gaps in progress,
+or a changing total. The provider's `.` marker becomes an explicit missing date. HTTP
+authentication, redirect, rate-limit, malformed-response, and safety-limit failures stop the exact
+request without retry, transformation, series substitution, or fallback. Tests inject the
+transport and do not contact FRED.
 
 Source registration, priority, fallback, authentication, retries, rate-limit handling, caching,
 and provider-symbol mapping belong to the application or adapter packages. A source must not:
@@ -276,9 +292,10 @@ reference. Reads reconstruct and validate SDK values and reject non-canonical or
 
 ## Remaining 0.4.0 Personal Close Brief target architecture
 
-The extension API adds portfolio-import and economic-series capabilities only with the working
-Rakuten and FRED packages. The CLI owns source selection and report orchestration in addition to its
-implemented content-addressed storage and Markdown presentation.
+The extension API adds portfolio import only with a working Rakuten package. Its implemented
+economic-series capability is provided by the independently installable FRED package. The CLI owns
+source selection and report orchestration in addition to its implemented content-addressed storage
+and Markdown presentation.
 
 Application use cases replace the growing snapshot-service orchestration surface. Acquisition,
 portfolio import, daily reporting, weekly reporting, report lookup, and model explanation have

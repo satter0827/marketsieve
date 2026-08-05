@@ -153,6 +153,13 @@ For Alpha Vantage financial statements, `--start` and `--end` filter the provide
 dividend, and split events are filtered by their provider-reported event dates. All values without
 a publication timestamp remain retrieval-bounded for knowledge-as-of use.
 
+### Implemented FRED extension
+
+The installed-source catalog reports FRED's `economic_series` capability without importing plugin
+code. Adapter users can load the explicitly selected entry point and call `EconomicSeriesFetcher`
+with a series ID, observation range, and knowledge date. The adapter has no CLI fetch route or
+implicit persistence yet; Personal Close Brief orchestration adds those application concerns.
+
 ## Agent explanation
 
 ```shell

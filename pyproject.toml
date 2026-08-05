@@ -8,6 +8,7 @@ dependencies = [
     "marketsieve-source-csv",
     "marketsieve-source-jquants",
     "marketsieve-source-alphavantage",
+    "marketsieve-source-fred",
 ]
 
 [dependency-groups]
@@ -37,6 +38,7 @@ members = [
     "packages/source-csv",
     "packages/source-jquants",
     "packages/source-alphavantage",
+    "packages/source-fred",
 ]
 
 [tool.uv.sources]
@@ -45,6 +47,7 @@ marketsieve-cli = { workspace = true }
 marketsieve-source-csv = { workspace = true }
 marketsieve-source-jquants = { workspace = true }
 marketsieve-source-alphavantage = { workspace = true }
+marketsieve-source-fred = { workspace = true }
 
 [[tool.marketsieve.public-packages]]
 distribution = "marketsieve"
@@ -88,6 +91,12 @@ path = "packages/source-alphavantage"
 module = "marketsieve_source_alphavantage"
 role = "adapter"
 
+[[tool.marketsieve.public-packages]]
+distribution = "marketsieve-source-fred"
+path = "packages/source-fred"
+module = "marketsieve_source_fred"
+role = "adapter"
+
 [tool.pytest.ini_options]
 addopts = "-q --strict-config --strict-markers"
 cache_dir = ".marketsieve/cache/pytest"
@@ -105,6 +114,7 @@ src = [
     "packages/source-csv/src",
     "packages/source-jquants/src",
     "packages/source-alphavantage/src",
+    "packages/source-fred/src",
     "scripts",
     "tests",
 ]
@@ -126,6 +136,7 @@ files = [
     "packages/source-csv/src",
     "packages/source-jquants/src",
     "packages/source-alphavantage/src",
+    "packages/source-fred/src",
     "scripts",
     "tests",
 ]
@@ -136,7 +147,7 @@ warn_unused_ignores = true
 [tool.coverage.run]
 branch = true
 data_file = ".marketsieve/coverage/data"
-source = ["marketsieve", "marketsieve_agent", "marketsieve_cli", "marketsieve_extension_api", "marketsieve_source_csv", "marketsieve_source_jquants", "marketsieve_source_alphavantage"]
+source = ["marketsieve", "marketsieve_agent", "marketsieve_cli", "marketsieve_extension_api", "marketsieve_source_csv", "marketsieve_source_jquants", "marketsieve_source_alphavantage", "marketsieve_source_fred"]
 omit = ["*/marketsieve_cli/__main__.py"]
 
 [tool.coverage.report]
@@ -148,7 +159,7 @@ skip_covered = true
 output = ".marketsieve/coverage/coverage.json"
 
 [tool.importlinter]
-root_packages = ["marketsieve", "marketsieve_agent", "marketsieve_cli", "marketsieve_extension_api", "marketsieve_source_csv", "marketsieve_source_jquants", "marketsieve_source_alphavantage"]
+root_packages = ["marketsieve", "marketsieve_agent", "marketsieve_cli", "marketsieve_extension_api", "marketsieve_source_csv", "marketsieve_source_jquants", "marketsieve_source_alphavantage", "marketsieve_source_fred"]
 
 [[tool.importlinter.contracts]]
 name = "Application dependencies point inward"
@@ -162,6 +173,7 @@ layers = [
     "marketsieve_source_csv",
     "marketsieve_source_jquants",
     "marketsieve_source_alphavantage",
+    "marketsieve_source_fred",
     "marketsieve_extension_api",
     "marketsieve",
 ]
@@ -183,7 +195,7 @@ forbidden_modules = ["marketsieve_cli"]
 name = "Extension API is independent from implementations"
 type = "forbidden"
 source_modules = ["marketsieve_extension_api"]
-forbidden_modules = ["marketsieve_cli", "marketsieve_source_csv", "marketsieve_source_jquants", "marketsieve_source_alphavantage"]
+forbidden_modules = ["marketsieve_cli", "marketsieve_source_csv", "marketsieve_source_jquants", "marketsieve_source_alphavantage", "marketsieve_source_fred"]
 
 [[tool.importlinter.contracts]]
 name = "CSV source does not depend on the CLI"
@@ -201,4 +213,10 @@ forbidden_modules = ["marketsieve_cli"]
 name = "Alpha Vantage source does not depend on the CLI"
 type = "forbidden"
 source_modules = ["marketsieve_source_alphavantage"]
+forbidden_modules = ["marketsieve_cli"]
+
+[[tool.importlinter.contracts]]
+name = "FRED source does not depend on the CLI"
+type = "forbidden"
+source_modules = ["marketsieve_source_fred"]
 forbidden_modules = ["marketsieve_cli"]

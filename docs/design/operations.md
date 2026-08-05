@@ -5,7 +5,8 @@
 MarketSieve currently supports local development, public distribution builds, offline analysis,
 immutable CSV snapshots, explicit J-Quants price, financial-summary, dividend, and earnings
 acquisition, and explicit Alpha Vantage price, profile, financial-statement, earnings, dividend,
-and split acquisition on Python 3.12 through 3.14. Python 3.13 is the primary development version.
+and split acquisition. It also builds and discovers an independently installable FRED
+economic-series adapter on Python 3.12 through 3.14. Python 3.13 is the primary development version.
 
 ```shell
 make sync
@@ -133,6 +134,15 @@ identifies raw compact daily data as available to free and premium keys, raw ful
 premium, and daily adjusted as premium. The adapter records the configured plan rather than
 probing or downgrading it. Raw responses are hashed but not persisted. Provider documentation and
 terms must be rechecked before a live release test or any change to raw-storage policy.
+
+FRED uses only `https://api.stlouisfed.org/fred/series/observations` and reads `FRED_API_KEY` from
+the invoking environment. The official contract reviewed on 2026-08-06 requires a 32-character
+lowercase alphanumeric API key, supports explicit real-time and observation bounds, permits up to
+100,000 observations per page, and reports throttling with HTTP 429. The adapter sends one exact
+historical knowledge date as both real-time bounds and uses `output_type=1`, `units=lin`, and
+ascending observation order. It neither retries rate limits nor stores raw responses. The
+[official endpoint contract](https://fred.stlouisfed.org/docs/api/fred/series_observations.html)
+is rechecked before a release or request-policy change.
 
 Content-addressed objects are written to a temporary sibling directory, verified, and atomically
 renamed. Raw responses are retained only when the adapter's approved terms policy permits local
