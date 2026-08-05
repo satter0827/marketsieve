@@ -26,11 +26,17 @@ def test_instrument_requires_explicit_exchange_identity_and_timezone() -> None:
     )
     assert instrument.exchange_timezone.key == "Asia/Tokyo"
 
-    for symbol in ("7203.T", "msft", ""):
+    for symbol in (".AAPL", "AAPL/US", "msft", ""):
         with pytest.raises(ValueError, match="symbol"):
             Instrument.create(
                 symbol=symbol, mic="XTKS", currency="JPY", exchange_timezone="Asia/Tokyo"
             )
+    assert (
+        Instrument.create(
+            symbol="BRK.B", mic="XNYS", currency="USD", exchange_timezone="America/New_York"
+        ).symbol
+        == "BRK.B"
+    )
     with pytest.raises(ValueError, match="timezone"):
         Instrument.create(
             symbol="7203", mic="XTKS", currency="JPY", exchange_timezone="Local/Unknown"

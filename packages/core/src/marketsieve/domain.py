@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-SYMBOL = re.compile(r"^[A-Z0-9]+$")
+SYMBOL = re.compile(r"^[A-Z0-9][A-Z0-9.-]*$")
 MIC = re.compile(r"^[A-Z0-9]{4}$")
 CURRENCY = re.compile(r"^[A-Z]{3}$")
 
@@ -32,7 +32,10 @@ class Instrument:
         if not all(isinstance(value, str) for value in (self.symbol, self.mic, self.currency)):
             raise TypeError("symbol, mic, and currency must be strings")
         if SYMBOL.fullmatch(self.symbol) is None:
-            raise ValueError("symbol must be uppercase alphanumeric without a market suffix")
+            raise ValueError(
+                "symbol must start with an uppercase letter or digit and contain only "
+                "uppercase letters, digits, dots, or hyphens"
+            )
         if MIC.fullmatch(self.mic) is None:
             raise ValueError("mic must be a four-character ISO 10383 code")
         if CURRENCY.fullmatch(self.currency) is None:

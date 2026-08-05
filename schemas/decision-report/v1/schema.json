@@ -60,7 +60,7 @@
       "additionalProperties": false,
       "required": ["symbol", "mic", "currency", "timezone", "type"],
       "properties": {
-        "symbol": { "type": "string", "pattern": "^[A-Z0-9]+$" },
+        "symbol": { "type": "string", "pattern": "^[A-Z0-9][A-Z0-9.-]*$" },
         "mic": { "type": "string", "pattern": "^[A-Z0-9]{4}$" },
         "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
         "timezone": { "type": "string", "minLength": 1 },

@@ -13,7 +13,9 @@ from marketsieve_extension_api import (
     DailyBarFetchRequest,
     DailyBarSourceConfiguration,
     FactFetchRequest,
+    InstrumentUniverseFetcher,
     SourceConfiguration,
+    UniverseRequest,
 )
 from marketsieve_source_jquants.source import HttpResponse, JQuantsSource, _NoRedirect
 
@@ -82,6 +84,71 @@ def profile() -> dict[str, object]:
             }
         ]
     }
+
+
+def test_fetches_bounded_japanese_instrument_universe() -> None:
+    provider = JQuantsSource(
+        transport=FakeTransport(
+            [response({"data": [{"Code": "94320"}, {"Code": "72030"}, {"Code": "bad"}]})]
+        ),
+        environ={"JQUANTS_API_KEY": "example"},
+        clock=lambda: datetime(2026, 8, 1, tzinfo=UTC),
+    )
+
+    imported = provider.fetch_universe(UniverseRequest("japan", "jp", 1, {}))
+
+    assert isinstance(provider, InstrumentUniverseFetcher)
+    assert [item.symbol for item in imported.instruments] == ["7203"]
+    assert imported.provider_total == 2
+    assert imported.truncated is True
+    assert imported.diagnostics == ("unsupported_rows_skipped:1", "limit_reached:1")
+
+
+@pytest.mark.parametrize(
+    ("universe_request", "environment", "message"),
+    (
+        (UniverseRequest("japan", "us", 1, {}), {"JQUANTS_API_KEY": "example"}, "jp market"),
+        (UniverseRequest("japan", "jp", 1, {}), {}, "missing credential"),
+    ),
+)
+def test_jquants_universe_rejects_wrong_market_or_credential(
+    universe_request: UniverseRequest, environment: dict[str, str], message: str
+) -> None:
+    provider = JQuantsSource(transport=FakeTransport([]), environ=environment)
+
+    with pytest.raises((ValueError, RuntimeError), match=message):
+        provider.fetch_universe(universe_request)
+
+
+def test_jquants_universe_rejects_malformed_credential_without_disclosure() -> None:
+    malformed_value = "example\ninvalid"
+    provider = JQuantsSource(
+        transport=FakeTransport([]), environ={"JQUANTS_API_KEY": malformed_value}
+    )
+
+    with pytest.raises(RuntimeError, match="invalid header") as raised:
+        provider.fetch_universe(UniverseRequest("japan", "jp", 1, {}))
+
+    assert malformed_value not in str(raised.value)
+
+
+@pytest.mark.parametrize(
+    ("rows", "message"),
+    (
+        ([{"Code": "72030"}, {"Code": "72030"}], "duplicate"),
+        ([{"Code": "bad"}], "no supported"),
+    ),
+)
+def test_jquants_universe_rejects_ambiguous_or_empty_results(
+    rows: list[dict[str, str]], message: str
+) -> None:
+    provider = JQuantsSource(
+        transport=FakeTransport([response({"data": rows})]),
+        environ={"JQUANTS_API_KEY": "example"},
+    )
+
+    with pytest.raises(ValueError, match=message):
+        provider.fetch_universe(UniverseRequest("japan", "jp", 100, {}))
 
 
 def bars() -> list[dict[str, object]]:

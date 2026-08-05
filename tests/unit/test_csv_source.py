@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from marketsieve_extension_api import AvailabilityBasis
-from marketsieve_source_csv import CsvDailyBarImporter
+from marketsieve_extension_api import AvailabilityBasis, InstrumentUniverseImporter, UniverseRequest
+from marketsieve_source_csv import CsvDailyBarImporter, CsvInstrumentUniverseImporter
 
 
 def write_bundle(path: Path, *, basis: str = "published") -> Path:
@@ -74,3 +74,81 @@ def test_csv_bundle_rejects_implicit_or_unsafe_metadata(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="without path components"):
         CsvDailyBarImporter().import_bundle(bundle)
+
+
+def test_csv_universe_is_strict_sorted_bounded_and_content_identified(tmp_path: Path) -> None:
+    path = tmp_path / "us.csv"
+    path.write_text(
+        "symbol,mic,currency,timezone,as_of\n"
+        "MSFT,XNAS,USD,America/New_York,2026-08-01T12:00:00+00:00\n"
+        "BRK.B,XNYS,USD,America/New_York,2026-08-01T12:00:00+00:00\n",
+        encoding="utf-8",
+    )
+    importer = CsvInstrumentUniverseImporter()
+    request = UniverseRequest("offline-us", "us", 1, {})
+
+    imported = importer.import_universe(path, request)
+
+    assert isinstance(importer, InstrumentUniverseImporter)
+    assert [(item.mic, item.symbol) for item in imported.instruments] == [("XNAS", "MSFT")]
+    assert imported.provider_total == 2
+    assert imported.truncated is True
+    assert imported.diagnostics == ("limit_reached:1",)
+    assert len(imported.source_hash) == 64
+
+
+def test_csv_universe_rejects_duplicates_and_mixed_timestamps(tmp_path: Path) -> None:
+    path = tmp_path / "bad.csv"
+    path.write_text(
+        "symbol,mic,currency,timezone,as_of\n"
+        "MSFT,XNAS,USD,America/New_York,2026-08-01T12:00:00+00:00\n"
+        "MSFT,XNAS,USD,America/New_York,2026-08-02T12:00:00+00:00\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="CSV line 3"):
+        CsvInstrumentUniverseImporter().import_universe(
+            path, UniverseRequest("offline-us", "us", 100, {})
+        )
+
+
+@pytest.mark.parametrize(
+    ("contents", "message"),
+    (
+        (b"\xff", "UTF-8"),
+        (b"symbol,mic\nMSFT,XNAS\n", "columns"),
+        (b"symbol,mic,currency,timezone,as_of\n", "at least one"),
+        (
+            b"symbol,mic,currency,timezone,as_of\n"
+            b"msft,XNAS,USD,America/New_York,2026-08-01T12:00:00+00:00\n",
+            "CSV line 2",
+        ),
+    ),
+)
+def test_csv_universe_rejects_malformed_files(
+    tmp_path: Path, contents: bytes, message: str
+) -> None:
+    path = tmp_path / "bad.csv"
+    path.write_bytes(contents)
+
+    with pytest.raises(ValueError, match=message):
+        CsvInstrumentUniverseImporter().import_universe(
+            path, UniverseRequest("offline-us", "us", 100, {})
+        )
+
+
+def test_csv_universe_rejects_missing_path_and_duplicate_identity(tmp_path: Path) -> None:
+    importer = CsvInstrumentUniverseImporter()
+    request = UniverseRequest("offline-us", "us", 100, {})
+    with pytest.raises(ValueError, match="regular file"):
+        importer.import_universe(tmp_path / "missing.csv", request)
+
+    path = tmp_path / "duplicate.csv"
+    path.write_text(
+        "symbol,mic,currency,timezone,as_of\n"
+        "MSFT,XNAS,USD,America/New_York,2026-08-01T12:00:00+00:00\n"
+        "MSFT,XNAS,USD,America/New_York,2026-08-01T12:00:00+00:00\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="duplicate"):
+        importer.import_universe(path, request)

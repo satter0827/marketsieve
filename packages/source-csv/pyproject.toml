@@ -20,6 +20,9 @@ csv = "marketsieve_source_csv:CsvDailyBarImporter"
 [project.entry-points."marketsieve.sources.daily_bars.importers"]
 csv = "marketsieve_source_csv:CsvDailyBarImporter"
 
+[project.entry-points."marketsieve.sources.instrument_universe.importers"]
+csv = "marketsieve_source_csv:CsvInstrumentUniverseImporter"
+
 [build-system]
 requires = ["hatchling>=1.27,<2"]
 build-backend = "hatchling.build"

@@ -8,8 +8,9 @@ public types live below `marketsieve.domain`, `marketsieve.data`, `marketsieve.a
 
 An equity instrument is identified by a provider-independent symbol together with an ISO 10383
 Market Identifier Code. A symbol without a market is ambiguous and is rejected at a public
-boundary. Currency and exchange timezone are explicit properties; they are not inferred from the
-symbol text.
+boundary. Symbols start with an uppercase letter or digit and may contain uppercase letters,
+digits, dots, and hyphens so U.S. class-share identifiers remain representable. Currency and
+exchange timezone are explicit properties; they are not inferred from symbol text.
 
 Provider symbols are adapter data. Mapping them to an exchange-qualified instrument is explicit and
 must not alter the domain identity.

@@ -24,6 +24,14 @@ will follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Offline Strategy Lab run, show, and compare commands with content-addressed local artifacts.
 - Grounded experiment explanations record prompt, model settings, raw output, validation, and a
   deterministic rendering without changing stored metrics or decisions.
+- Typed Japanese and U.S. instrument-universe capabilities with working CSV, J-Quants, and SEC
+  implementations, explicit limits, content identity, and visible truncation diagnostics.
+- A deterministic balanced candidate screen with eligible actions, transparent evidence counts,
+  stable ordering, and no arbitrary expression or opaque score.
+
+### Changed
+
+- Equity symbols now preserve uppercase dots and hyphens needed by U.S. class-share identifiers.
 
 ## [0.3.0] - 2026-08-05
 

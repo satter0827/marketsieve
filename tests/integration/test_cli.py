@@ -487,7 +487,12 @@ def test_csv_import_snapshot_and_price_inspect_are_one_offline_path(tmp_path: Pa
     csv_source = next(item for item in source_document["sources"] if item["name"] == "csv")
     assert csv_source["loaded"] is False
     jquants = next(item for item in source_document["sources"] if item["name"] == "jquants")
-    assert jquants["data_kinds"] == ["daily_bars", "financials", "events"]
+    assert jquants["data_kinds"] == [
+        "daily_bars",
+        "financials",
+        "events",
+        "instrument_universe",
+    ]
     alphavantage = next(
         item for item in source_document["sources"] if item["name"] == "alphavantage"
     )
@@ -495,7 +500,7 @@ def test_csv_import_snapshot_and_price_inspect_are_one_offline_path(tmp_path: Pa
     fred = next(item for item in source_document["sources"] if item["name"] == "fred")
     assert fred["data_kinds"] == ["economic_series"]
     sec = next(item for item in source_document["sources"] if item["name"] == "sec")
-    assert sec["data_kinds"] == ["financials"]
+    assert sec["data_kinds"] == ["financials", "instrument_universe"]
     edinet = next(item for item in source_document["sources"] if item["name"] == "edinet")
     assert edinet["data_kinds"] == ["financials"]
     validate("source-result", import_document)

@@ -10,11 +10,13 @@ network clients, databases, delivery providers, or LLM providers.
 
 The root workspace catalog declares every public distribution, and all entries share one version.
 `marketsieve` contains the I/O-independent SDK, including knowledge-time-correct financial-history
-calculations. `marketsieve-extension-api` defines the implemented daily-bar import contract,
-`marketsieve-source-csv` implements local import, `marketsieve-source-jquants` implements explicit
-J-Quants API V2 acquisition, `marketsieve-source-alphavantage` implements explicit Alpha Vantage
-acquisition, `marketsieve-source-fred` implements explicit FRED economic-series acquisition,
-`marketsieve-source-sec` implements explicit SEC filing and company-fact acquisition, and
+calculations. `marketsieve-extension-api` defines the implemented data-kind capabilities,
+`marketsieve-source-csv` implements local daily-bar and instrument-universe import,
+`marketsieve-source-jquants` implements explicit J-Quants API V2 acquisition,
+`marketsieve-source-alphavantage` implements explicit Alpha Vantage acquisition,
+`marketsieve-source-fred` implements explicit FRED economic-series acquisition,
+`marketsieve-source-sec` implements explicit SEC filing, company-fact, and instrument-universe
+acquisition, and
 `marketsieve-source-edinet` implements explicit EDINET filing and XBRL-derived acquisition.
 `marketsieve-cli` owns the executable application and immutable
 snapshot store.
@@ -105,6 +107,11 @@ the daily-source contract.
 Sources that perform file or network I/O are separate distributions. CSV, J-Quants, Alpha
 Vantage, FRED, SEC, and EDINET are working sources.
 
+Instrument-universe import and fetch use a separate capability from price and financial data. Every
+request names `jp` or `us`, one source profile, a positive result limit, and provider settings. The
+normalized result retains retrieval time, content digest, supported provider count, truncation, and
+diagnostics. It never guesses a market or silently changes the requested limit.
+
 ## CSV acquisition and snapshot path
 
 The implemented offline acquisition path is:
@@ -159,6 +166,11 @@ Provider profile values are stored beside normalized bars with their observation
 responses do not expose a per-record publication timestamp, they use retrieval availability and
 cannot enter an earlier knowledge-as-of analysis. Raw responses are never retained; only response
 digests enter snapshot identity.
+
+The same adapter fetches the Japanese instrument universe from `/equities/master`. Provider codes
+must use the supported five-digit form ending in zero before they become four-digit XTKS
+identifiers. Unsupported rows, duplicate identifiers, configured limits, and pagination remain
+explicit in the normalized result.
 
 ## Alpha Vantage acquisition path
 
@@ -219,6 +231,12 @@ unambiguous amendment link when the original filing is present in the same resul
 US-GAAP and IFRS company facts retain taxonomy tags, units, periods, values, and accession links.
 The adapter maps only named standard concepts, rejects conflicting duplicates, and never derives
 cash flow or other values inside the source.
+
+The SEC adapter also reads the official `company_tickers_exchange.json` association file for an
+explicit U.S. universe request. It maps only Nasdaq, NYSE, and NYSE American rows to their MICs,
+preserves class-share dots in symbols, reports unsupported rows, and applies the requested result
+limit after a stable MIC-and-symbol sort. The association file is discovery input rather than an
+assertion that every row is complete or current.
 
 ## EDINET acquisition path
 
@@ -391,3 +409,15 @@ and the pure replay function. The replay engine accepts already validated daily 
 filesystem, configuration, provider, model, or network dependency. Application code owns TOML
 input, snapshot resolution, content-addressed run storage, projections, and optional model
 explanations.
+
+## Screening domain
+
+The SDK owns an immutable, content-addressed instrument universe and one typed balanced candidate
+screen. The screen accepts decisions already calculated by a decision policy; it performs no
+acquisition, indicator calculation, arbitrary expression evaluation, or holding reclassification.
+Only non-held `buy_candidate`, `wait_for_pullback`, and `wait_for_earnings` decisions are eligible.
+
+Candidate order is action priority, confidence priority, descending supporting-evidence count,
+then MIC and symbol. Supporting evidence count is exposed directly and is not a hidden aggregate
+score. Processing and display limits are positive explicit inputs. Reaching either limit produces a
+diagnostic, and a decision outside the processed universe is rejected.

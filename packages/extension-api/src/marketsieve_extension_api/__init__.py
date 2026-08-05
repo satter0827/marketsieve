@@ -31,6 +31,12 @@ from marketsieve_extension_api.fundamentals import (
     Revision,
     SourceConfiguration,
 )
+from marketsieve_extension_api.universe import (
+    ImportedInstrumentUniverse,
+    InstrumentUniverseFetcher,
+    InstrumentUniverseImporter,
+    UniverseRequest,
+)
 
 __all__ = [
     "AvailabilityBasis",
@@ -54,8 +60,12 @@ __all__ = [
     "ImportedEconomicSeries",
     "ImportedEvents",
     "ImportedFinancials",
+    "ImportedInstrumentUniverse",
     "InstrumentProfile",
+    "InstrumentUniverseFetcher",
+    "InstrumentUniverseImporter",
     "Revision",
     "SourceConfiguration",
     "SourceDiagnostic",
+    "UniverseRequest",
 ]
