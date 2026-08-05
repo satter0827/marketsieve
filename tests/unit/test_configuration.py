@@ -99,6 +99,29 @@ def test_agent_provider_rejects_secret_or_unknown_configuration(tmp_path: Path) 
         Configuration(path).agent_provider("openai")
 
 
+def test_daily_routine_configuration_is_explicit_and_bounded(tmp_path: Path) -> None:
+    path = tmp_path / "routine.toml"
+    path.write_text(
+        '[routines.jp]\nsource_profile = "japan"\nlookback_days = 500\n'
+        '[routines.us]\nsource_profile = "united-states"\n',
+        encoding="utf-8",
+    )
+    configuration = Configuration(path)
+
+    assert configuration.daily_profile("jp") == ("japan", 500)
+    assert configuration.daily_profile("us") == ("united-states", 400)
+
+    invalid = tmp_path / "invalid-routine.toml"
+    invalid.write_text('[routines.jp]\nsource_profile = "japan"\nlookback_days = 59\n')
+    with pytest.raises(ValueError, match="60 through 2000"):
+        Configuration(invalid).daily_profile("jp")
+
+
+def test_daily_routine_configuration_never_guesses_a_profile() -> None:
+    with pytest.raises(LookupError, match="not configured"):
+        Configuration(None).daily_profile("jp")
+
+
 def test_explicit_configuration_rejects_missing_invalid_and_secret_like_shapes(
     tmp_path: Path,
 ) -> None:

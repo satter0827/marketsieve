@@ -43,6 +43,9 @@ class AgentProvider:
     endpoint: str | None = None
 
 
+DEFAULT_DAILY_LOOKBACK_DAYS = 400
+
+
 class Configuration:
     """Load source profiles without environment-driven setting overrides."""
 
@@ -132,3 +135,28 @@ class Configuration:
         if unknown:
             raise ValueError(f"agent provider {name!r} contains unsupported settings")
         return AgentProvider(name=name, model=value["model"], endpoint=endpoint)
+
+    def daily_profile(self, market: str) -> tuple[str, int]:
+        """Return the explicit source profile and bounded history for one market."""
+
+        if market not in {"jp", "us"}:
+            raise ValueError("market must be jp or us")
+        routines = self._document().get("routines")
+        if not isinstance(routines, dict):
+            raise LookupError(
+                "daily routines are not configured; add [routines.jp] and [routines.us]"
+            )
+        value = routines.get(market)
+        if not isinstance(value, dict) or not isinstance(value.get("source_profile"), str):
+            raise LookupError(f"daily routine {market!r} must declare source_profile")
+        unknown = set(value) - {"source_profile", "lookback_days"}
+        if unknown:
+            raise ValueError(f"daily routine {market!r} contains unsupported settings")
+        lookback = value.get("lookback_days", DEFAULT_DAILY_LOOKBACK_DAYS)
+        if (
+            not isinstance(lookback, int)
+            or isinstance(lookback, bool)
+            or not 60 <= lookback <= 2000
+        ):
+            raise ValueError("daily lookback_days must be an integer from 60 through 2000")
+        return value["source_profile"], lookback

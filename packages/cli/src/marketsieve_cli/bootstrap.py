@@ -17,9 +17,15 @@ from marketsieve_cli.adapters.portfolios import (
     import_canonical_csv,
     portfolio_document,
 )
-from marketsieve_cli.adapters.reports import ReportStore, render_markdown, report_document
+from marketsieve_cli.adapters.reports import (
+    ReportStore,
+    create_report,
+    render_markdown,
+    report_document,
+)
 from marketsieve_cli.adapters.snapshots import SnapshotStore
 from marketsieve_cli.application.diagnostics import DiagnosticsService
+from marketsieve_cli.application.routines import DailyBriefService
 from marketsieve_cli.application.snapshots import SnapshotService
 from marketsieve_cli.observability import configure_logger
 
@@ -65,6 +71,19 @@ def build_portfolio_store() -> PortfolioStore:
     """Build the canonical local portfolio repository."""
 
     return PortfolioStore(Path(".marketsieve/portfolio"))
+
+
+def build_daily_brief_service(config_path: Path | None = None) -> DailyBriefService:
+    """Build the one-command close-analysis workflow."""
+
+    configuration = Configuration.resolve(config_path)
+    return DailyBriefService(
+        build_portfolio_store(),
+        build_snapshot_service(config_path),
+        build_report_store(),
+        configuration,
+        create_report,
+    )
 
 
 def import_portfolio(path: Path, *, broker: str, as_of: str) -> dict[str, object]:

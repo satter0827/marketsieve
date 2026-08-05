@@ -467,3 +467,10 @@ class SnapshotService:
 
     def report(self, instrument: str, profile: str) -> dict[str, Any]:
         return report_document(self.inspect(instrument, profile))
+
+    def bars(self, profile: str, instrument: str) -> tuple[DailyBar, ...]:
+        """Read verified daily bars for a routine after explicit acquisition."""
+
+        stored = self._repository.resolve(profile, instrument)
+        self._repository.verify(stored.object_id)
+        return self._repository.daily_bars(stored.object_id)
