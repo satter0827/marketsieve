@@ -5,8 +5,8 @@
 MarketSieve currently supports local development, public distribution builds, offline analysis,
 immutable CSV snapshots, explicit J-Quants price, financial-summary, dividend, and earnings
 acquisition, and explicit Alpha Vantage price, profile, financial-statement, earnings, dividend,
-and split acquisition. It also builds and discovers an independently installable FRED
-economic-series adapter on Python 3.12 through 3.14. Python 3.13 is the primary development version.
+and split acquisition. It also builds and discovers independently installable FRED economic-series
+and SEC filing adapters on Python 3.12 through 3.14. Python 3.13 is the primary development version.
 
 ```shell
 make sync
@@ -143,6 +143,17 @@ historical knowledge date as both real-time bounds and uses `output_type=1`, `un
 ascending observation order. It neither retries rate limits nor stores raw responses. The
 [official endpoint contract](https://fred.stlouisfed.org/docs/api/fred/series_observations.html)
 is rechecked before a release or request-policy change.
+
+SEC uses only `https://data.sec.gov/submissions` and
+`https://data.sec.gov/api/xbrl/companyfacts`. It requires no API key. The profile declares a
+ten-digit CIK, while `SEC_USER_AGENT` supplies the organization and contact email required by SEC
+fair-access policy. The adapter stays below the published maximum of ten requests per second by
+making sequential bounded requests and leaves retry scheduling to the application. Official API
+and fair-access documentation were reviewed on 2026-08-06 and are rechecked before a release or
+request-policy change. See the
+[official EDGAR data API](https://www.sec.gov/search-filings/edgar-application-programming-interfaces)
+and the
+[fair-access guidance](https://www.sec.gov/search-filings/edgar-search-assistance/accessing-edgar-data).
 
 Content-addressed objects are written to a temporary sibling directory, verified, and atomically
 renamed. Raw responses are retained only when the adapter's approved terms policy permits local

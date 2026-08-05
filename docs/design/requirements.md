@@ -15,8 +15,8 @@ notifications.
 - **FND-01:** `marketsieve` is a typed, I/O-independent public SDK.
 - **FND-02:** Market identity, time, daily bars, financial facts, events, economic series,
   indicators, provenance, and evidence use deterministic public semantics.
-- **FND-03:** CSV, J-Quants, Alpha Vantage, and FRED are explicit acquisition paths with no implicit
-  fallback or provider merging.
+- **FND-03:** CSV, J-Quants, Alpha Vantage, FRED, and SEC are explicit acquisition paths with no
+  implicit fallback or provider merging.
 - **FND-04:** Verified immutable snapshots support offline inspection, analysis, comparison, and
   reporting.
 - **FND-05:** The optional agent can explain only an immutable decision-report fact catalog through

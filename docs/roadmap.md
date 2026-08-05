@@ -11,10 +11,9 @@ design and release history, not in this file.
 
 ## 0.5.0 Official Fundamentals
 
-1. Add SEC submission and XBRL acquisition with publication-time semantics.
-2. Add EDINET document and XBRL acquisition with the same normalized financial contract.
-3. Add knowledge-as-of financial trends and company-history valuation comparisons.
-4. Integrate filing changes into daily and weekly reports without coupling reports to a provider.
+1. Add EDINET document and XBRL acquisition with the same normalized financial contract.
+2. Add knowledge-as-of financial trends and company-history valuation comparisons.
+3. Integrate filing changes into daily and weekly reports without coupling reports to a provider.
 
 ## 0.6.0 Strategy Lab
 

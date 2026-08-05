@@ -160,6 +160,14 @@ code. Adapter users can load the explicitly selected entry point and call `Econo
 with a series ID, observation range, and knowledge date. The adapter has no CLI fetch route or
 implicit persistence yet; Personal Close Brief orchestration adds those application concerns.
 
+### Implemented SEC commands
+
+The same `source doctor` and `source fetch --kind financials` commands accept an SEC profile for
+XNAS and XNYS instruments. The profile supplies a ten-digit `cik`; `SEC_USER_AGENT` supplies the
+organization and contact email required for network access. `doctor` validates both without making
+a request. `--start` and `--end` select filing dates, and the stored facts retain the exact SEC
+acceptance time for knowledge-as-of use.
+
 ## Agent explanation
 
 ```shell
