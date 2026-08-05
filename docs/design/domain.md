@@ -134,3 +134,33 @@ independent evidence-bearing results. A section may be complete, partial, unavai
 Missing facts include machine-readable reasons. Comparison uses a common knowledge-as-of instant and
 does not rank incompatible periods, accounting bases, consolidation bases, or absolute values in
 different currencies.
+
+## 0.4.0 portfolio and decision target
+
+A portfolio snapshot is an immutable, brokerage-neutral observation of holdings and watch items at
+one aware instant. A holding identifies an instrument, quantity, average acquisition price,
+currency, and account type. Optional personal context contains only explicit policy inputs such as
+a position-weight limit. It does not contain credentials, account numbers, orders, or transactions.
+
+A market session is `jp_close`, `us_close`, or `weekly`. It identifies the report scope and target
+as-of instant; it does not infer that an exchange was open. Acquisition evidence remains the
+authority for observation availability.
+
+A decision is a policy result, not an order. Held instruments use `keep`, `watch`, `reduce_review`,
+`sell_review`, or `indeterminate`. Unheld instruments use `buy_candidate`, `wait_for_pullback`,
+`wait_for_earnings`, `pass`, or `indeterminate`. Human projections translate these stable values.
+
+Each decision records confidence, supporting evidence, opposing evidence, invalidation conditions,
+the next review action, policy identity, policy settings, and input evidence. Missing essential
+price history produces an indeterminate decision. Missing non-essential facts lower confidence and
+remain visible.
+
+The balanced medium-term policy uses SMA 20 and 60, RSI 14, MACD 12/26/9, ATR 14, 20-day return,
+and 252-day maximum drawdown. Its defaults are RSI 70/30, ATR-to-close warning at 4 percent,
+drawdown warning at -20 percent, earnings wait at seven calendar days, and position concentration
+warning above 20 percent. Policy settings are explicit values included in evidence identity.
+
+A decision report is an immutable composition of one market session, one portfolio snapshot, the
+selected policy, per-instrument decisions, input diagnostics, and previous-report changes. Its
+identity is a digest of canonical semantic content. Locale-specific headings and terminal styling
+are projections and do not affect identity.

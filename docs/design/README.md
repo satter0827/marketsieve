@@ -1,7 +1,8 @@
 # Design
 
-This directory is the normative system-level design for implemented `0.3.0` behavior. It does not
-make later roadmap items available or public.
+This directory is the normative system-level design for implemented `0.3.0` behavior and the
+approved `0.4.0` Personal Close Brief target. A target is not public behavior until its code,
+schemas, tests, and audience documentation ship together.
 
 ## Documents
 
