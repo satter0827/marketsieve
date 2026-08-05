@@ -44,6 +44,7 @@ class AgentProvider:
 
 
 DEFAULT_DAILY_LOOKBACK_DAYS = 400
+DEFAULT_FINANCIAL_LOOKBACK_DAYS = 1500
 DEFAULT_WEEKLY_MAX_AGE_DAYS = 7
 
 
@@ -137,7 +138,7 @@ class Configuration:
             raise ValueError(f"agent provider {name!r} contains unsupported settings")
         return AgentProvider(name=name, model=value["model"], endpoint=endpoint)
 
-    def daily_profile(self, market: str) -> tuple[str, int]:
+    def daily_profile(self, market: str) -> tuple[str, int, int]:
         """Return the explicit source profile and bounded history for one market."""
 
         if market not in {"jp", "us"}:
@@ -150,7 +151,11 @@ class Configuration:
         value = routines.get(market)
         if not isinstance(value, dict) or not isinstance(value.get("source_profile"), str):
             raise LookupError(f"daily routine {market!r} must declare source_profile")
-        unknown = set(value) - {"source_profile", "lookback_days"}
+        unknown = set(value) - {
+            "source_profile",
+            "lookback_days",
+            "financial_lookback_days",
+        }
         if unknown:
             raise ValueError(f"daily routine {market!r} contains unsupported settings")
         lookback = value.get("lookback_days", DEFAULT_DAILY_LOOKBACK_DAYS)
@@ -160,7 +165,16 @@ class Configuration:
             or not 60 <= lookback <= 2000
         ):
             raise ValueError("daily lookback_days must be an integer from 60 through 2000")
-        return value["source_profile"], lookback
+        financial_lookback = value.get("financial_lookback_days", DEFAULT_FINANCIAL_LOOKBACK_DAYS)
+        if (
+            not isinstance(financial_lookback, int)
+            or isinstance(financial_lookback, bool)
+            or not 365 <= financial_lookback <= 4000
+        ):
+            raise ValueError(
+                "daily financial_lookback_days must be an integer from 365 through 4000"
+            )
+        return value["source_profile"], lookback, financial_lookback
 
     def weekly_max_age_days(self) -> int:
         """Return the maximum age accepted for each daily input report."""

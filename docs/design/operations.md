@@ -8,7 +8,8 @@ acquisition, and explicit Alpha Vantage price, profile, financial-statement, ear
 and split acquisition. It also builds and discovers independently installable FRED economic-series
 plus SEC and EDINET filing adapters on Python 3.12 through 3.14. Python 3.13 is the primary
 development version. The `daily jp` and `daily us` routines explicitly acquire configured price
-history, evaluate the latest local portfolio, and persist an immutable Close Brief.
+history, official financial facts, and corporate events, evaluate the latest local portfolio, and
+persist an immutable Close Brief.
 
 ```shell
 make sync
@@ -74,10 +75,12 @@ Daily source selection is explicit and non-secret:
 [routines.jp]
 source_profile = "japan"
 lookback_days = 400
+financial_lookback_days = 1500
 
 [routines.us]
 source_profile = "united-states"
 lookback_days = 400
+financial_lookback_days = 1500
 
 [routines.weekly]
 max_age_days = 7
@@ -85,8 +88,12 @@ max_age_days = 7
 
 `lookback_days` accepts 60 through 2,000 calendar days and defaults to 400. The routine uses the
 selected source profile for every instrument in that market and does not fall back to another
-provider. `--as-of` accepts an explicit offset-aware timestamp for reproducible operation; without
-it, the CLI uses the invocation time.
+provider. `financial_lookback_days` accepts 365 through 4,000 calendar days and defaults to 1,500.
+The routine also fetches events from 30 days before through 30 days after the market-local analysis
+date. Facts and events unavailable at `--as-of` are excluded even when the snapshot was retrieved
+later. Financial and event failures remain explicit optional-evidence diagnostics; price failure
+makes the instrument indeterminate. `--as-of` accepts an explicit offset-aware timestamp for
+reproducible operation; without it, the CLI uses the invocation time.
 
 `marketsieve weekly` is offline. It combines only the current `jp-latest` and `us-latest` reports
 when neither is future-dated or older than the configured limit. It never refreshes data or

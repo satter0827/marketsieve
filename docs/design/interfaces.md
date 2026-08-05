@@ -229,10 +229,11 @@ Canonical CSV uses the exact header
 rows require those three fields to be empty. Instruments are equities identified by MIC, symbol,
 currency, and IANA timezone. Normalized holdings and watch items use a stable instrument order.
 
-`daily` explicitly acquires through configured profiles, validates snapshots, evaluates every held
-or watched instrument in the selected market, stores one immutable report, and renders it. An
-instrument failure becomes an indeterminate entry. If every instrument is indeterminate, the
-command fails and does not update the latest reference.
+`daily` explicitly acquires price, financial, and event data through the configured profile,
+validates each snapshot, and evaluates every held or watched instrument in the selected market.
+Price failure makes that instrument indeterminate. Financial or event failure leaves the price
+decision usable, records the missing evidence, and cannot silently reuse another provider. If every
+instrument is indeterminate, the command fails and does not update the latest reference.
 
 `weekly` reads the latest eligible Japanese and U.S. reports and performs no network access. A
 missing or stale input names the daily command required to recover. `report show` and `report

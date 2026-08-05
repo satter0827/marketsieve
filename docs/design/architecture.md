@@ -348,10 +348,14 @@ portfolio import only with a working Rakuten package. Its implemented
 economic-series capability is provided by the independently installable FRED package. The CLI owns
 source selection and report orchestration in addition to content-addressed storage and Markdown
 presentation. The implemented daily service selects one currency-qualified market from the latest
-portfolio, explicitly fetches each instrument through one configured profile, filters observations
-to the command knowledge time, evaluates the shared policy, and stores the report. A failed
-instrument is evaluated with empty price history and remains visibly indeterminate; an all-failed
-run stores diagnostic evidence without advancing the session reference.
+portfolio and explicitly fetches price, financial, and event data for each instrument through one
+configured profile. It filters every input to the command knowledge time, projects compatible
+annual financial periods through the SDK financial-history calculation, selects the next known
+earnings date, evaluates the shared policy, and stores the report. Price acquisition is essential:
+a failed instrument is evaluated with empty price history and remains visibly indeterminate.
+Financial and event acquisition are optional evidence; failures lower confidence or omit the
+earnings wait rule and remain visible as diagnostics. An all-indeterminate run stores diagnostic
+evidence without advancing the session reference.
 
 The weekly service performs no acquisition. It reads the explicit Japanese-close and U.S.-close
 latest references, rejects missing, future, or stale inputs, and combines their decisions without

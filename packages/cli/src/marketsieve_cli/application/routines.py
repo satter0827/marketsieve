@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal, localcontext
 from typing import Protocol
@@ -18,6 +19,7 @@ from marketsieve import (
 )
 from marketsieve.data.daily import DailyBar
 from marketsieve.domain import Instrument
+from marketsieve.financial import FinancialTrendReport
 
 
 class PortfolioReader(Protocol):
@@ -37,6 +39,12 @@ class DailyDataService(Protocol):
 
     def bars(self, profile: str, instrument: str) -> tuple[DailyBar, ...]: ...
 
+    def financial_trend(
+        self, profile: str, instrument: str, as_of: datetime
+    ) -> FinancialTrendReport: ...
+
+    def next_earnings_date(self, profile: str, instrument: str, as_of: datetime) -> date | None: ...
+
 
 class DecisionReportRepository(Protocol):
     def put(self, report: DecisionReport) -> DecisionReport: ...
@@ -45,13 +53,22 @@ class DecisionReportRepository(Protocol):
 
 
 class RoutineConfiguration(Protocol):
-    def daily_profile(self, market: str) -> tuple[str, int]: ...
+    def daily_profile(self, market: str) -> tuple[str, int, int]: ...
 
     def weekly_max_age_days(self) -> int: ...
 
 
 MARKET_CURRENCY = {"jp": "JPY", "us": "USD"}
 MARKET_SESSION = {"jp": MarketSession.JP_CLOSE, "us": MarketSession.US_CLOSE}
+
+
+@dataclass(frozen=True, slots=True)
+class _OptionalContext:
+    next_earnings_date: date | None = None
+    revenue_growth: Decimal | None = None
+    eps_growth: Decimal | None = None
+    free_cash_flow: Decimal | None = None
+    evidence_ids: tuple[str, ...] = ()
 
 
 class DailyBriefService:
@@ -85,8 +102,9 @@ class DailyBriefService:
         if not selected.holdings and not selected.watch_items:
             raise ValueError(f"portfolio contains no {market} instruments")
 
-        profile, lookback_days = self._configuration.daily_profile(market)
+        profile, lookback_days, financial_lookback_days = self._configuration.daily_profile(market)
         bars_by_instrument: dict[tuple[str, str], tuple[DailyBar, ...]] = {}
+        optional_by_instrument: dict[tuple[str, str], _OptionalContext] = {}
         diagnostics: list[str] = []
         for instrument in self._instruments(selected):
             key = self._key(instrument)
@@ -106,6 +124,13 @@ class DailyBriefService:
             except (LookupError, OSError, RuntimeError, TypeError, ValueError) as error:
                 diagnostics.append(f"{key}: price acquisition failed ({type(error).__name__})")
                 bars_by_instrument[(instrument.mic, instrument.symbol)] = ()
+            optional_by_instrument[(instrument.mic, instrument.symbol)] = self._optional_context(
+                profile,
+                instrument,
+                as_of,
+                financial_lookback_days,
+                diagnostics,
+            )
 
         weights = self._position_weights(selected, bars_by_instrument)
         holdings = {
@@ -120,6 +145,13 @@ class DailyBriefService:
                     PersonalInvestmentContext(),
                     holdings.get((instrument.mic, instrument.symbol)),
                     weights.get((instrument.mic, instrument.symbol)),
+                    optional_by_instrument[(instrument.mic, instrument.symbol)].next_earnings_date,
+                    optional_by_instrument[(instrument.mic, instrument.symbol)].revenue_growth,
+                    optional_by_instrument[(instrument.mic, instrument.symbol)].eps_growth,
+                    optional_by_instrument[(instrument.mic, instrument.symbol)].free_cash_flow,
+                    input_evidence_ids=optional_by_instrument[
+                        (instrument.mic, instrument.symbol)
+                    ].evidence_ids,
                 )
             )
             for instrument in self._instruments(selected)
@@ -143,6 +175,57 @@ class DailyBriefService:
                 f"all {market} instruments are indeterminate; latest report was not updated"
             )
         return stored
+
+    def _optional_context(
+        self,
+        profile: str,
+        instrument: Instrument,
+        as_of: datetime,
+        financial_lookback_days: int,
+        diagnostics: list[str],
+    ) -> _OptionalContext:
+        key = self._key(instrument)
+        local_end = as_of.astimezone(instrument.exchange_timezone).date()
+        trend: FinancialTrendReport | None = None
+        try:
+            self._data.fetch(
+                profile,
+                key,
+                local_end - timedelta(days=financial_lookback_days),
+                local_end,
+                "raw",
+                "financials",
+            )
+            trend = self._data.financial_trend(profile, key, as_of)
+        except (LookupError, OSError, RuntimeError, TypeError, ValueError) as error:
+            diagnostics.append(f"{key}: financial acquisition failed ({type(error).__name__})")
+        earnings: date | None = None
+        try:
+            self._data.fetch(
+                profile,
+                key,
+                local_end - timedelta(days=30),
+                local_end + timedelta(days=30),
+                "raw",
+                "events",
+            )
+            earnings = self._data.next_earnings_date(profile, key, as_of)
+        except (LookupError, OSError, RuntimeError, TypeError, ValueError) as error:
+            diagnostics.append(f"{key}: event acquisition failed ({type(error).__name__})")
+        if trend is None:
+            return _OptionalContext(next_earnings_date=earnings)
+        return _OptionalContext(
+            earnings,
+            self._metric(trend, "revenue_growth"),
+            self._metric(trend, "eps_growth"),
+            self._metric(trend, "free_cash_flow"),
+            (trend.evidence_id,),
+        )
+
+    @staticmethod
+    def _metric(trend: FinancialTrendReport, name: str) -> Decimal | None:
+        metric = trend.metric(name)
+        return metric.value if metric is not None else None
 
     @staticmethod
     def _select_portfolio(portfolio: PortfolioSnapshot, market: str) -> PortfolioSnapshot:

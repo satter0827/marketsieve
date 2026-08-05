@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import UTC, date, datetime
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -13,6 +14,11 @@ from marketsieve.analysis.indicators import (
 )
 from marketsieve.data.daily import Adjustment, DailyBar
 from marketsieve.domain import Instrument
+from marketsieve.financial import (
+    FinancialObservation,
+    FinancialTrendReport,
+    analyze_financial_history,
+)
 from marketsieve_cli.application.equity import (
     comparison_document,
     data_quality_section,
@@ -474,3 +480,60 @@ class SnapshotService:
         stored = self._repository.resolve(profile, instrument)
         self._repository.verify(stored.object_id)
         return self._repository.daily_bars(stored.object_id)
+
+    def financial_trend(
+        self, profile: str, instrument: str, as_of: datetime
+    ) -> FinancialTrendReport:
+        """Rebuild a knowledge-time-correct financial trend from a verified snapshot."""
+
+        if as_of.tzinfo is None or as_of.utcoffset() is None:
+            raise ValueError("as_of must include a UTC offset")
+        stored = self._repository.resolve(profile, instrument, "financials")
+        self._repository.verify(stored.object_id)
+        document = self._repository.normalized(stored.object_id)
+        observations = tuple(
+            FinancialObservation(
+                item["concept"],
+                Decimal(item["value"]),
+                item["scale"],
+                item["period"],
+                date.fromisoformat(item["fiscal_period_start"])
+                if item["fiscal_period_start"]
+                else None,
+                date.fromisoformat(item["fiscal_period_end"]),
+                item["accounting_standard"],
+                item["consolidation"],
+                item["revision"],
+                item["currency"],
+                datetime.fromisoformat(item["available_at"]),
+                f"{stored.object_id}:fact:{index}",
+            )
+            for index, item in enumerate(document["facts"])
+        )
+        return analyze_financial_history(observations, as_of)
+
+    def next_earnings_date(self, profile: str, instrument: str, as_of: datetime) -> date | None:
+        """Return the nearest known future earnings event from a verified snapshot."""
+
+        if as_of.tzinfo is None or as_of.utcoffset() is None:
+            raise ValueError("as_of must include a UTC offset")
+        stored = self._repository.resolve(profile, instrument, "events")
+        self._repository.verify(stored.object_id)
+        document = self._repository.normalized(stored.object_id)
+        local_date = as_of.astimezone(
+            Instrument.create(
+                symbol=document["instrument"]["symbol"],
+                mic=document["instrument"]["mic"],
+                currency=document["instrument"]["currency"],
+                exchange_timezone=document["instrument"]["timezone"],
+            ).exchange_timezone
+        ).date()
+        candidates = tuple(
+            date.fromisoformat(item["effective_date"])
+            for item in document["events"]
+            if item["type"] == "earnings"
+            and datetime.fromisoformat(item["available_at"]).astimezone(UTC)
+            <= as_of.astimezone(UTC)
+            and date.fromisoformat(item["effective_date"]) >= local_date
+        )
+        return min(candidates, default=None)

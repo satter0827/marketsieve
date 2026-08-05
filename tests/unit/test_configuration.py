@@ -108,12 +108,16 @@ def test_daily_routine_configuration_is_explicit_and_bounded(tmp_path: Path) -> 
     )
     configuration = Configuration(path)
 
-    assert configuration.daily_profile("jp") == ("japan", 500)
-    assert configuration.daily_profile("us") == ("united-states", 400)
+    assert configuration.daily_profile("jp") == ("japan", 500, 1500)
+    assert configuration.daily_profile("us") == ("united-states", 400, 1500)
 
     invalid = tmp_path / "invalid-routine.toml"
     invalid.write_text('[routines.jp]\nsource_profile = "japan"\nlookback_days = 59\n')
     with pytest.raises(ValueError, match="60 through 2000"):
+        Configuration(invalid).daily_profile("jp")
+
+    invalid.write_text('[routines.jp]\nsource_profile = "japan"\nfinancial_lookback_days = 364\n')
+    with pytest.raises(ValueError, match="365 through 4000"):
         Configuration(invalid).daily_profile("jp")
 
 
