@@ -7,7 +7,7 @@ from pathlib import Path
 
 from marketsieve_cli.adapters.config import Configuration
 from marketsieve_cli.adapters.plugins import SourcePluginRegistry
-from marketsieve_extension_api import DailyBarSourceConfiguration
+from marketsieve_extension_api import DailyBarSourceConfiguration, SourceConfiguration
 
 
 def validate_daily_configuration(path: Path) -> None:
@@ -22,8 +22,24 @@ def validate_daily_configuration(path: Path) -> None:
         diagnostic = sources.load_fetcher(binding.plugin).doctor(
             DailyBarSourceConfiguration(profile.currency, profile.timezone, binding.settings)
         )
-        if diagnostic.code in {"invalid_configuration", "invalid_credential"}:
-            raise ValueError(diagnostic.message)
+        diagnostics = [diagnostic]
+        if "financials" in profile.sources:
+            financials = profile.binding("financials")
+            diagnostics.append(
+                sources.load_financial_fetcher(financials.plugin).doctor_financials(
+                    SourceConfiguration(profile.currency, profile.timezone, financials.settings)
+                )
+            )
+        if "events" in profile.sources:
+            events = profile.binding("events")
+            diagnostics.append(
+                sources.load_event_fetcher(events.plugin).doctor_events(
+                    SourceConfiguration(profile.currency, profile.timezone, events.settings)
+                )
+            )
+        for diagnostic in diagnostics:
+            if diagnostic.code in {"invalid_configuration", "invalid_credential"}:
+                raise ValueError(diagnostic.message)
     configuration.weekly_max_age_days()
 
 

@@ -50,6 +50,18 @@ def test_daily_configuration_rejects_provider_settings_before_network_use(
         validate_daily_configuration(config)
 
 
+def test_daily_configuration_validates_configured_event_sources(tmp_path: Path) -> None:
+    config = tmp_path / "invalid-events.toml"
+    document = (ROOT / "marketsieve.example.toml").read_text(encoding="utf-8")
+    config.write_text(
+        document.replace('event_types = "earnings,dividend,split"', 'event_types = "bogus"'),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="event_types must select"):
+        validate_daily_configuration(config)
+
+
 def test_daily_configuration_rejects_malformed_credentials(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
