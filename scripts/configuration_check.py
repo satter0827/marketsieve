@@ -6,18 +6,18 @@ import argparse
 from pathlib import Path
 
 from marketsieve_cli.adapters.config import Configuration
+from marketsieve_cli.adapters.plugins import SourcePluginRegistry
 
 
 def validate_daily_configuration(path: Path) -> None:
     """Validate every configuration path used by the numbered workflow."""
 
     configuration = Configuration(path)
+    sources = SourcePluginRegistry()
     for market in ("jp", "us"):
         source_name, _, _ = configuration.daily_profile(market)
-        configuration.source_profile(source_name).binding("daily_bars")
-
-        screening = configuration.screening_profile(market)
-        configuration.source_profile(screening.source_profile).binding("instrument_universe")
+        binding = configuration.source_profile(source_name).binding("daily_bars")
+        sources.load_fetcher(binding.plugin)
     configuration.weekly_max_age_days()
 
 
