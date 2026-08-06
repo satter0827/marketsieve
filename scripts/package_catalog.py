@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).parents[1]
-VALID_ROLES = {"sdk", "agent", "extension-api", "cli", "adapter"}
+VALID_ROLES = {"sdk", "agent", "ai", "extension-api", "cli", "adapter"}
 
 
 @dataclass(frozen=True, slots=True)

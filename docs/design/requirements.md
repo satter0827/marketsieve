@@ -21,13 +21,16 @@ notifications.
   reporting.
 - **FND-05:** The optional agent can explain only an immutable decision-report fact catalog through
   an explicitly selected local or cloud model. Explanation artifacts cannot modify report objects.
-- **FND-06:** Local and CI gates verify tests, dependency direction, distributions, and isolated
+- **FND-06:** A manual AI service can explain an immutable report through a content-addressed file
+  exchange without an API key. Request, response, validation, and explanation remain separate, and
+  the renderer accepts only report-owned values selected by validated fact IDs.
+- **FND-07:** Local and CI gates verify tests, dependency direction, distributions, and isolated
   installation on supported Python versions.
-- **FND-07:** FRED supplies explicit economic-series observations with observation, retrieval, and
+- **FND-08:** FRED supplies explicit economic-series observations with observation, retrieval, and
   revision time semantics.
-- **FND-08:** Financial acquisitions preserve filing identity, amendment linkage, public time, and
+- **FND-09:** Financial acquisitions preserve filing identity, amendment linkage, public time, and
   fact-to-filing provenance so historical analysis can exclude facts not yet available.
-- **FND-09:** Financial trends select only compatible annual observations known at the requested
+- **FND-10:** Financial trends select only compatible annual observations known at the requested
   instant and retain deterministic period, metric, and evidence identities.
 
 ## Personal Close Brief

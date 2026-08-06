@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:marketsieve:schema:report-ai-request:1.0.0",
+  "title": "MarketSieve manual AI report request",
+  "type": "object",
+  "required": ["request_id", "schema", "service", "task", "prompt_version", "locale", "interaction", "instructions", "catalog", "response_schema"],
+  "properties": {
+    "request_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "schema": {"const": "report-ai-request/v1"},
+    "service": {"const": "chatgpt"},
+    "task": {"const": "explain_decision_report"},
+    "prompt_version": {"type": "string", "minLength": 1},
+    "locale": {"enum": ["ja", "en"]},
+    "interaction": {
+      "type": "object",
+      "required": ["mode", "project", "web_search", "external_tools", "custom_instructions"],
+      "properties": {
+        "mode": {"const": "temporary_chat"},
+        "project": {"const": false},
+        "web_search": {"const": false},
+        "external_tools": {"const": false},
+        "custom_instructions": {"const": "disabled"}
+      },
+      "additionalProperties": false
+    },
+    "instructions": {
+      "type": "object",
+      "required": ["task", "rules", "limits"],
+      "properties": {
+        "task": {"type": "string", "minLength": 1},
+        "rules": {"type": "array", "items": {"type": "string", "minLength": 1}, "minItems": 1},
+        "limits": {
+          "type": "object",
+          "required": ["selected_fact_ids", "attempts"],
+          "properties": {
+            "selected_fact_ids": {"type": "integer", "minimum": 1},
+            "attempts": {"const": 1}
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "catalog": {
+      "type": "object",
+      "required": ["report_id", "catalog_hash", "sections", "facts"],
+      "properties": {
+        "report_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "catalog_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "sections": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+        "facts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["fact_id", "section", "label", "value", "as_of"],
+            "properties": {
+              "fact_id": {"type": "string", "minLength": 1},
+              "section": {"type": "string", "minLength": 1},
+              "label": {"type": "string", "minLength": 1},
+              "value": {"type": "string"},
+              "as_of": {"type": ["string", "null"]}
+            },
+            "additionalProperties": false
+          },
+          "minItems": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "response_schema": {"type": "object"}
+  },
+  "additionalProperties": false
+}

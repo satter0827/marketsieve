@@ -3,6 +3,10 @@ SHELL := /bin/sh
 
 STATE_DIR ?= .marketsieve
 TEST ?=
+RESPONSE ?=
+REPORT ?= latest
+CONFIG ?= marketsieve.toml
+CONTROLLED ?= 0
 BASE_SHA ?= origin/develop
 HEAD_SHA ?= HEAD
 REVIEWED_SHA ?=
@@ -17,10 +21,39 @@ RELEASE_DIR ?= $(STATE_DIR)/artifacts/release/$(COMMIT)
 export UV_CACHE_DIR := $(abspath $(STATE_DIR))/cache/uv
 export PYTHONPYCACHEPREFIX := $(abspath $(STATE_DIR))/cache/python
 
-.PHONY: help sync format format-check lint typecheck test secret-check check doctor capabilities-json build evidence evidence-bundle evidence-validate review-attest governance-check release-build release-verify release-check clean-generated
+.PHONY: help daily-jp-ai daily-us-ai weekly-ai ai-prepare ai-import ai-show doctor sync format format-check lint typecheck test secret-check check capabilities-json build evidence evidence-bundle evidence-validate review-attest governance-check release-build release-verify release-check clean-generated
 
-help: ## Show the available project commands.
-	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z0-9_-]+:.*## / {printf "%-18s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+help: ## Show daily-use commands first, followed by developer commands.
+	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z0-9_-]+:.*## / {printf "%-22s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+
+daily-jp-ai: ## Daily JP close report (Network), then prepare a ChatGPT request.
+	@test -f "$(CONFIG)" || { echo "Missing $(CONFIG). Next: cp marketsieve.example.toml $(CONFIG), edit it, then run make doctor" >&2; exit 2; }
+	uv run marketsieve --config "$(CONFIG)" daily jp
+	uv run marketsieve ai prepare report latest
+
+daily-us-ai: ## Daily US close report (Network), then prepare a ChatGPT request.
+	@test -f "$(CONFIG)" || { echo "Missing $(CONFIG). Next: cp marketsieve.example.toml $(CONFIG), edit it, then run make doctor" >&2; exit 2; }
+	uv run marketsieve --config "$(CONFIG)" daily us
+	uv run marketsieve ai prepare report latest
+
+weekly-ai: ## Weekly brief (Offline), then prepare a ChatGPT request.
+	@test -f "$(CONFIG)" || { echo "Missing $(CONFIG). Next: cp marketsieve.example.toml $(CONFIG), edit it, then run make doctor" >&2; exit 2; }
+	uv run marketsieve --config "$(CONFIG)" weekly
+	uv run marketsieve ai prepare report latest
+
+ai-prepare: ## Prepare ChatGPT request from REPORT=latest (Offline).
+	uv run marketsieve ai prepare report "$(REPORT)"
+
+ai-import: ## Import RESPONSE=... (Offline); add CONTROLLED=1 only after checking chat conditions.
+	@test -n "$(RESPONSE)" || { echo "RESPONSE is required. Next: make ai-import RESPONSE=/absolute/path/response.json" >&2; exit 2; }
+	@test -f "$(RESPONSE)" || { echo "Response file not found: $(RESPONSE)" >&2; exit 2; }
+	uv run marketsieve ai import "$(RESPONSE)" $(if $(filter 1,$(CONTROLLED)),--controlled,)
+
+ai-show: ## Show the latest validated AI explanation (Offline).
+	uv run marketsieve ai show latest
+
+doctor: ## Run offline installation diagnostics.
+	uv run marketsieve doctor
 
 sync: ## Install the locked workspace and development dependencies.
 	uv sync --locked
@@ -46,9 +79,6 @@ secret-check: ## Scan tracked files and the current diff without printing secret
 
 check: ## Run the complete development gate.
 	BASE_SHA="$(BASE_SHA)" EVIDENCE_DIR="$(EVIDENCE_DIR)" uv run python -m scripts.develop_gate check all
-
-doctor: ## Run offline installation diagnostics.
-	uv run marketsieve doctor
 
 capabilities-json: ## Describe the CLI machine contract.
 	uv run marketsieve capabilities --output json

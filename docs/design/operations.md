@@ -228,6 +228,28 @@ recoverable draft instead of presenting a partially completed release as final.
 
 ## Model operation
 
+Daily AI use starts with `make daily-jp-ai`, `make daily-us-ai`, `make weekly-ai`, or
+`make ai-prepare`. The first two acquire market data over the network and prepare a request only
+after report generation succeeds; weekly preparation and preparation from an existing report are
+offline. The terminal prints the exact files and next command. A person then uses a new ChatGPT
+Temporary Chat without Project, web search, or external tools, saves the JSON response, runs
+`make ai-import RESPONSE=/absolute/path/response.json`, and reads it with `make ai-show`.
+The import records controlled conditions only when the operator explicitly adds `CONTROLLED=1`;
+the default does not attest chat settings.
+
+The request, original response, validation, and explanation live in separate content-addressed
+directories below `.marketsieve/ai`. They are local generated evidence and are not committed.
+Temporary Chat reduces retained product history but does not remove the need to exclude private
+portfolio data. Custom Instructions are disabled and that condition is recorded in the request and
+validated explanation provenance. MarketSieve does not automate the ChatGPT browser or claim a
+stable UI contract.
+The operating assumptions follow OpenAI's
+[Temporary Chat FAQ](https://help.openai.com/en/articles/8914046-temporary-chat-faq) and
+[File Uploads FAQ](https://help.openai.com/en/articles/8555545-file-uploads-with-gpts-and-advanced-data-analysis-in-chatgpt)
+as reviewed on 2026-08-06.
+
+The existing direct-provider operation remains available:
+
 The CLI has no default model. LM Studio accepts loopback endpoints by default. A cloud
 provider requires explicit provider configuration and `--allow-cloud` on every invocation. Dry-run
 shows the credential-free fact payload without contacting a model. Provider, model, prompt version,
