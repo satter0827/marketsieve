@@ -19,6 +19,23 @@ def test_daily_configuration_requires_both_routine_profiles(tmp_path: Path) -> N
         validate_daily_configuration(config)
 
 
+def test_daily_configuration_rejects_a_profile_assigned_to_the_wrong_market(
+    tmp_path: Path,
+) -> None:
+    config = tmp_path / "swapped.toml"
+    document = (ROOT / "marketsieve.example.toml").read_text(encoding="utf-8")
+    config.write_text(
+        document.replace(
+            '[routines.jp]\nsource_profile = "japan"',
+            '[routines.jp]\nsource_profile = "us"',
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="requires JPY and Asia/Tokyo"):
+        validate_daily_configuration(config)
+
+
 def test_daily_configuration_does_not_require_optional_screening(tmp_path: Path) -> None:
     config = tmp_path / "without-screening.toml"
     document = (ROOT / "marketsieve.example.toml").read_text(encoding="utf-8")

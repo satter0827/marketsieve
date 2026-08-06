@@ -4,6 +4,7 @@ __pycache__/
 .DS_Store
 
 # Credentials and local-only configuration.
+/marketsieve.toml
 .env
 .env.*
 !.env.example

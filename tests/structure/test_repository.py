@@ -319,9 +319,9 @@ def test_makefile_exposes_stable_entry_points() -> None:
     daily_status_recipe = makefile.split("daily-status:", maxsplit=1)[1].split(
         "\n\ndaily-jp-ai:", maxsplit=1
     )[0]
-    assert "[blocked] no market-data credential is available" in daily_status_recipe
-    assert 'elif test -n "$$JQUANTS_API_KEY"' in daily_status_recipe
-    assert 'elif test -n "$$ALPHAVANTAGE_API_KEY"' in daily_status_recipe
+    assert "scripts.portfolio_check" in daily_status_recipe
+    assert "JQUANTS_API_KEY" not in daily_status_recipe
+    assert "ALPHAVANTAGE_API_KEY" not in daily_status_recipe
     ai_import_show_recipe = makefile.split("ai-import-show:", maxsplit=1)[1].split(
         "\n\n", maxsplit=1
     )[0]

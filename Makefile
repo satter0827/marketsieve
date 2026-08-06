@@ -55,29 +55,8 @@ daily-status: doctor ## Check configuration, portfolio, reports, and installatio
 		exit 2; \
 	fi
 	@uv run python -m scripts.configuration_check "$(CONFIG)" || { echo "Next: correct $(CONFIG) or the credential environment variables" >&2; exit 2; }
-	@uv run python -m scripts.portfolio_check || { echo "Next VS Code operation: 02 First Run: Import Portfolio CSV" >&2; exit 2; }
-	@if test -n "$$JQUANTS_API_KEY"; then \
-		echo "[ready] JQUANTS_API_KEY for task 10"; \
-	else \
-		echo "[missing] JQUANTS_API_KEY; task 10 cannot acquire JP data"; \
-	fi
-	@if test -n "$$ALPHAVANTAGE_API_KEY"; then \
-		echo "[ready] ALPHAVANTAGE_API_KEY for task 20"; \
-	else \
-		echo "[missing] ALPHAVANTAGE_API_KEY; task 20 cannot acquire US data"; \
-	fi
 	@uv run marketsieve report list --output json
-	@if test -n "$$JQUANTS_API_KEY" && test -n "$$ALPHAVANTAGE_API_KEY"; then \
-		echo "Next daily operation: 10 Daily: Analyze JP Close and Prepare ChatGPT Request (Network), or 20 Daily: Analyze US Close and Prepare ChatGPT Request (Network)"; \
-	elif test -n "$$JQUANTS_API_KEY"; then \
-		echo "Next daily operation: 10 Daily: Analyze JP Close and Prepare ChatGPT Request (Network)"; \
-	elif test -n "$$ALPHAVANTAGE_API_KEY"; then \
-		echo "Next daily operation: 20 Daily: Analyze US Close and Prepare ChatGPT Request (Network)"; \
-	else \
-		echo "[blocked] no market-data credential is available" >&2; \
-		echo "Next: set JQUANTS_API_KEY or ALPHAVANTAGE_API_KEY, then rerun 03 First Run: Check Readiness" >&2; \
-		exit 2; \
-	fi
+	@uv run python -m scripts.portfolio_check
 
 daily-jp-ai: ## Daily JP close report (Network), then prepare a ChatGPT request.
 	@test -f "$(CONFIG)" || { echo "Missing $(CONFIG). Next VS Code operation: 01 First Run: Create Configuration" >&2; exit 2; }

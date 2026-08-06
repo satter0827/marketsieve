@@ -15,9 +15,16 @@ def validate_daily_configuration(path: Path) -> None:
 
     configuration = Configuration(path)
     sources = SourcePluginRegistry()
+    expected_markets = {
+        "jp": ("JPY", "Asia/Tokyo"),
+        "us": ("USD", "America/New_York"),
+    }
     for market in ("jp", "us"):
         source_name, _, _ = configuration.daily_profile(market)
         profile = configuration.source_profile(source_name)
+        if (profile.currency, profile.timezone) != expected_markets[market]:
+            currency, timezone = expected_markets[market]
+            raise ValueError(f"daily routine {market!r} requires {currency} and {timezone}")
         binding = profile.binding("daily_bars")
         diagnostic = sources.load_fetcher(binding.plugin).doctor(
             DailyBarSourceConfiguration(profile.currency, profile.timezone, binding.settings)
