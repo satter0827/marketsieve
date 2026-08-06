@@ -13,6 +13,7 @@ import click
 
 from marketsieve_cli.bootstrap import (
     build_agent_service,
+    build_ai_service,
     build_console_output,
     build_daily_brief_service,
     build_diagnostics_service,
@@ -35,6 +36,22 @@ from marketsieve_cli.bootstrap import (
 OUTPUT_CHOICES = ("auto", "rich", "text", "json")
 CAPABILITIES_SCHEMA_VERSION = "2.0.0"
 COMMAND_METADATA: dict[str, dict[str, Any]] = {
+    "ai prepare report": {
+        "output_schema": None,
+        "effects": {"network": False, "secrets": False, "optional_writes": ["ai_request"]},
+    },
+    "ai import": {
+        "output_schema": "urn:marketsieve:schema:report-ai-explanation:1.0.0",
+        "effects": {
+            "network": False,
+            "secrets": False,
+            "optional_writes": ["ai_response", "ai_validation", "ai_explanation"],
+        },
+    },
+    "ai show": {
+        "output_schema": "urn:marketsieve:schema:report-ai-explanation:1.0.0",
+        "effects": {"network": False, "secrets": False, "optional_writes": []},
+    },
     "screen update": {
         "output_schema": "urn:marketsieve:schema:instrument-universe:1.0.0",
         "effects": {"network": True, "secrets": True, "optional_writes": ["universe"]},
@@ -557,6 +574,93 @@ def report_export(report_id: str, export_format: str) -> None:
     except (LookupError, TypeError, ValueError, OSError) as error:
         raise click.ClickException(str(error)) from None
     click.echo(markdown, nl=False)
+
+
+@main.group()
+def ai() -> None:
+    """Exchange grounded report explanations with a manual AI service."""
+
+
+@ai.group()
+def prepare() -> None:
+    """Prepare one upload file without contacting an AI service."""
+
+
+@prepare.command("report")
+@click.argument("report_id")
+@click.pass_context
+def ai_prepare_report(context: click.Context, report_id: str) -> None:
+    """Prepare an exact report for a new ChatGPT Temporary Chat."""
+
+    try:
+        prepared = build_ai_service().prepare_report(report_id, context.obj["locale"])
+    except (LookupError, TypeError, ValueError, OSError) as error:
+        message = f"{error}; next: run marketsieve daily jp, daily us, or weekly"
+        _console(context, "auto").emit_error("ai_prepare_failed", message)
+        raise click.exceptions.Exit(1) from None
+    if context.obj["locale"] == "ja":
+        click.echo(f"ChatGPTへアップロード: {prepared.request_path}")
+        click.echo(f"回答の保存先: {prepared.response_path}")
+        click.echo(f"保存後に実行: {prepared.import_command}")
+    else:
+        click.echo(f"Upload to ChatGPT: {prepared.request_path}")
+        click.echo(f"Save the response to: {prepared.response_path}")
+        click.echo(f"Then run: {prepared.import_command}")
+
+
+@ai.command("import")
+@click.argument("response", type=click.Path(path_type=Path, dir_okay=False, exists=True))
+@click.option("--model-label", default=None, help="Record the model label shown by ChatGPT.")
+@click.option(
+    "--controlled",
+    is_flag=True,
+    help="Confirm a new Temporary Chat with Custom Instructions, Project, web, and tools disabled.",
+)
+@output_option
+@click.pass_context
+def ai_import(
+    context: click.Context,
+    response: Path,
+    model_label: str | None,
+    controlled: bool,
+    output_mode: str,
+) -> None:
+    """Validate and store one downloaded ChatGPT response."""
+
+    console = _console(context, output_mode)
+    try:
+        document = build_ai_service().import_response(
+            response, model_label=model_label, controlled=controlled
+        )
+    except (LookupError, TypeError, ValueError, OSError) as error:
+        message = f"{error}; next: uv run marketsieve ai prepare report latest"
+        console.emit_error("ai_import_failed", message)
+        raise click.exceptions.Exit(1) from None
+    _emit_ai_explanation(console, document, output_mode)
+
+
+@ai.command("show")
+@click.argument("explanation_id")
+@output_option
+@click.pass_context
+def ai_show(context: click.Context, explanation_id: str, output_mode: str) -> None:
+    """Show an exact or latest validated AI explanation."""
+
+    console = _console(context, output_mode)
+    try:
+        document = build_ai_service().show(explanation_id)
+    except (LookupError, TypeError, ValueError, OSError) as error:
+        message = f"{error}; next: uv run marketsieve ai import /path/to/response.json"
+        console.emit_error("ai_show_failed", message)
+        raise click.exceptions.Exit(1) from None
+    _emit_ai_explanation(console, document, output_mode)
+
+
+def _emit_ai_explanation(console: Any, document: dict[str, Any], output_mode: str) -> None:
+    if output_mode == "json":
+        console.emit_document(document, title="AI explanation")
+    else:
+        click.echo(document["text"])
 
 
 @main.group()

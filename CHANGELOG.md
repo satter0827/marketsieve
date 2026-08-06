@@ -7,6 +7,23 @@ will follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-08-06
+
+### Added
+
+- A human-mediated ChatGPT Temporary Chat workflow prepares privacy-bounded report requests,
+  validates saved responses, and renders only MarketSieve-owned facts without requiring an API key.
+- The independent `marketsieve-ai` wheel owns request generation, response validation, and
+  deterministic rendering without HTTP, browser, CLI, configuration, or persistence dependencies.
+- Daily-use Make targets and ordered VS Code Tasks expose JP, US, weekly, prepare, import, show, and
+  status operations before developer workflows.
+
+### Changed
+
+- Public workspace packages now share version 0.8.0 and compatible 0.8 dependency ranges.
+- Run and Debug is limited to a generic CLI command and manual AI exchange debugging. Existing
+  direct-provider Agent commands and the `marketsieve-agent` wheel remain available.
+
 ## [0.7.0] - 2026-08-06
 
 ### Added

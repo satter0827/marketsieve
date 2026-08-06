@@ -18,7 +18,7 @@ LINE, LLM providers, and databases.
 
 ## Current status
 
-`develop` contains the 0.7.0 release candidate. It provides the data workbench:
+`develop` contains the 0.8.0 release candidate. It provides the data workbench:
 independent CSV, J-Quants, Alpha Vantage, FRED, SEC, and EDINET sources; immutable verified
 snapshots; price,
 financial, and event inspection; seven deterministic technical indicators; and an explanation-only
@@ -33,6 +33,30 @@ Bounded Japanese and U.S. universes can be updated explicitly, then screened off
 local price snapshots. Candidate order exposes its inputs and never uses an opaque score. The
 weekend briefing includes fresh stored candidates in a section separate from portfolio decisions.
 
+## Daily use
+
+The primary AI workflow uses a new ChatGPT Temporary Chat through files; it does not require an API
+key or automate a browser. Create the request, upload the printed absolute path, save ChatGPT's JSON
+response to the recommended path, then import and show it. Use no Project, web search, or external
+tools, and disable Custom Instructions.
+
+| Operation | Terminal | VS Code Task | Network | Output |
+| --- | --- | --- | --- | --- |
+| JP close and request | `make daily-jp-ai` | `Daily Use: JP Close + ChatGPT Request (Network)` | Market data only | report and `request.json` |
+| US close and request | `make daily-us-ai` | `Daily Use: US Close + ChatGPT Request (Network)` | Market data only | report and `request.json` |
+| Weekly brief and request | `make weekly-ai` | `Daily Use: Weekly Brief + ChatGPT Request` | No | report and `request.json` |
+| Prepare latest report | `make ai-prepare` | `Daily Use: Prepare ChatGPT Request from Latest Report` | No | `request.json` |
+| Import saved response | `make ai-import RESPONSE=/absolute/path/response.json` | `Daily Use: Import ChatGPT Response` | No | response, validation, explanation |
+| Show latest explanation | `make ai-show` | `Daily Use: Show Latest AI Explanation` | No | deterministic explanation |
+| Check setup | `make doctor` | `Daily Use: Status` | No | diagnostics |
+
+ChatGPT selects supplied fact IDs, their order, and non-numeric relationships. MarketSieve validates
+that selection and renders values from the immutable report. Existing direct API and local-model
+Agent commands remain available as optional advanced workflows.
+Use `CONTROLLED=1` with `make ai-import` only after confirming the new Temporary Chat, disabled
+Custom Instructions, and disabled Project, web search, and external tools. The default records no
+such attestation.
+
 ## Installation
 
 Python 3.12 through 3.14 is supported. Development uses Python 3.13 and
@@ -42,7 +66,7 @@ Python 3.12 through 3.14 is supported. Development uses Python 3.13 and
 make sync
 ```
 
-The SDK, extension API, CLI, Agent, CSV source, J-Quants source, Alpha Vantage source, FRED source,
+The SDK, extension API, CLI, manual AI exchange, Agent, CSV source, J-Quants source, Alpha Vantage source, FRED source,
 SEC source, and EDINET source build as independent artifacts:
 
 ```shell
@@ -53,7 +77,7 @@ Release artifacts are published both as a checksummed GitHub Release wheelhouse 
 PyPI distributions. Install the normal CLI and all source adapters from PyPI:
 
 ```shell
-python -m pip install "marketsieve-cli[all-sources]>=0.7,<0.8"
+python -m pip install "marketsieve-cli[all-sources]>=0.8,<0.9"
 ```
 
 For an offline installation, verify the GitHub Release assets against `release.json`, extract the
@@ -152,11 +176,8 @@ make evidence
 ```
 
 VS Code uses the workspace `.venv`. Its Test Explorer supports ordinary runs, debugging, and
-interactive coverage after `make sync`; repository tasks provide dependency sync, formatting, the
-current test file, diagnostics, and the complete gate. Run and Debug provides named workflows for
-diagnostics, data, analysis, portfolios, screening, briefs, reports, experiments, and agents. `App:
-Command (Prompt for Arguments)` accepts any CLI arguments for commands without a dedicated preset.
-Configurations whose names include `Network` may contact the explicitly configured provider.
+interactive coverage after `make sync`. Tasks own daily operation and quality gates; Run and Debug
+owns generic CLI and manual AI-exchange debugging; Test Explorer owns tests and coverage.
 Interactive coverage is local feedback, while `make check` is the authoritative coverage gate.
 Local caches and generated artifacts are kept under `.marketsieve`; `.venv` is the only generated
 environment at the repository root.
@@ -173,7 +194,7 @@ request is the release boundary. See [Contributing](CONTRIBUTING.md) for the wor
 
 Provider packages depend on the small, data-kind-specific extension API rather than CLI internals.
 The [external universe plugin example](examples/instrument-universe-plugin/README.md) is outside the
-workspace catalog, declares `marketsieve-extension-api>=0.7,<0.8`, registers one entry point, and
+workspace catalog, declares `marketsieve-extension-api>=0.8,<0.9`, registers one entry point, and
 uses the public conformance check. The complete gate builds its wheel and installs it against the
 public wheel set in an isolated environment.
 

@@ -11,10 +11,17 @@ from scripts.package_catalog import PackageSpec, build_all, compatible_range, lo
 def test_workspace_catalog_has_unique_buildable_public_packages() -> None:
     catalog = load_package_catalog()
 
-    assert {spec.role for spec in catalog} >= {"sdk", "extension-api", "cli", "adapter"}
+    assert {spec.role for spec in catalog} >= {
+        "sdk",
+        "agent",
+        "ai",
+        "extension-api",
+        "cli",
+        "adapter",
+    }
     assert len({spec.distribution for spec in catalog}) == len(catalog)
     assert all(spec.pyproject.is_file() for spec in catalog)
-    assert all(spec.project_version == "0.7.0" for spec in catalog)
+    assert all(spec.project_version == "0.8.0" for spec in catalog)
 
 
 def test_workspace_dependencies_allow_external_minor_compatible_plugins() -> None:

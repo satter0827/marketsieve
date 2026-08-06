@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:marketsieve:schema:report-ai-validation:1.0.0",
+  "title": "MarketSieve manual AI response validation",
+  "type": "object",
+  "required": ["validation_id", "schema", "request_id", "response_id", "status", "reason"],
+  "properties": {
+    "validation_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "schema": {"const": "report-ai-validation/v1"},
+    "request_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "response_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "status": {"enum": ["valid", "invalid"]},
+    "reason": {"type": ["string", "null"]},
+    "plan": {
+      "type": "object",
+      "required": ["section_order", "selected_fact_ids", "connections"],
+      "properties": {
+        "section_order": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+        "selected_fact_ids": {"type": "array", "items": {"type": "string"}, "minItems": 1, "uniqueItems": true},
+        "connections": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["from_fact_id", "relation", "to_fact_id"],
+            "properties": {
+              "from_fact_id": {"type": "string"},
+              "relation": {"enum": ["context_for", "contrasts", "supports"]},
+              "to_fact_id": {"type": "string"}
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"status": {"const": "valid"}}},
+      "then": {"required": ["plan"], "properties": {"reason": {"const": null}}}
+    },
+    {
+      "if": {"properties": {"status": {"const": "invalid"}}},
+      "then": {
+        "not": {"required": ["plan"]},
+        "properties": {"reason": {"type": "string", "minLength": 1}}
+      }
+    }
+  ],
+  "additionalProperties": false
+}
