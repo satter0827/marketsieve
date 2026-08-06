@@ -132,7 +132,7 @@ def test_vscode_configuration_uses_installed_workspace_contracts() -> None:
     commands = [" ".join([task["command"], *task.get("args", [])]) for task in tasks]
     assert commands == [
         "make setup-config",
-        "make portfolio-import PORTFOLIO=${input:portfolioPath} BROKER=${input:portfolioBroker}",
+        "make portfolio-import PORTFOLIO=${input:portfolioPath}",
         "make daily-status",
         "make daily-jp-ai",
         "make daily-us-ai",
@@ -161,7 +161,6 @@ def test_vscode_configuration_uses_installed_workspace_contracts() -> None:
     task_input_ids = {entry["id"] for entry in tasks_document["inputs"]}
     assert task_input_ids == {
         "portfolioPath",
-        "portfolioBroker",
         "aiResponsePath",
         "aiControlled",
     }
@@ -199,7 +198,6 @@ def test_vscode_configuration_uses_installed_workspace_contracts() -> None:
     assert all(launch["cwd"] == "${workspaceFolder}" for launch in operational_launches)
     assert operational_launches[1]["env"] == {
         "PORTFOLIO": "${input:portfolioPath}",
-        "BROKER": "${input:portfolioBroker}",
     }
     assert operational_launches[6]["env"] == {
         "RESPONSE": "${input:aiResponsePath}",
@@ -220,7 +218,6 @@ def test_vscode_configuration_uses_installed_workspace_contracts() -> None:
     assert len(input_ids) == len(launch_document["inputs"])
     assert input_ids == {
         "portfolioPath",
-        "portfolioBroker",
         "aiResponsePath",
         "aiControlled",
     }

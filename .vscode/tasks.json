@@ -2,7 +2,7 @@
   "version": "2.0.0",
   "tasks": [
     {"label": "01 First Run: Create Configuration", "detail": "Run once. An existing marketsieve.toml is never overwritten.", "type": "process", "command": "make", "args": ["setup-config"], "problemMatcher": []},
-    {"label": "02 First Run: Import Portfolio CSV", "detail": "Run once and whenever holdings change. Import time is used as as-of; the source file is not retained.", "type": "process", "command": "make", "args": ["portfolio-import", "PORTFOLIO=${input:portfolioPath}", "BROKER=${input:portfolioBroker}"], "problemMatcher": []},
+    {"label": "02 First Run: Import Portfolio CSV", "detail": "Import the canonical holdings CSV. Import time is used as as-of; the source file is not retained.", "type": "process", "command": "make", "args": ["portfolio-import", "PORTFOLIO=${input:portfolioPath}"], "problemMatcher": []},
     {"label": "03 First Run: Check Readiness", "detail": "Check configuration, portfolio, credentials, and the next operation.", "type": "process", "command": "make", "args": ["daily-status"], "problemMatcher": []},
     {"label": "10 Daily: Analyze JP Close and Prepare ChatGPT Request (Network)", "detail": "Run after the Japanese market closes. The terminal prints the upload file and next action.", "type": "process", "command": "make", "args": ["daily-jp-ai"], "problemMatcher": []},
     {"label": "20 Daily: Analyze US Close and Prepare ChatGPT Request (Network)", "detail": "Run after the U.S. market closes. The terminal prints the upload file and next action.", "type": "process", "command": "make", "args": ["daily-us-ai"], "problemMatcher": []},
@@ -23,13 +23,6 @@
       "id": "portfolioPath",
       "type": "promptString",
       "description": "Absolute path to the portfolio CSV"
-    },
-    {
-      "id": "portfolioBroker",
-      "type": "pickString",
-      "description": "Select the CSV format",
-      "options": ["canonical", "rakuten"],
-      "default": "canonical"
     },
     {
       "id": "aiResponsePath",

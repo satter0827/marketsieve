@@ -15,8 +15,7 @@
       "command": "make portfolio-import",
       "cwd": "${workspaceFolder}",
       "env": {
-        "PORTFOLIO": "${input:portfolioPath}",
-        "BROKER": "${input:portfolioBroker}"
+        "PORTFOLIO": "${input:portfolioPath}"
       }
     },
     {
@@ -94,13 +93,6 @@
       "id": "portfolioPath",
       "type": "promptString",
       "description": "Absolute path to the portfolio CSV"
-    },
-    {
-      "id": "portfolioBroker",
-      "type": "pickString",
-      "description": "Select the CSV format",
-      "options": ["canonical", "rakuten"],
-      "default": "canonical"
     },
     {
       "id": "aiResponsePath",
