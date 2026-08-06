@@ -1,13 +1,26 @@
 from pathlib import Path
 
 import pytest
-from scripts.configuration_check import validate_daily_configuration
+from scripts.configuration_check import daily_source_diagnostics, validate_daily_configuration
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_example_configuration_supports_the_numbered_daily_workflow() -> None:
     validate_daily_configuration(ROOT / "marketsieve.example.toml")
+
+
+def test_daily_source_diagnostics_preserve_configured_provider_results(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("JQUANTS_API_KEY", raising=False)
+    monkeypatch.delenv("ALPHAVANTAGE_API_KEY", raising=False)
+    diagnostics = daily_source_diagnostics(ROOT / "marketsieve.example.toml")
+
+    assert diagnostics["jp"].code == "missing_credential"
+    assert "JQUANTS_API_KEY" in diagnostics["jp"].message
+    assert diagnostics["us"].code == "missing_credential"
+    assert "ALPHAVANTAGE_API_KEY" in diagnostics["us"].message
 
 
 def test_daily_configuration_requires_both_routine_profiles(tmp_path: Path) -> None:
