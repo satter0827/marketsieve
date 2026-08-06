@@ -2,18 +2,505 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "name": "App: Command (Prompt for Arguments)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "marketsieve_cli",
+      "args": "${command:pickArgs}",
+      "env": {
+        "PYTHONPYCACHEPREFIX": "${workspaceFolder}/.marketsieve/cache/python"
+      },
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
       "name": "App: Doctor",
       "type": "debugpy",
       "request": "launch",
       "module": "marketsieve_cli",
+      "args": ["doctor"],
+      "env": {
+        "PYTHONPYCACHEPREFIX": "${workspaceFolder}/.marketsieve/cache/python"
+      },
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
+      "name": "App: Capabilities JSON",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "marketsieve_cli",
+      "args": ["capabilities", "--output", "json"],
+      "env": {
+        "PYTHONPYCACHEPREFIX": "${workspaceFolder}/.marketsieve/cache/python"
+      },
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
+      "name": "Data: Source List",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "marketsieve_cli",
+      "args": ["source", "list", "--output", "${input:outputMode}"],
+      "env": {
+        "PYTHONPYCACHEPREFIX": "${workspaceFolder}/.marketsieve/cache/python"
+      },
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
+      "name": "Data: Import Example CSV",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "marketsieve_cli",
       "args": [
-        "doctor"
+        "source",
+        "import",
+        "${workspaceFolder}/examples/csv-daily-bars",
+        "--plugin",
+        "csv",
+        "--output",
+        "${input:outputMode}"
       ],
       "env": {
         "PYTHONPYCACHEPREFIX": "${workspaceFolder}/.marketsieve/cache/python"
       },
       "console": "integratedTerminal",
       "justMyCode": true
+    },
+    {
+      "name": "Data: Source Doctor",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "marketsieve_cli",
+      "args": [
+        "source",
+        "doctor",
+        "${input:configuredSourceProfile}",
+        "--kind",
+        "${input:sourceKind}",
+        "--output",
+        "${input:outputMode}"
+      ],
+      "env": {
+        "PYTHONPYCACHEPREFIX": "${workspaceFolder}/.marketsieve/cache/python"
+      },
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
+      "name": "Data: Source Fetch (Network)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "marketsieve_cli",
+      "args": [
+        "source",
+        "fetch",
+        "${input:configuredSourceProfile}",
+        "${input:instrument}",
+        "--start",
+        "${input:startDate}",
+        "--end",
+        "${input:endDate}",
+        "--adjustment",
+        "${input:adjustment}",
+        "--kind",
+        "${input:sourceKind}",
+        "--output",
+        "${input:outputMode}"
+      ],
+      "env": {
+        "PYTHONPYCACHEPREFIX": "${workspaceFolder}/.marketsieve/cache/python"
+      },
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
+      "name": "Data: Snapshot List",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "marketsieve_cli",
+      "args": ["snapshot", "list", "--output", "${input:outputMode}"],
+      "env": {
+        "PYTHONPYCACHEPREFIX": "${workspaceFolder}/.marketsieve/cache/python"
+      },
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
+      "name": "Data: Snapshot Show",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "marketsieve_cli",
+      "args": [
+        "snapshot",
+        "show",
+        "${input:objectId}",
+        "--output",
+        "${input:outputMode}"
+      ],
+      "env": {
+        "PYTHONPYCACHEPREFIX": "${workspaceFolder}/.marketsieve/cache/python"
+      },
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
+      "name": "Data: Snapshot Verify",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "marketsieve_cli",
+      "args": [
+        "snapshot",
+        "verify",
+        "${input:objectId}",
+        "--output",
+        "${input:outputMode}"
+      ],
+      "env": {
+        "PYTHONPYCACHEPREFIX": "${workspaceFolder}/.marketsieve/cache/python"
+      },
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
+      "name": "Analysis: Inspect",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "marketsieve_cli",
+      "args": [
+        "inspect",
+        "${input:instrument}",
+        "--source-profile",
+        "${input:sourceProfile}",
+        "--output",
+        "${input:outputMode}"
+      ],
+      "env": {
+        "PYTHONPYCACHEPREFIX": "${workspaceFolder}/.marketsieve/cache/python"
+      },
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
+      "name": "Analysis: Indicator",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "marketsieve_cli",
+      "args": [
+        "analyze",
+        "${input:indicator}",
+        "${input:instrument}",
+        "--period",
+        "${input:period}",
+        "--source-profile",
+        "${input:sourceProfile}",
+        "--output",
+        "${input:outputMode}"
+      ],
+      "env": {
+        "PYTHONPYCACHEPREFIX": "${workspaceFolder}/.marketsieve/cache/python"
+      },
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
+      "name": "Analysis: Compare",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "marketsieve_cli",
+      "args": [
+        "compare",
+        "${input:instrument}",
+        "${input:secondInstrument}",
+        "--source-profile",
+        "${input:sourceProfile}",
+        "--output",
+        "${input:outputMode}"
+      ],
+      "env": {
+        "PYTHONPYCACHEPREFIX": "${workspaceFolder}/.marketsieve/cache/python"
+      },
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
+      "name": "Portfolio: Import",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "marketsieve_cli",
+      "args": [
+        "portfolio",
+        "import",
+        "${input:portfolioPath}",
+        "--broker",
+        "${input:broker}",
+        "--as-of",
+        "${input:asOf}",
+        "--output",
+        "${input:outputMode}"
+      ],
+      "env": {
+        "PYTHONPYCACHEPREFIX": "${workspaceFolder}/.marketsieve/cache/python"
+      },
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
+      "name": "Portfolio: Show Latest",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "marketsieve_cli",
+      "args": ["portfolio", "show", "--output", "${input:outputMode}"],
+      "env": {
+        "PYTHONPYCACHEPREFIX": "${workspaceFolder}/.marketsieve/cache/python"
+      },
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
+      "name": "Screen: Update (Network)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "marketsieve_cli",
+      "args": ["screen", "update", "${input:market}", "--output", "${input:outputMode}"],
+      "env": {
+        "PYTHONPYCACHEPREFIX": "${workspaceFolder}/.marketsieve/cache/python"
+      },
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
+      "name": "Screen: Run Offline",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "marketsieve_cli",
+      "args": ["screen", "run", "${input:market}", "--output", "${input:outputMode}"],
+      "env": {
+        "PYTHONPYCACHEPREFIX": "${workspaceFolder}/.marketsieve/cache/python"
+      },
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
+      "name": "Brief: Daily (Network)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "marketsieve_cli",
+      "args": ["daily", "${input:market}", "--output", "${input:outputMode}"],
+      "env": {
+        "PYTHONPYCACHEPREFIX": "${workspaceFolder}/.marketsieve/cache/python"
+      },
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
+      "name": "Brief: Weekly Offline",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "marketsieve_cli",
+      "args": ["weekly", "--output", "${input:outputMode}"],
+      "env": {
+        "PYTHONPYCACHEPREFIX": "${workspaceFolder}/.marketsieve/cache/python"
+      },
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
+      "name": "Report: List",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "marketsieve_cli",
+      "args": ["report", "list", "--output", "${input:outputMode}"],
+      "env": {
+        "PYTHONPYCACHEPREFIX": "${workspaceFolder}/.marketsieve/cache/python"
+      },
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
+      "name": "Report: Show",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "marketsieve_cli",
+      "args": [
+        "report",
+        "show",
+        "${input:reportId}",
+        "--output",
+        "${input:outputMode}"
+      ],
+      "env": {
+        "PYTHONPYCACHEPREFIX": "${workspaceFolder}/.marketsieve/cache/python"
+      },
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
+      "name": "Report: Explain Dry Run",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "marketsieve_cli",
+      "args": [
+        "report",
+        "explain",
+        "${input:reportId}",
+        "--provider",
+        "${input:provider}",
+        "--dry-run",
+        "--output",
+        "${input:outputMode}"
+      ],
+      "env": {
+        "PYTHONPYCACHEPREFIX": "${workspaceFolder}/.marketsieve/cache/python"
+      },
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
+      "name": "Experiment: Run",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "marketsieve_cli",
+      "args": ["experiment", "run", "${input:experimentSpec}", "--output", "${input:outputMode}"],
+      "env": {
+        "PYTHONPYCACHEPREFIX": "${workspaceFolder}/.marketsieve/cache/python"
+      },
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
+      "name": "Agent: Doctor",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "marketsieve_cli",
+      "args": ["agent", "doctor", "${input:provider}", "--output", "${input:outputMode}"],
+      "env": {
+        "PYTHONPYCACHEPREFIX": "${workspaceFolder}/.marketsieve/cache/python"
+      },
+      "console": "integratedTerminal",
+      "justMyCode": true
+    }
+  ],
+  "inputs": [
+    {
+      "id": "outputMode",
+      "type": "pickString",
+      "description": "Output format",
+      "options": ["rich", "text", "json"],
+      "default": "rich"
+    },
+    {
+      "id": "market",
+      "type": "pickString",
+      "description": "Market",
+      "options": ["jp", "us"],
+      "default": "jp"
+    },
+    {
+      "id": "sourceProfile",
+      "type": "promptString",
+      "description": "Stored snapshot source profile name",
+      "default": "example-jp"
+    },
+    {
+      "id": "configuredSourceProfile",
+      "type": "promptString",
+      "description": "Configured provider source profile name",
+      "default": "japan"
+    },
+    {
+      "id": "sourceKind",
+      "type": "pickString",
+      "description": "Source data kind",
+      "options": ["daily_bars", "financials", "events"],
+      "default": "daily_bars"
+    },
+    {
+      "id": "instrument",
+      "type": "promptString",
+      "description": "Instrument in MIC:SYMBOL form",
+      "default": "XTKS:7203"
+    },
+    {
+      "id": "secondInstrument",
+      "type": "promptString",
+      "description": "Second stored instrument in MIC:SYMBOL form"
+    },
+    {
+      "id": "startDate",
+      "type": "promptString",
+      "description": "Fetch start date (YYYY-MM-DD)",
+      "default": "2025-01-01"
+    },
+    {
+      "id": "endDate",
+      "type": "promptString",
+      "description": "Fetch end date (YYYY-MM-DD)",
+      "default": "2025-12-31"
+    },
+    {
+      "id": "adjustment",
+      "type": "pickString",
+      "description": "Price adjustment",
+      "options": ["raw", "adjusted"],
+      "default": "raw"
+    },
+    {
+      "id": "objectId",
+      "type": "promptString",
+      "description": "Snapshot object ID"
+    },
+    {
+      "id": "indicator",
+      "type": "pickString",
+      "description": "Indicator",
+      "options": ["sma", "ema", "rsi", "atr", "period-return", "maximum-drawdown"],
+      "default": "sma"
+    },
+    {
+      "id": "period",
+      "type": "promptString",
+      "description": "Indicator period",
+      "default": "20"
+    },
+    {
+      "id": "portfolioPath",
+      "type": "promptString",
+      "description": "Portfolio CSV path",
+      "default": "portfolio.csv"
+    },
+    {
+      "id": "broker",
+      "type": "promptString",
+      "description": "Portfolio importer name",
+      "default": "canonical"
+    },
+    {
+      "id": "asOf",
+      "type": "promptString",
+      "description": "Knowledge time with UTC offset",
+      "default": "2026-01-01T00:00:00+09:00"
+    },
+    {
+      "id": "reportId",
+      "type": "promptString",
+      "description": "Report ID or latest",
+      "default": "latest"
+    },
+    {
+      "id": "provider",
+      "type": "pickString",
+      "description": "Explanation provider",
+      "options": ["lmstudio", "openai", "anthropic", "google"],
+      "default": "lmstudio"
+    },
+    {
+      "id": "experimentSpec",
+      "type": "promptString",
+      "description": "Experiment specification path",
+      "default": "experiment.toml"
     }
   ]
 }

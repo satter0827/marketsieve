@@ -125,17 +125,91 @@ def test_vscode_configuration_uses_installed_workspace_contracts() -> None:
     }
     assert referenced_targets <= make_targets
 
-    launches = json.loads((vscode / "launch.json").read_text(encoding="utf-8"))["configurations"]
-    assert [(launch["name"], launch["module"], launch["args"]) for launch in launches] == [
-        ("App: Doctor", "marketsieve_cli", ["doctor"])
-    ]
+    launch_document = json.loads((vscode / "launch.json").read_text(encoding="utf-8"))
+    launches = launch_document["configurations"]
+    launches_by_name = {launch["name"]: launch for launch in launches}
+    assert len(launches_by_name) == len(launches)
+    assert launches_by_name["App: Command (Prompt for Arguments)"]["args"] == (
+        "${command:pickArgs}"
+    )
+
+    command_paths = {
+        "App: Doctor": ("doctor",),
+        "App: Capabilities JSON": ("capabilities",),
+        "Data: Source List": ("source", "list"),
+        "Data: Import Example CSV": ("source", "import"),
+        "Data: Source Doctor": ("source", "doctor"),
+        "Data: Source Fetch (Network)": ("source", "fetch"),
+        "Data: Snapshot List": ("snapshot", "list"),
+        "Data: Snapshot Show": ("snapshot", "show"),
+        "Data: Snapshot Verify": ("snapshot", "verify"),
+        "Analysis: Inspect": ("inspect",),
+        "Analysis: Indicator": ("analyze",),
+        "Analysis: Compare": ("compare",),
+        "Portfolio: Import": ("portfolio", "import"),
+        "Portfolio: Show Latest": ("portfolio", "show"),
+        "Screen: Update (Network)": ("screen", "update"),
+        "Screen: Run Offline": ("screen", "run"),
+        "Brief: Daily (Network)": ("daily",),
+        "Brief: Weekly Offline": ("weekly",),
+        "Report: List": ("report", "list"),
+        "Report: Show": ("report", "show"),
+        "Report: Explain Dry Run": ("report", "explain"),
+        "Experiment: Run": ("experiment", "run"),
+        "Agent: Doctor": ("agent", "doctor"),
+    }
+    assert set(launches_by_name) == {"App: Command (Prompt for Arguments)", *command_paths}
+
+    input_ids = {entry["id"] for entry in launch_document["inputs"]}
+    assert len(input_ids) == len(launch_document["inputs"])
+    inputs_by_id = {entry["id"]: entry for entry in launch_document["inputs"]}
+    assert all(
+        "${workspaceFolder}" not in str(entry.get("default", ""))
+        for entry in launch_document["inputs"]
+    )
+    example_manifest = json.loads(
+        (ROOT / "examples/csv-daily-bars/manifest.json").read_text(encoding="utf-8")
+    )
+    assert inputs_by_id["sourceProfile"]["default"] == example_manifest["source_profile"]
+    example_configuration = tomllib.loads(
+        (ROOT / "marketsieve.example.toml").read_text(encoding="utf-8")
+    )
+    assert (
+        inputs_by_id["configuredSourceProfile"]["default"]
+        in example_configuration["source_profiles"]
+    )
+    assert "default" not in inputs_by_id["secondInstrument"]
+    input_pattern = re.compile(r"\$\{input:([^}]+)\}")
     for launch in launches:
+        assert launch["type"] == "debugpy"
+        assert launch["request"] == "launch"
+        assert launch["module"] == "marketsieve_cli"
+        assert launch["console"] == "integratedTerminal"
+        assert launch["justMyCode"] is True
         assert (
             launch.get("env", {}).get("PYTHONPYCACHEPREFIX")
             == "${workspaceFolder}/.marketsieve/cache/python"
         )
+
+        serialized = json.dumps(launch)
+        assert set(input_pattern.findall(serialized)) <= input_ids
+
+    for name, command_path in command_paths.items():
+        args = launches_by_name[name]["args"]
+        assert tuple(args[: len(command_path)]) == command_path
         environment = os.environ.copy()
         environment["PYTHONPYCACHEPREFIX"] = str(ROOT / ".marketsieve/cache/python")
+        subprocess.run(
+            [sys.executable, "-m", "marketsieve_cli", *command_path, "--help"],
+            cwd=ROOT,
+            env=environment,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+    for name in ("App: Doctor", "App: Capabilities JSON"):
+        launch = launches_by_name[name]
         subprocess.run(
             [sys.executable, "-m", launch["module"], *launch["args"]],
             cwd=ROOT,
