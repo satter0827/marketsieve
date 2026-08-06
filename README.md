@@ -38,7 +38,8 @@ weekend briefing includes fresh stored candidates in a section separate from por
 Open **Run and Debug** in VS Code. The numbered launch configurations at the top define the complete
 operating order. Run `01` through `03` once, `10` or `20` after the corresponding market closes,
 `30` only at the weekend after both daily reports, and `40` after saving ChatGPT's JSON response.
-Tasks with the same labels remain available as an alternative entry point.
+Run `02` again whenever holdings or watch items change, followed by `03` to recheck readiness. Tasks
+with the same labels remain available as an alternative entry point.
 
 The primary AI workflow uses a new ChatGPT Temporary Chat through files; it does not require an API
 key or automate a browser. Upload the printed absolute request path, save the JSON response, then

@@ -38,7 +38,7 @@ def validate_daily_configuration(path: Path) -> None:
                 )
             )
         for diagnostic in diagnostics:
-            if diagnostic.code in {"invalid_configuration", "invalid_credential"}:
+            if not diagnostic.ready and diagnostic.code != "missing_credential":
                 raise ValueError(diagnostic.message)
     configuration.weekly_max_age_days()
 
