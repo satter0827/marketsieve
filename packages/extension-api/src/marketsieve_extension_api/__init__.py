@@ -1,6 +1,9 @@
 """Public source-extension contracts."""
 
-from marketsieve_extension_api.conformance import verify_instrument_universe_importer
+from marketsieve_extension_api.conformance import (
+    verify_instrument_universe_importer,
+    verify_portfolio_snapshot_importer,
+)
 from marketsieve_extension_api.daily import (
     AvailabilityBasis,
     DailyBarBundleImporter,
@@ -32,6 +35,10 @@ from marketsieve_extension_api.fundamentals import (
     Revision,
     SourceConfiguration,
 )
+from marketsieve_extension_api.portfolio import (
+    ImportedPortfolioSnapshot,
+    PortfolioSnapshotImporter,
+)
 from marketsieve_extension_api.universe import (
     ImportedInstrumentUniverse,
     InstrumentUniverseFetcher,
@@ -62,12 +69,15 @@ __all__ = [
     "ImportedEvents",
     "ImportedFinancials",
     "ImportedInstrumentUniverse",
+    "ImportedPortfolioSnapshot",
     "InstrumentProfile",
     "InstrumentUniverseFetcher",
     "InstrumentUniverseImporter",
+    "PortfolioSnapshotImporter",
     "Revision",
     "SourceConfiguration",
     "SourceDiagnostic",
     "UniverseRequest",
     "verify_instrument_universe_importer",
+    "verify_portfolio_snapshot_importer",
 ]

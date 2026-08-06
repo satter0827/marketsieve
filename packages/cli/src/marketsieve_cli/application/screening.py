@@ -43,7 +43,7 @@ class SnapshotReader(Protocol):
 
 
 class PortfolioReader(Protocol):
-    def latest(self) -> tuple[str, PortfolioSnapshot, str]: ...
+    def latest_snapshot(self) -> PortfolioSnapshot: ...
 
 
 class ScreeningRepository(Protocol):
@@ -155,7 +155,7 @@ class ScreeningService:
 
     def _holdings(self, as_of: datetime) -> dict[tuple[str, str], Holding]:
         try:
-            _, portfolio, _ = self._portfolios.latest()
+            portfolio = self._portfolios.latest_snapshot()
         except LookupError:
             return {}
         if portfolio.as_of.astimezone(UTC) > as_of.astimezone(UTC):

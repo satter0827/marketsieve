@@ -13,6 +13,7 @@ from marketsieve_cli.adapters.console import ConsoleOutput, OutputMode
 from marketsieve_cli.adapters.experiments import ExperimentStore
 from marketsieve_cli.adapters.explanations import ExplanationStore
 from marketsieve_cli.adapters.plugins import SourcePluginRegistry
+from marketsieve_cli.adapters.portfolio_plugins import PortfolioPluginRegistry
 from marketsieve_cli.adapters.portfolios import (
     PortfolioStore,
     import_canonical_csv,
@@ -35,6 +36,7 @@ from marketsieve_cli.application.routines import DailyBriefService, WeeklyBriefS
 from marketsieve_cli.application.screening import ScreeningService
 from marketsieve_cli.application.snapshots import SnapshotService
 from marketsieve_cli.observability import configure_logger
+from marketsieve_extension_api import verify_portfolio_snapshot_importer
 
 
 def build_console_output(
@@ -163,22 +165,24 @@ def build_experiment_agent_service(config_path: Path | None = None) -> object:
 
 
 def import_portfolio(path: Path, *, broker: str, as_of: str) -> dict[str, object]:
-    """Import one explicit broker-neutral portfolio file."""
+    """Import one explicit portfolio file through a selected normalizer."""
 
-    if broker != "canonical":
-        raise ValueError("unsupported portfolio broker")
-    snapshot, source_hash = import_canonical_csv(
-        path.read_bytes(), as_of=datetime.fromisoformat(as_of)
-    )
-    object_id = build_portfolio_store().put(snapshot, source_hash=source_hash)
-    return portfolio_document(snapshot, source_hash=source_hash, object_id=object_id)
+    observed_at = datetime.fromisoformat(as_of)
+    if broker == "canonical":
+        imported = import_canonical_csv(path.read_bytes(), as_of=observed_at)
+    else:
+        imported = verify_portfolio_snapshot_importer(
+            PortfolioPluginRegistry().load(broker), path, as_of=observed_at
+        )
+    object_id = build_portfolio_store().put(imported)
+    return portfolio_document(imported, object_id=object_id)
 
 
 def read_portfolio() -> dict[str, object]:
     """Read and validate the latest normalized portfolio."""
 
-    object_id, snapshot, source_hash = build_portfolio_store().latest()
-    return portfolio_document(snapshot, source_hash=source_hash, object_id=object_id)
+    object_id, imported = build_portfolio_store().latest()
+    return portfolio_document(imported, object_id=object_id)
 
 
 def list_decision_reports() -> dict[str, Any]:

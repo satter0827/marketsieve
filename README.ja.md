@@ -91,8 +91,16 @@ uv run marketsieve portfolio import holdings.csv --broker canonical \
 uv run marketsieve portfolio show
 ```
 
-保存するのは正規化結果と入力digestだけで、元CSVは保存しません。楽天CSVは列を推測せず、
-匿名化した実fixtureを根拠に追加します。
+楽天証券の空の`assetbalance(all)`は直接取り込めます。
+
+```shell
+uv run marketsieve portfolio import assetbalance.csv --broker rakuten \
+  --as-of 2026-08-06T12:48:40+09:00
+```
+
+保存するのは正規化結果と入力digestだけで、元CSVは保存しません。楽天adapterが受け付ける
+のは、検証済みの保有なし形式だけです。保有銘柄と監視銘柄は、匿名化した保有あり出力で
+形式を確認できるまでcanonical CSVを使用します。
 
 ## アーキテクチャ
 

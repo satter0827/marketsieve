@@ -63,6 +63,21 @@ def test_secret_scan_reads_utf16_configuration(tmp_path: Path) -> None:
     assert [finding.kind for finding in scan_paths((path,))] == ["credential_assignment"]
 
 
+def test_secret_scan_reads_cp932_csv(tmp_path: Path) -> None:
+    key = "JQUANTS" + "_API_KEY"
+    path = tmp_path / "portfolio.csv"
+    path.write_text(f"銘柄,{key}=opaque-production-credential\n", encoding="cp932")
+
+    assert [finding.kind for finding in scan_paths((path,))] == ["credential_assignment"]
+
+
+def test_secret_scan_accepts_safe_cp932_csv(tmp_path: Path) -> None:
+    path = tmp_path / "portfolio.csv"
+    path.write_text("銘柄,評価額\n該当なし,0\n", encoding="cp932")
+
+    assert scan_paths((path,)) == []
+
+
 def test_secret_scan_fails_closed_for_oversized_content(tmp_path: Path) -> None:
     path = tmp_path / "large.bin"
     path.write_bytes(b"x" * (5 * 1024 * 1024 + 1))

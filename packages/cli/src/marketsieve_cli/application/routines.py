@@ -26,7 +26,7 @@ from marketsieve.financial import FinancialTrendReport
 
 
 class PortfolioReader(Protocol):
-    def latest(self) -> tuple[str, PortfolioSnapshot, str]: ...
+    def latest_snapshot(self) -> PortfolioSnapshot: ...
 
 
 class DailyDataService(Protocol):
@@ -112,7 +112,7 @@ class DailyBriefService:
             raise ValueError("market must be jp or us")
         if as_of.tzinfo is None or as_of.utcoffset() is None:
             raise ValueError("daily as_of must include a UTC offset")
-        _, portfolio, _ = self._portfolios.latest()
+        portfolio = self._portfolios.latest_snapshot()
         if portfolio.as_of.astimezone(UTC) > as_of.astimezone(UTC):
             raise ValueError("daily as_of must not predate the portfolio snapshot")
         selected = self._select_portfolio(portfolio, market)

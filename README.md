@@ -120,8 +120,16 @@ uv run marketsieve portfolio import holdings.csv --broker canonical \
 uv run marketsieve portfolio show
 ```
 
-MarketSieve stores normalized content and the input digest, not the source CSV. Rakuten CSV import
-is unavailable until an anonymized real fixture establishes its format.
+An empty Rakuten Securities `assetbalance(all)` export can be imported directly:
+
+```shell
+uv run marketsieve portfolio import assetbalance.csv --broker rakuten \
+  --as-of 2026-08-06T12:48:40+09:00
+```
+
+MarketSieve stores normalized content and the input digest, not the source CSV. The Rakuten adapter
+currently accepts only the verified no-holdings form. Use the canonical CSV for holdings and watch
+items until an anonymized non-empty export defines that broker format.
 
 ## Architecture
 

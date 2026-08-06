@@ -78,10 +78,10 @@ class Portfolios:
     def __init__(self, snapshot: PortfolioSnapshot | None = None) -> None:
         self.snapshot = snapshot
 
-    def latest(self) -> tuple[str, PortfolioSnapshot, str]:
+    def latest_snapshot(self) -> PortfolioSnapshot:
         if self.snapshot is None:
             raise LookupError("no portfolio")
-        return "portfolio", self.snapshot, "source"
+        return self.snapshot
 
 
 def _configuration(tmp_path: Path) -> Configuration:

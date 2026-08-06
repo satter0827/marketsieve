@@ -22,7 +22,10 @@ from scripts.package_catalog import PackageSpec, load_package_catalog
 ROOT = Path(__file__).parents[1]
 STATE_ROOT = ROOT / ".marketsieve"
 RUNTIME_WHEELHOUSE = STATE_ROOT / "cache" / "runtime-wheelhouse"
-EXTERNAL_PLUGIN_EXAMPLE = ROOT / "examples" / "instrument-universe-plugin"
+EXTERNAL_PLUGIN_EXAMPLES = (
+    ROOT / "examples" / "instrument-universe-plugin",
+    ROOT / "examples" / "portfolio-importer-plugin",
+)
 
 
 def run(command: Sequence[str], *, cwd: Path = ROOT) -> None:
@@ -286,10 +289,11 @@ def check_package(path: Path) -> None:
     sdist_files = {spec.distribution: verify_catalog_sdist(spec.sdist(dist)) for spec in catalog}
     external_dist = (path / "external-plugin").resolve()
     external_dist.mkdir()
-    run(("uv", "build", str(EXTERNAL_PLUGIN_EXAMPLE), "--out-dir", str(external_dist)))
-    external_wheels = tuple(external_dist.glob("*.whl"))
-    if len(external_wheels) != 1:
-        raise RuntimeError("external plugin example must build exactly one wheel")
+    for example in EXTERNAL_PLUGIN_EXAMPLES:
+        run(("uv", "build", str(example), "--out-dir", str(external_dist)))
+    external_wheels = tuple(sorted(external_dist.glob("*.whl")))
+    if len(external_wheels) != len(EXTERNAL_PLUGIN_EXAMPLES):
+        raise RuntimeError("each external plugin example must build exactly one wheel")
 
     with tempfile.TemporaryDirectory(prefix="marketsieve-install-") as temp_dir:
         temporary_root = Path(temp_dir)
@@ -329,9 +333,12 @@ def check_package(path: Path) -> None:
         ).stdout.strip()
         cli_module = next(spec.module for spec in catalog if spec.role == "cli")
         run((str(isolated), "-m", cli_module, "doctor", "--output", "json"))
+        universe_wheel = next(
+            wheel for wheel in external_wheels if "example_universe" in wheel.name
+        )
         verify_isolated_target(
             temporary_root,
-            target=external_wheels[0],
+            target=universe_wheel,
             dist=dist,
             import_statement=(
                 "from importlib.metadata import entry_points; "
@@ -340,6 +347,22 @@ def check_package(path: Path) -> None:
                 "selected=[item for item in items if item.name == 'example-universe']; "
                 "assert len(selected) == 1; assert isinstance(selected[0].load()(), "
                 "InstrumentUniverseImporter)"
+            ),
+        )
+        portfolio_wheel = next(
+            wheel for wheel in external_wheels if "example_portfolio" in wheel.name
+        )
+        verify_isolated_target(
+            temporary_root,
+            target=portfolio_wheel,
+            dist=dist,
+            import_statement=(
+                "from importlib.metadata import entry_points; "
+                "from marketsieve_extension_api import PortfolioSnapshotImporter; "
+                "items=entry_points(group='marketsieve.portfolios.importers'); "
+                "selected=[item for item in items if item.name == 'example-portfolio']; "
+                "assert len(selected) == 1; assert isinstance(selected[0].load()(), "
+                "PortfolioSnapshotImporter)"
             ),
         )
 
@@ -351,10 +374,9 @@ def check_package(path: Path) -> None:
         ],
         "wheel_files": wheel_files,
         "sdist_files": sdist_files,
-        "external_plugin": {
-            "name": external_wheels[0].name,
-            "sha256": sha256(external_wheels[0]),
-        },
+        "external_plugins": [
+            {"name": wheel.name, "sha256": sha256(wheel)} for wheel in external_wheels
+        ],
     }
     (path / "package.json").write_text(
         json.dumps(package, indent=2, sort_keys=True) + "\n", encoding="utf-8"

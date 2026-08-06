@@ -265,7 +265,8 @@ reports, rendered Markdown, and mutable latest references remain below `.markets
 ignored by version control. Source brokerage files are read once and not copied into local state.
 Portfolio objects live below `.marketsieve/portfolio/objects`; `refs/latest.json` is replaced
 atomically. The object contains normalized holdings and watch items plus the source digest, but no
-source path, original bytes, account number, or customer name.
+source path, original bytes, account number, or customer name. It also retains the importer name,
+importer version, dataset identity, and diagnostics needed to reproduce provenance.
 
 Routine output is optimized for a short review. A successful report may state that no action is
 needed. Warnings identify a concrete missing, stale, incompatible, or failed input and name the
@@ -273,6 +274,8 @@ next command when recovery is possible. General legal disclaimers do not replace
 information.
 
 FRED credentials enter through `FRED_API_KEY`. Rakuten import uses a local file and no credential.
-The importer accepts only fixture-proven formats, drops account identifiers, and records the input
-digest without retaining the file contents. Live portfolio data and generated reports never enter
-tests, evidence bundles, distributions, or logs.
+The importer accepts only the fixture-proven CP932 no-holdings `assetbalance(all)` form, rejects
+non-empty or structurally different detail sections, and records the input digest without retaining
+the source path or contents. The committed fixture contains structural labels and zero values only.
+Live portfolio data and generated reports never enter tests, evidence bundles, distributions, or
+logs.

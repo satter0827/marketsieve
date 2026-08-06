@@ -44,6 +44,9 @@ notifications.
   instrument does not update a latest-report reference.
 - **PCB-06:** Human output leads with the conclusion, items needing attention, changes, and the next
   action. No-action days are successful outcomes.
+- **PCB-07:** A verified no-holdings Rakuten `assetbalance(all)` export maps to an empty normalized
+  portfolio without retaining the source path, source bytes, customer identity, or account identity.
+  Unverified non-empty detail formats fail explicitly.
 - **PCB-08:** An agent explanation consumes an immutable decision report and cannot alter its
   decisions, values, evidence, or identity.
 - **PCB-09:** External adapters can be independently developed and installed against a versioned

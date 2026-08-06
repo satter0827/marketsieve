@@ -11,6 +11,7 @@ network clients, databases, delivery providers, or LLM providers.
 The root workspace catalog declares every public distribution, and all entries share one version.
 `marketsieve` contains the I/O-independent SDK, including knowledge-time-correct financial-history
 calculations. `marketsieve-extension-api` defines the implemented data-kind capabilities,
+`marketsieve-import-rakuten` implements the verified empty `assetbalance(all)` portfolio import,
 `marketsieve-source-csv` implements local daily-bar and instrument-universe import,
 `marketsieve-source-jquants` implements explicit J-Quants API V2 acquisition,
 `marketsieve-source-alphavantage` implements explicit Alpha Vantage acquisition,
@@ -69,6 +70,10 @@ Import Linter is the executable authority for layer direction and cycles between
 AST structure tests separately protect the SDK from I/O dependencies and protect the public
 distribution boundary. New layers or public ports are added only with a working use case and tests;
 empty adapter, repository, or base-class packages are prohibited.
+
+The external examples under `examples` demonstrate independently built instrument-universe and
+portfolio-importer wheels. The package gate installs each example in isolation with released-style
+SDK and extension-API wheels and verifies its declared runtime capability.
 
 The core returns typed normalized values, indicator results, and evidence and does not depend on
 logging, clocks, handlers, files, or environment variables. The bootstrap owns logging
@@ -364,10 +369,13 @@ entering or leaving the reviewed portfolio explicitly.
 
 ## Personal Close Brief application architecture
 
-The CLI currently imports one strict broker-neutral UTF-8 CSV into a brokerage-neutral portfolio
-snapshot and a content-addressed local store. It retains only normalized values and the source
-SHA-256 digest. The source file is never copied below `.marketsieve`. The extension API adds
-portfolio import only with a working Rakuten package. Its implemented
+The CLI imports either one strict broker-neutral UTF-8 CSV or the verified no-holdings form of a
+Rakuten Securities CP932 `assetbalance(all)` export into a brokerage-neutral portfolio snapshot
+and content-addressed local store. It retains only normalized values and the source SHA-256 digest.
+The source file is never copied below `.marketsieve`. The extension API defines portfolio import
+from the independently installable working Rakuten package. The immutable portfolio object retains
+the adapter name and version, dataset identity, source digest, and diagnostics beside the normalized
+snapshot. Application services read only the normalized snapshot. Its implemented
 economic-series capability is provided by the independently installable FRED package. The CLI owns
 source selection and report orchestration in addition to content-addressed storage and Markdown
 presentation. The implemented daily service selects one currency-qualified market from the latest

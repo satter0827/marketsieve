@@ -16,8 +16,9 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from marketsieve import Holding, PortfolioSnapshot, WatchItem
 from marketsieve.domain import Instrument, InstrumentType
+from marketsieve_extension_api import ImportedPortfolioSnapshot
 
-PORTFOLIO_SCHEMA = "portfolio-result/v1"
+PORTFOLIO_SCHEMA = "portfolio-result/v2"
 CSV_HEADERS = (
     "kind",
     "mic",
@@ -55,13 +56,18 @@ def _instrument_document(instrument: Instrument) -> dict[str, str]:
 
 
 def portfolio_document(
-    snapshot: PortfolioSnapshot, *, source_hash: str, object_id: str | None = None
+    imported: ImportedPortfolioSnapshot, *, object_id: str | None = None
 ) -> dict[str, object]:
+    snapshot = imported.snapshot
     document: dict[str, object] = {
         "schema": PORTFOLIO_SCHEMA,
         "as_of": snapshot.as_of.isoformat(),
         "source": snapshot.source,
-        "source_hash": source_hash,
+        "source_name": imported.source_name,
+        "source_version": imported.source_version,
+        "dataset": imported.dataset,
+        "source_hash": imported.source_hash,
+        "diagnostics": list(imported.diagnostics),
         "holdings": [
             {
                 "instrument": _instrument_document(item.instrument),
@@ -78,7 +84,7 @@ def portfolio_document(
     return {"object_id": object_id, **document} if object_id is not None else document
 
 
-def import_canonical_csv(payload: bytes, *, as_of: datetime) -> tuple[PortfolioSnapshot, str]:
+def import_canonical_csv(payload: bytes, *, as_of: datetime) -> ImportedPortfolioSnapshot:
     """Normalize the documented broker-neutral CSV without retaining its bytes."""
 
     if as_of.tzinfo is None or as_of.utcoffset() is None:
@@ -123,9 +129,12 @@ def import_canonical_csv(payload: bytes, *, as_of: datetime) -> tuple[PortfolioS
             raise ValueError("portfolio kind must be holding or watch")
     holdings.sort(key=lambda item: (item.instrument.mic, item.instrument.symbol))
     watch_items.sort(key=lambda item: (item.instrument.mic, item.instrument.symbol))
-    return (
-        PortfolioSnapshot(as_of, tuple(holdings), tuple(watch_items), "canonical_csv"),
-        hashlib.sha256(payload).hexdigest(),
+    return ImportedPortfolioSnapshot(
+        snapshot=PortfolioSnapshot(as_of, tuple(holdings), tuple(watch_items), "canonical_csv"),
+        source_name="canonical",
+        source_version="1.0.0",
+        dataset="canonical-portfolio/v1",
+        source_hash=hashlib.sha256(payload).hexdigest(),
     )
 
 
@@ -151,12 +160,8 @@ class PortfolioStore:
         self._objects = root / "objects"
         self._refs = root / "refs"
 
-    def put(self, snapshot: PortfolioSnapshot, *, source_hash: str) -> str:
-        if len(source_hash) != 64 or any(
-            character not in "0123456789abcdef" for character in source_hash
-        ):
-            raise ValueError("portfolio source hash must be a lowercase SHA-256 digest")
-        document = portfolio_document(snapshot, source_hash=source_hash)
+    def put(self, imported: ImportedPortfolioSnapshot) -> str:
+        document = portfolio_document(imported)
         payload = _json_bytes(document)
         object_id = hashlib.sha256(payload).hexdigest()
         self._ensure_directory(self._objects)
@@ -170,7 +175,7 @@ class PortfolioStore:
         self._atomic_write(self._refs / "latest.json", _json_bytes({"object_id": object_id}))
         return object_id
 
-    def latest(self) -> tuple[str, PortfolioSnapshot, str]:
+    def latest(self) -> tuple[str, ImportedPortfolioSnapshot]:
         reference = self._refs / "latest.json"
         if reference.is_symlink() or not reference.is_file():
             raise LookupError("portfolio not found; run 'marketsieve portfolio import'")
@@ -181,7 +186,12 @@ class PortfolioStore:
             raise ValueError("portfolio latest reference is invalid") from error
         return self.show(object_id)
 
-    def show(self, object_id: str) -> tuple[str, PortfolioSnapshot, str]:
+    def latest_snapshot(self) -> PortfolioSnapshot:
+        """Return only the normalized value needed by application services."""
+
+        return self.latest()[1].snapshot
+
+    def show(self, object_id: str) -> tuple[str, ImportedPortfolioSnapshot]:
         if len(object_id) != 64 or any(
             character not in "0123456789abcdef" for character in object_id
         ):
@@ -194,13 +204,12 @@ class PortfolioStore:
             raise ValueError("portfolio object ID does not match its content")
         try:
             value = json.loads(payload)
-            snapshot = _parse_snapshot(value)
-            source_hash = value["source_hash"]
+            imported = _parse_imported(value)
         except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
             raise ValueError("portfolio object is invalid") from error
-        if _json_bytes(portfolio_document(snapshot, source_hash=source_hash)) != payload:
+        if _json_bytes(portfolio_document(imported)) != payload:
             raise ValueError("portfolio object is not canonical")
-        return object_id, snapshot, source_hash
+        return object_id, imported
 
     @staticmethod
     def _ensure_directory(path: Path) -> None:
@@ -222,12 +231,16 @@ class PortfolioStore:
             raise
 
 
-def _parse_snapshot(value: dict[str, Any]) -> PortfolioSnapshot:
+def _parse_imported(value: dict[str, Any]) -> ImportedPortfolioSnapshot:
     if value.get("schema") != PORTFOLIO_SCHEMA or set(value) != {
         "schema",
         "as_of",
         "source",
+        "source_name",
+        "source_version",
+        "dataset",
         "source_hash",
+        "diagnostics",
         "holdings",
         "watch_items",
     }:
@@ -244,8 +257,16 @@ def _parse_snapshot(value: dict[str, Any]) -> PortfolioSnapshot:
     watch_items = tuple(
         WatchItem(_parse_instrument(item["instrument"])) for item in value["watch_items"]
     )
-    return PortfolioSnapshot(
+    snapshot = PortfolioSnapshot(
         datetime.fromisoformat(value["as_of"]), holdings, watch_items, value["source"]
+    )
+    return ImportedPortfolioSnapshot(
+        snapshot=snapshot,
+        source_name=value["source_name"],
+        source_version=value["source_version"],
+        dataset=value["dataset"],
+        source_hash=value["source_hash"],
+        diagnostics=tuple(value["diagnostics"]),
     )
 
 
