@@ -1,7 +1,7 @@
 [project]
-name = "marketsieve-extension-api"
+name = "marketsieve-ai"
 version = "0.8.0"
-description = "Extension contracts for MarketSieve data sources."
+description = "Manual, grounded AI exchange for MarketSieve."
 readme = "README.md"
 requires-python = ">=3.12,<3.15"
 license = "MIT"
@@ -13,15 +13,20 @@ dependencies = [
     "marketsieve>=0.8,<0.9",
 ]
 
+[tool.uv.sources]
+marketsieve = { workspace = true }
+
 [build-system]
 requires = ["hatchling>=1.27,<2"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/marketsieve_extension_api"]
+packages = ["src/marketsieve_ai"]
 
 [tool.hatch.build.targets.sdist]
-only-include = ["LICENSE", "README.md", "pyproject.toml", "src"]
-
-[tool.uv.sources]
-marketsieve = { workspace = true }
+only-include = [
+    "LICENSE",
+    "README.md",
+    "pyproject.toml",
+    "src/marketsieve_ai",
+]

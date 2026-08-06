@@ -13,7 +13,25 @@ MarketSieveは、検証済みの市場情報から再現可能な分析、過去
 
 ## 現在の状態
 
-`develop`には0.7.0のリリース候補があります。CSV、J-Quants、Alpha Vantage、FRED、SEC、EDINETを独立した配布物として扱い、変更不能な検証済みスナップショット、価格・テクニカル・財務・valuation・risk・event・data qualityの総合確認、比較、レポート、説明専用Agentを提供します。設定済みの`daily jp`と`daily us`は、ポートフォリオ銘柄を明示的に取得し、変更不能なClose Briefを保存します。`weekly`は有効な日米レポートと期限内の候補をオフラインで週末作戦会議へまとめ、保有判断と`残った候補`を分けて表示します。日米の銘柄集合は上限を指定して明示的に更新し、検証済みのローカル価格からオフラインで候補を抽出できます。候補の順序は根拠を確認でき、不透明な総合点を使いません。Agentは変更不能な判断レポートだけを読み、LM Studio、OpenAI、Anthropic、Googleのいずれかを明示した場合だけ動作します。説明は別成果物として保存され、レポートを変更しません。
+`develop`には0.8.0のリリース候補があります。CSV、J-Quants、Alpha Vantage、FRED、SEC、EDINETを独立した配布物として扱い、変更不能な検証済みスナップショット、価格・テクニカル・財務・valuation・risk・event・data qualityの総合確認、比較、レポート、説明専用Agentを提供します。設定済みの`daily jp`と`daily us`は、ポートフォリオ銘柄を明示的に取得し、変更不能なClose Briefを保存します。`weekly`は有効な日米レポートと期限内の候補をオフラインで週末作戦会議へまとめ、保有判断と`残った候補`を分けて表示します。日米の銘柄集合は上限を指定して明示的に更新し、検証済みのローカル価格からオフラインで候補を抽出できます。候補の順序は根拠を確認でき、不透明な総合点を使いません。手動AI交換はChatGPT画面を利用し、API keyを必要としません。既存Agentは変更不能な判断レポートだけを読み、LM Studio、OpenAI、Anthropic、Googleのいずれかを明示した場合だけ動作します。どちらの説明も別成果物として保存され、レポートを変更しません。
+
+## 日常利用
+
+基本のAI動線では、新しいChatGPT Temporary Chatとファイルを使用します。API keyもブラウザ自動操作も使用しません。出力された絶対パスの依頼ファイルをアップロードし、ChatGPTのJSON回答を推奨パスへ保存してから、取込と表示を実行します。Project、Web検索、外部ツールは使用せず、Custom Instructionsは無効化します。
+
+| 操作 | ターミナル | VS Code Task | 通信 | 生成物 |
+| --- | --- | --- | --- | --- |
+| 日本株Closeと依頼生成 | `make daily-jp-ai` | `Daily Use: JP Close + ChatGPT Request (Network)` | 市場データ取得のみ | レポート、`request.json` |
+| 米国株Closeと依頼生成 | `make daily-us-ai` | `Daily Use: US Close + ChatGPT Request (Network)` | 市場データ取得のみ | レポート、`request.json` |
+| 週次Briefと依頼生成 | `make weekly-ai` | `Daily Use: Weekly Brief + ChatGPT Request` | なし | レポート、`request.json` |
+| 最新レポートから依頼生成 | `make ai-prepare` | `Daily Use: Prepare ChatGPT Request from Latest Report` | なし | `request.json` |
+| 保存した回答の取込 | `make ai-import RESPONSE=/absolute/path/response.json` | `Daily Use: Import ChatGPT Response` | なし | 回答、検証、説明 |
+| 最新説明の表示 | `make ai-show` | `Daily Use: Show Latest AI Explanation` | なし | 決定論的な説明 |
+| 設定確認 | `make doctor` | `Daily Use: Status` | なし | 診断結果 |
+
+ChatGPTが返すのは、提示済みfact ID、表示順、数値を含まない事実間の関係だけです。MarketSieveが回答を検証し、変更不能なレポートの値から説明を生成します。既存のAPI・ローカルモデルAgentは高度な任意機能として引き続き利用できます。
+
+新しいTemporary Chat、Custom Instructions無効、Project・Web検索・外部ツール無効を確認した場合だけ、`make ai-import RESPONSE=... CONTROLLED=1`を使用します。通常の取込は確認済みと記録しません。
 
 ## インストール
 
@@ -23,7 +41,7 @@ Python 3.12から3.14をサポートします。開発にはPython 3.13と[uv](h
 make sync
 ```
 
-SDK、extension API、CLI、Agent、CSV source、J-Quants source、Alpha Vantage source、FRED source、SEC source、EDINET sourceは独立した配布物としてビルドできます。
+SDK、extension API、CLI、手動AI交換、Agent、CSV source、J-Quants source、Alpha Vantage source、FRED source、SEC source、EDINET sourceは独立した配布物としてビルドできます。
 
 ```shell
 make build
@@ -33,7 +51,7 @@ make build
 wheelhouseとして残します。通常はPyPIからinstallします。
 
 ```shell
-python -m pip install "marketsieve-cli[all-sources]>=0.7,<0.8"
+python -m pip install "marketsieve-cli[all-sources]>=0.8,<0.9"
 ```
 
 offlineで使用する場合は、assetを`release.json`で検証してwheelhouse ZIPを展開した後、
@@ -116,7 +134,7 @@ make check
 make evidence
 ```
 
-VS Codeはworkspaceの`.venv`を使用します。`make sync`の実行後、Test Explorerから通常実行、デバッグ、対話的なカバレッジ確認を行えます。repository taskは依存同期、format、現在のテストファイル、診断、完全Gateを提供します。Run and Debugには、診断、データ、分析、ポートフォリオ、スクリーニング、定期処理、レポート、実験、エージェントの起動設定があります。専用設定がないコマンドは`App: Command (Prompt for Arguments)`へCLI引数を入力して実行できます。名前に`Network`を含む設定は、明示的に選択したproviderへ接続する場合があります。対話的なカバレッジはローカル確認用とし、`make check`を正式なカバレッジGateとします。ローカルcacheと生成物は`.marketsieve`に集約し、repository rootに置く生成環境は`.venv`だけとします。
+VS Codeはworkspaceの`.venv`を使用します。`make sync`の実行後、Test Explorerから通常実行、デバッグ、対話的なカバレッジ確認を行えます。Tasksは日常利用と品質ゲート、Run and Debugは汎用CLIと手動AI交換のデバッグ、Test Explorerはテストとカバレッジを担当します。対話的なカバレッジはローカル確認用とし、`make check`を正式なカバレッジGateとします。ローカルcacheと生成物は`.marketsieve`に集約し、repository rootに置く生成環境は`.venv`だけとします。
 
 `make check`はDevelop Gateを実行します。`make evidence`はこれに加えて、checksum付きreview bundleを`.marketsieve/artifacts/review/<commit>/`へ生成します。bundleはcode reviewの入力であり、review完了の証拠ではありません。アプリケーション結果はstdout、構造化JSON Lines logはstderrへ出力します。情報logを取得する場合は`--log-level INFO`、`.marketsieve/logs/`にも保存する場合は`--log-file`を指定します。
 
@@ -126,7 +144,7 @@ VS Codeはworkspaceの`.venv`を使用します。`make sync`の実行後、Test
 
 provider packageはCLI内部ではなく、データ種別ごとに小さく分けたextension APIへ依存します。
 [外部universe pluginの例](examples/instrument-universe-plugin/README.md)はworkspace catalogの外にあり、
-`marketsieve-extension-api>=0.7,<0.8`、entry point、公開conformance checkを示します。完全Gateは
+`marketsieve-extension-api>=0.8,<0.9`、entry point、公開conformance checkを示します。完全Gateは
 このwheelをbuildし、公開wheel一式と隔離環境へinstallします。
 
 ## Roadmap

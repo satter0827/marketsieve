@@ -113,6 +113,14 @@ as such and are not presented as successful test evidence.
 
 ## Workbench and Agent acceptance
 
+Manual AI exchange acceptance covers deterministic request IDs and bytes, private-field omission,
+raw JSON and single-code-block input, strict request and fact validation, bounded response size,
+trial numbering, separate immutable artifacts, and deterministic rendering. Package checks install
+`marketsieve-ai` independently and prove it has no CLI, persistence, browser, HTTP, configuration,
+or provider dependency. CLI and repository tests keep Make targets, VS Code Tasks, capabilities,
+and documented daily operations aligned. A release PR includes a synthetic request so a reviewer
+can complete one Temporary Chat upload, save, import, and show cycle without committing the chat.
+
 The gate includes deterministic reference vectors for every indicator, ambient-decimal-context
 tests, snapshot identity and atomicity tests, publication-versus-retrieval availability tests, and
 contract suites shared by CSV, J-Quants, Alpha Vantage, FRED, SEC, and EDINET. Network clients are

@@ -1,55 +1,24 @@
 {
   "version": "2.0.0",
   "tasks": [
+    {"label": "Daily Use: JP Close + ChatGPT Request (Network)", "type": "shell", "command": "make daily-jp-ai", "problemMatcher": []},
+    {"label": "Daily Use: US Close + ChatGPT Request (Network)", "type": "shell", "command": "make daily-us-ai", "problemMatcher": []},
+    {"label": "Daily Use: Weekly Brief + ChatGPT Request", "type": "shell", "command": "make weekly-ai", "problemMatcher": []},
+    {"label": "Daily Use: Prepare ChatGPT Request from Latest Report", "type": "shell", "command": "make ai-prepare", "problemMatcher": []},
+    {"label": "Daily Use: Import ChatGPT Response", "type": "process", "command": "make", "args": ["ai-import", "RESPONSE=${input:aiResponsePath}"], "problemMatcher": []},
+    {"label": "Daily Use: Show Latest AI Explanation", "type": "shell", "command": "make ai-show", "problemMatcher": []},
+    {"label": "Daily Use: Status", "type": "shell", "command": "make doctor", "problemMatcher": []},
+    {"label": "Developer: Sync", "type": "shell", "command": "make sync", "problemMatcher": []},
+    {"label": "Developer: Format", "type": "shell", "command": "make format", "problemMatcher": []},
+    {"label": "Developer: Test Current File", "type": "shell", "command": "make test TEST=${relativeFile}", "problemMatcher": []},
+    {"label": "Developer: Check", "type": "shell", "command": "make check", "group": "test", "problemMatcher": []},
+    {"label": "Developer: Review Evidence", "type": "shell", "command": "make evidence", "group": "test", "problemMatcher": []}
+  ],
+  "inputs": [
     {
-      "label": "Environment: Sync",
-      "type": "shell",
-      "command": "make sync",
-      "problemMatcher": []
-    },
-    {
-      "label": "Code: Format",
-      "type": "shell",
-      "command": "make format",
-      "problemMatcher": []
-    },
-    {
-      "label": "Tests: Current File",
-      "type": "shell",
-      "command": "make test TEST=${relativeFile}",
-      "problemMatcher": []
-    },
-    {
-      "label": "Gate: Check",
-      "type": "shell",
-      "command": "make check",
-      "group": "test",
-      "problemMatcher": []
-    },
-    {
-      "label": "Gate: Review",
-      "type": "shell",
-      "command": "make evidence",
-      "group": "test",
-      "problemMatcher": []
-    },
-    {
-      "label": "Review: Validate",
-      "type": "shell",
-      "command": "make evidence-validate",
-      "problemMatcher": []
-    },
-    {
-      "label": "App: Doctor",
-      "type": "shell",
-      "command": "make doctor",
-      "problemMatcher": []
-    },
-    {
-      "label": "App: Capabilities JSON",
-      "type": "shell",
-      "command": "make capabilities-json",
-      "problemMatcher": []
+      "id": "aiResponsePath",
+      "type": "promptString",
+      "description": "Absolute path to the saved ChatGPT response JSON"
     }
   ]
 }

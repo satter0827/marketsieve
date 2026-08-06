@@ -186,6 +186,9 @@ def test_capabilities_match_click_commands_and_validate_schema() -> None:
     validate("capabilities-result", document, major=2)
     assert [item["name"] for item in document["commands"]] == [
         "agent doctor",
+        "ai import",
+        "ai prepare report",
+        "ai show",
         "analyze atr",
         "analyze ema",
         "analyze macd",
@@ -238,6 +241,17 @@ def test_capabilities_match_click_commands_and_validate_schema() -> None:
         "network": True,
         "optional_writes": ["explanation"],
         "secrets": True,
+    }
+    ai_import = next(item for item in document["commands"] if item["name"] == "ai import")
+    assert {option["name"] for option in ai_import["options"]} == {
+        "model_label",
+        "controlled",
+        "output_mode",
+    }
+    assert ai_import["effects"] == {
+        "network": False,
+        "optional_writes": ["ai_response", "ai_validation", "ai_explanation"],
+        "secrets": False,
     }
 
 
@@ -491,7 +505,7 @@ def test_rakuten_empty_portfolio_import_is_offline_and_private() -> None:
         assert document["watch_items"] == []
         assert document["source"] == "rakuten_assetbalance_empty"
         assert document["source_name"] == "rakuten"
-        assert document["source_version"] == "0.7.0"
+        assert document["source_version"] == "0.8.0"
         assert document["dataset"] == "assetbalance-all-empty/v1"
         assert document["diagnostics"] == ["empty_portfolio"]
         assert not any(
@@ -792,6 +806,54 @@ def test_report_commands_and_explicit_agent_share_one_immutable_report(
     assert fallback_document["status"] == "template"
     assert "provider detail" not in fallback_document["text"]
     assert "provider detail" not in fallback.stderr
+
+
+def test_manual_ai_exchange_uses_the_same_immutable_report() -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem():
+        report_id = write_decision_report(Path(".marketsieve/reports"))
+        report_path = Path(f".marketsieve/reports/objects/{report_id}.json")
+        original_report = report_path.read_bytes()
+
+        prepared = runner.invoke(main, ["ai", "prepare", "report", "latest"])
+        assert prepared.exit_code == 0, prepared.output
+        request_path = next(Path(".marketsieve/ai/request/objects").glob("*.json"))
+        request = json.loads(request_path.read_text(encoding="utf-8"))
+        assert '"quantity"' not in request_path.read_text(encoding="utf-8")
+        assert "ChatGPTへアップロード" in prepared.output
+
+        response_path = Path("response.json")
+        response_path.write_text(
+            json.dumps(
+                {
+                    "request_id": request["request_id"],
+                    "section_order": ["XTKS:7203"],
+                    "selected_fact_ids": ["decision.XTKS:7203.action"],
+                    "connections": [],
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        imported = runner.invoke(
+            main,
+            ["ai", "import", str(response_path), "--controlled", "--output", "json"],
+        )
+        shown = runner.invoke(main, ["ai", "show", "latest", "--output", "json"])
+
+        assert report_path.read_bytes() == original_report
+        assert len(tuple(Path(".marketsieve/ai/response/objects").glob("*.json"))) == 1
+        assert len(tuple(Path(".marketsieve/ai/validation/objects").glob("*.json"))) == 1
+        assert len(tuple(Path(".marketsieve/ai/explanation/objects").glob("*.json"))) == 1
+
+    assert imported.exit_code == 0, imported.output
+    explanation = json.loads(imported.stdout)
+    validate("report-ai-explanation", explanation)
+    assert explanation["service"] == "chatgpt"
+    assert explanation["report_id"] == report_id
+    assert shown.exit_code == 0
+    assert json.loads(shown.stdout) == explanation
 
 
 def test_jquants_doctor_and_fetch_use_only_explicit_profile(

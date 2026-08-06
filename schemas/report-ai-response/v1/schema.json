@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:marketsieve:schema:report-ai-response:1.0.0",
+  "title": "MarketSieve imported manual AI response",
+  "type": "object",
+  "required": ["response_id", "schema", "request_id", "trial", "service", "model_label", "controlled", "imported_at", "raw_sha256", "raw_base64", "raw_text"],
+  "properties": {
+    "response_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "schema": {"const": "report-ai-response/v1"},
+    "request_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "trial": {"type": "integer", "minimum": 1},
+    "service": {"const": "chatgpt"},
+    "model_label": {"type": ["string", "null"]},
+    "controlled": {"type": "boolean"},
+    "imported_at": {"type": "string", "format": "date-time"},
+    "raw_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "raw_base64": {"type": "string"},
+    "raw_text": {"type": ["string", "null"]}
+  },
+  "additionalProperties": false
+}

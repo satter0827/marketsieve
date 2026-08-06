@@ -31,7 +31,7 @@
               "secrets": {"type": "boolean"},
               "optional_writes": {
                 "type": "array",
-                "items": {"enum": ["experiment", "explanation", "log_file", "portfolio", "report", "screening_report", "snapshot", "universe"]},
+                "items": {"enum": ["ai_explanation", "ai_request", "ai_response", "ai_validation", "experiment", "explanation", "log_file", "portfolio", "report", "screening_report", "snapshot", "universe"]},
                 "uniqueItems": true
               }
             },

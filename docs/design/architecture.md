@@ -21,6 +21,9 @@ acquisition, and
 `marketsieve-source-edinet` implements explicit EDINET filing and XBRL-derived acquisition.
 `marketsieve-cli` owns the executable application and immutable
 snapshot store.
+The `marketsieve-ai` distribution implements deterministic request generation, strict response
+validation, and fact-owned rendering for a human-mediated AI service. It depends only on the public
+`marketsieve` SDK and owns no HTTP client, browser automation, CLI, configuration, or persistence.
 The optional `marketsieve-agent` distribution implements decision-report fact selection,
 deterministic safe fallback, and an injectable LM Studio OpenAI-compatible adapter. LM Studio uses
 one bounded non-streaming request, follows no redirects, and accepts only loopback endpoints unless
@@ -280,7 +283,7 @@ artifact boundaries. The complete wheel set is installed offline in an isolated 
 Source dependencies do not expand the core SDK.
 
 Public distributions in one release share a version. Dependencies between them accept only that
-minor release series, such as `marketsieve-extension-api>=0.7,<0.8`, so an adapter can be developed
+minor release series, such as `marketsieve-extension-api>=0.8,<0.9`, so an adapter can be developed
 and installed outside this workspace without requiring an exact patch lock. The root catalog and
 package metadata are validated together; workspace-only source overrides do not enter a wheel.
 
@@ -326,6 +329,26 @@ environment variables and are never copied into configuration, snapshots, logs, 
 or distributions.
 
 ## Model explanation boundary
+
+The primary non-API path prepares one content-addressed `report-ai-request/v1` object from a
+validated report. A person uploads that file to a new ChatGPT Temporary Chat and imports the saved
+response. ChatGPT may select supplied fact IDs, section order, and bounded non-numeric connective
+text; it cannot introduce facts or calculations. The CLI stores request, original response,
+validation, and deterministic explanation as separate immutable objects below `.marketsieve/ai`.
+Only latest references and the response inbox path are mutable. Report objects are never changed.
+The response object stores the exact imported bytes as Base64 with a SHA-256 digest; UTF-8 text is
+included only when decoding succeeds, so malformed input remains reproducible without lossy repair.
+
+The request excludes portfolio quantity, acquisition price, source evidence identifiers, personal
+data, personal concentration thresholds, and credentials. Import accepts UTF-8 JSON or one
+otherwise-empty JSON code fence and rejects
+unknown fields, request mismatch, changed catalogs, unknown or duplicate facts, omitted selected
+sections, invalid order, unsafe connections, and responses over 65,536 bytes. Repeated imports are
+numbered trials without changing the request identity.
+
+Weekly requests include both portfolio decisions and remaining candidate decisions. Candidate fact
+IDs use the `candidate` namespace and candidate sections use the `candidate:` prefix, so a symbol
+cannot be confused with a portfolio-decision section or fact.
 
 The optional `marketsieve-agent` distribution consumes a validated decision report. Provider
 packages remain outside the SDK. A model chooses fact identifiers,

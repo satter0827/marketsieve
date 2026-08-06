@@ -179,6 +179,29 @@ from official XBRL-derived TSV data and never performs ticker-to-issuer lookup.
 
 ## Agent explanation
 
+The daily non-API path is:
+
+```shell
+marketsieve ai prepare report {ID,latest}
+marketsieve ai import RESPONSE.json [--model-label LABEL] [--controlled]
+marketsieve ai show {ID,latest}
+```
+
+`prepare` is offline and prints the absolute upload path, recommended response path, and exact
+import command. `import` accepts UTF-8 JSON or one otherwise-empty JSON code block, validates it
+against the exact immutable request and report, and stores response, validation, and explanation
+separately. `show` renders only a validated explanation and is offline. `--controlled` records that
+a new Temporary Chat used no Project, web search, or external tools and that Custom Instructions
+were disabled.
+Persistent validation records conform to
+`schemas/report-ai-validation/v1/schema.json`; valid records contain the accepted plan and invalid
+records contain a non-empty rejection reason.
+An import binds to the response's request ID or to the request ID in the recommended response
+filename. Unparseable input without either binding is rejected instead of being attributed to the
+latest request.
+
+The direct-provider Agent commands below remain available as an optional advanced path.
+
 ```shell
 marketsieve agent doctor lmstudio
 marketsieve report explain {ID,latest} --provider lmstudio

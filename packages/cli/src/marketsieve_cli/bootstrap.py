@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, TextIO
 
 from marketsieve import __version__
+from marketsieve_cli.adapters.ai_exchange import AiExchangeStore
 from marketsieve_cli.adapters.config import Configuration
 from marketsieve_cli.adapters.console import ConsoleOutput, OutputMode
 from marketsieve_cli.adapters.experiments import ExperimentStore
@@ -30,6 +31,7 @@ from marketsieve_cli.adapters.screening import (
     universe_document,
 )
 from marketsieve_cli.adapters.snapshots import SnapshotStore
+from marketsieve_cli.application.ai import ManualAiService
 from marketsieve_cli.application.diagnostics import DiagnosticsService
 from marketsieve_cli.application.experiments import ExperimentService
 from marketsieve_cli.application.routines import DailyBriefService, WeeklyBriefService
@@ -232,6 +234,15 @@ def build_agent_service(config_path: Path | None = None) -> object:
         ExplanationStore(Path(".marketsieve/explanations")),
         configuration,
         os.environ,
+    )
+
+
+def build_ai_service() -> ManualAiService:
+    """Build the offline, human-mediated AI exchange workflow."""
+
+    return ManualAiService(
+        ReportStore(Path(".marketsieve/reports")),
+        AiExchangeStore(Path(".marketsieve/ai")),
     )
 
 
