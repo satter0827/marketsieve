@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-import os
+import argparse
 from collections.abc import Mapping
+from pathlib import Path
 from typing import Any
 
 from marketsieve_cli.bootstrap import read_portfolio
-
-MARKET_CREDENTIALS = {"jp": "JQUANTS_API_KEY", "us": "ALPHAVANTAGE_API_KEY"}
+from marketsieve_extension_api import SourceDiagnostic
+from scripts.configuration_check import daily_source_diagnostics
 
 
 def supported_markets(document: Mapping[str, Any]) -> frozenset[str]:
@@ -34,32 +35,37 @@ def supported_markets(document: Mapping[str, Any]) -> frozenset[str]:
     return frozenset(markets)
 
 
-def runnable_markets(markets: frozenset[str], environ: Mapping[str, str]) -> frozenset[str]:
-    """Return portfolio markets whose required credential is available."""
+def runnable_markets(
+    markets: frozenset[str], diagnostics: Mapping[str, SourceDiagnostic]
+) -> frozenset[str]:
+    """Return portfolio markets whose configured daily provider is ready."""
 
-    return frozenset(
-        market for market in markets if environ.get(MARKET_CREDENTIALS[market], "").strip()
-    )
+    return frozenset(market for market in markets if diagnostics[market].ready)
 
 
 def main() -> int:
     """Validate the latest stored portfolio and print a concise result."""
 
+    parser = argparse.ArgumentParser()
+    parser.add_argument("config", type=Path)
+    arguments = parser.parse_args()
     try:
         markets = supported_markets(read_portfolio())
+        diagnostics = daily_source_diagnostics(arguments.config)
     except (LookupError, OSError, TypeError, ValueError) as error:
         print(f"[invalid] portfolio: {error}")
         print("Next VS Code operation: 02 First Run: Import Portfolio CSV")
         return 2
     print(f"[ready] portfolio markets: {', '.join(sorted(markets))}")
-    runnable = runnable_markets(markets, os.environ)
+    runnable = runnable_markets(markets, diagnostics)
     for market in sorted(markets):
-        credential = MARKET_CREDENTIALS[market]
-        status = "ready" if market in runnable else "missing"
-        print(f"[{status}] {credential} for task {'10' if market == 'jp' else '20'}")
+        diagnostic = diagnostics[market]
+        status = "ready" if diagnostic.ready else "blocked"
+        print(f"[{status}] {market} daily source: {diagnostic.message}")
+        if not diagnostic.ready and diagnostic.recovery:
+            print(f"Next: {diagnostic.recovery}")
     if not runnable:
-        credentials = " or ".join(MARKET_CREDENTIALS[market] for market in sorted(markets))
-        print(f"[blocked] set {credentials}, then rerun 03 First Run: Check Readiness")
+        print("[blocked] fix the configured daily source, then rerun 03 First Run: Check Readiness")
         return 2
     operations = [
         "10 Daily: Analyze JP Close and Prepare ChatGPT Request (Network)"

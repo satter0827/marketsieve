@@ -7,14 +7,19 @@ from pathlib import Path
 
 from marketsieve_cli.adapters.config import Configuration
 from marketsieve_cli.adapters.plugins import SourcePluginRegistry
-from marketsieve_extension_api import DailyBarSourceConfiguration, SourceConfiguration
+from marketsieve_extension_api import (
+    DailyBarSourceConfiguration,
+    SourceConfiguration,
+    SourceDiagnostic,
+)
 
 
-def validate_daily_configuration(path: Path) -> None:
-    """Validate every configuration path used by the numbered workflow."""
+def daily_source_diagnostics(path: Path) -> dict[str, SourceDiagnostic]:
+    """Inspect each configured daily-bar provider without using the network."""
 
     configuration = Configuration(path)
     sources = SourcePluginRegistry()
+    diagnostics: dict[str, SourceDiagnostic] = {}
     expected_markets = {
         "jp": ("JPY", "Asia/Tokyo"),
         "us": ("USD", "America/New_York"),
@@ -26,10 +31,22 @@ def validate_daily_configuration(path: Path) -> None:
             currency, timezone = expected_markets[market]
             raise ValueError(f"daily routine {market!r} requires {currency} and {timezone}")
         binding = profile.binding("daily_bars")
-        diagnostic = sources.load_fetcher(binding.plugin).doctor(
+        diagnostics[market] = sources.load_fetcher(binding.plugin).doctor(
             DailyBarSourceConfiguration(profile.currency, profile.timezone, binding.settings)
         )
-        diagnostics = [diagnostic]
+    return diagnostics
+
+
+def validate_daily_configuration(path: Path) -> None:
+    """Validate every configuration path used by the numbered workflow."""
+
+    configuration = Configuration(path)
+    sources = SourcePluginRegistry()
+    daily_diagnostics = daily_source_diagnostics(path)
+    for market in ("jp", "us"):
+        source_name, _, _ = configuration.daily_profile(market)
+        profile = configuration.source_profile(source_name)
+        diagnostics = [daily_diagnostics[market]]
         if "financials" in profile.sources:
             financials = profile.binding("financials")
             diagnostics.append(

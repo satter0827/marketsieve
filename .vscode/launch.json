@@ -47,10 +47,10 @@
       "cwd": "${workspaceFolder}"
     },
     {
-      "name": "40 ChatGPT: Import Saved Response and Show Explanation",
+      "name": "40 ChatGPT: Import Saved Response and Display Explanation",
       "type": "node-terminal",
       "request": "launch",
-      "command": "make ai-import-show",
+      "command": "make ai-import",
       "cwd": "${workspaceFolder}",
       "env": {
         "RESPONSE": "${input:aiResponsePath}",

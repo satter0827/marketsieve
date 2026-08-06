@@ -21,7 +21,7 @@ VS Codeの「実行とデバッグ」を開くと、実行順を示す番号付�
 
 基本のAI動線では、新しいChatGPT Temporary Chatとファイルを使用します。API keyもブラウザ自動操作も使用しません。出力された絶対パスの依頼ファイルをアップロードし、ChatGPTのJSON回答を推奨パスへ保存します。Project、Web検索、外部ツールは使用せず、Custom Instructionsは無効化します。
 
-ChatGPT用のAPI keyは不要ですが、市場データ取得には`JQUANTS_API_KEY`または`ALPHAVANTAGE_API_KEY`が必要です。TaskはVS Codeプロセスの環境変数を引き継ぎます。`03`で不足と表示された場合は、必要な変数を設定した環境からVS Codeを起動し直します。値を`tasks.json`や`marketsieve.toml`へ書きません。
+ChatGPT用のAPI keyは不要です。市場データ取得では、設定したproviderによって認証情報が必要になる場合があります。TaskはVS Codeプロセスの環境変数を引き継ぎます。`03`で不足と表示された場合は、必要な変数を設定した環境からVS Codeを起動し直します。値を`tasks.json`や`marketsieve.toml`へ書きません。
 
 | 操作 | ターミナル | VS Code 実行構成 | 通信 | 生成物 |
 | --- | --- | --- | --- | --- |
@@ -31,7 +31,7 @@ ChatGPT用のAPI keyは不要ですが、市場データ取得には`JQUANTS_API
 | 10. 日本株終値分析 | `make daily-jp-ai` | `10 Daily: Analyze JP Close and Prepare ChatGPT Request (Network)` | 市場データ取得のみ | レポート、`request.json` |
 | 20. 米国株終値分析 | `make daily-us-ai` | `20 Daily: Analyze US Close and Prepare ChatGPT Request (Network)` | 市場データ取得のみ | レポート、`request.json` |
 | 30. 週次まとめ | `make weekly-ai` | `30 Weekly: Build Brief and Prepare ChatGPT Request (After JP and US)` | なし | レポート、`request.json` |
-| 40. 回答取込・表示 | `make ai-import-show RESPONSE=/absolute/path/response.json` | `40 ChatGPT: Import Saved Response and Show Explanation` | なし | 回答、検証、説明 |
+| 40. 回答取込・表示 | `make ai-import RESPONSE=/absolute/path/response.json` | `40 ChatGPT: Import Saved Response and Display Explanation` | なし | 回答、検証、説明 |
 
 ChatGPTが返すのは、提示済みfact ID、表示順、数値を含まない事実間の関係だけです。MarketSieveが回答を検証し、変更不能なレポートの値から説明を生成します。既存のAPI・ローカルモデルAgentは高度な任意機能として引き続き利用できます。
 

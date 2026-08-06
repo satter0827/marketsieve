@@ -46,10 +46,10 @@ key or automate a browser. Upload the printed absolute request path, save the JS
 use task `40` to import and show it. Use no Project, web search, or external tools, and disable
 Custom Instructions.
 
-The ChatGPT exchange needs no API key, but market acquisition needs `JQUANTS_API_KEY` or
-`ALPHAVANTAGE_API_KEY`. Tasks inherit the VS Code process environment. If task `03` reports a
-missing variable, restart VS Code from an environment that defines it. Never put credential values
-in `tasks.json` or `marketsieve.toml`.
+The ChatGPT exchange needs no API key. A configured market-data provider may require its own
+credential. Tasks inherit the VS Code process environment. If task `03` reports a missing variable,
+restart VS Code from an environment that defines it. Never put credential values in `tasks.json` or
+`marketsieve.toml`.
 
 | Operation | Terminal | VS Code launch configuration | Network | Output |
 | --- | --- | --- | --- | --- |
@@ -59,7 +59,7 @@ in `tasks.json` or `marketsieve.toml`.
 | 10. JP close analysis | `make daily-jp-ai` | `10 Daily: Analyze JP Close and Prepare ChatGPT Request (Network)` | Market data only | report and `request.json` |
 | 20. US close analysis | `make daily-us-ai` | `20 Daily: Analyze US Close and Prepare ChatGPT Request (Network)` | Market data only | report and `request.json` |
 | 30. Weekly brief | `make weekly-ai` | `30 Weekly: Build Brief and Prepare ChatGPT Request (After JP and US)` | No | report and `request.json` |
-| 40. Import and show response | `make ai-import-show RESPONSE=/absolute/path/response.json` | `40 ChatGPT: Import Saved Response and Show Explanation` | No | response, validation, explanation |
+| 40. Import and display response | `make ai-import RESPONSE=/absolute/path/response.json` | `40 ChatGPT: Import Saved Response and Display Explanation` | No | response, validation, explanation |
 
 ChatGPT selects supplied fact IDs, their order, and non-numeric relationships. MarketSieve validates
 that selection and renders values from the immutable report. Existing direct API and local-model

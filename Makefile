@@ -24,7 +24,7 @@ RELEASE_DIR ?= $(STATE_DIR)/artifacts/release/$(COMMIT)
 export UV_CACHE_DIR := $(abspath $(STATE_DIR))/cache/uv
 export PYTHONPYCACHEPREFIX := $(abspath $(STATE_DIR))/cache/python
 
-.PHONY: help setup-config portfolio-import portfolio-show daily-status daily-jp-ai daily-us-ai weekly-ai ai-prepare ai-import ai-import-show ai-show doctor sync format format-check lint typecheck test secret-check check capabilities-json build evidence evidence-bundle evidence-validate review-attest governance-check release-build release-verify release-check clean-generated
+.PHONY: help setup-config portfolio-import portfolio-show daily-status daily-jp-ai daily-us-ai weekly-ai ai-prepare ai-import ai-show doctor sync format format-check lint typecheck test secret-check check capabilities-json build evidence evidence-bundle evidence-validate review-attest governance-check release-build release-verify release-check clean-generated
 
 help: ## Show daily-use commands first, followed by developer commands.
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z0-9_-]+:.*## / {printf "%-22s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -56,7 +56,7 @@ daily-status: doctor ## Check configuration, portfolio, reports, and installatio
 	fi
 	@uv run python -m scripts.configuration_check "$(CONFIG)" || { echo "Next: correct $(CONFIG) or the credential environment variables" >&2; exit 2; }
 	@uv run marketsieve report list --output json
-	@uv run python -m scripts.portfolio_check
+	@uv run python -m scripts.portfolio_check "$(CONFIG)"
 
 daily-jp-ai: ## Daily JP close report (Network), then prepare a ChatGPT request.
 	@test -f "$(CONFIG)" || { echo "Missing $(CONFIG). Next VS Code operation: 01 First Run: Create Configuration" >&2; exit 2; }
@@ -80,8 +80,6 @@ ai-import: ## Import RESPONSE=... (Offline); add CONTROLLED=1 only after checkin
 	@test -n "$(RESPONSE)" || { echo "RESPONSE is required. Next: make ai-import RESPONSE=/absolute/path/response.json" >&2; exit 2; }
 	@test -f "$(RESPONSE)" || { echo "Response file not found: $(RESPONSE)" >&2; exit 2; }
 	uv run marketsieve ai import "$(RESPONSE)" $(if $(filter 1,$(CONTROLLED)),--controlled,)
-
-ai-import-show: ai-import ## Import RESPONSE=... and display the validated explanation (Offline).
 
 ai-show: ## Show the latest validated AI explanation (Offline).
 	uv run marketsieve ai show latest

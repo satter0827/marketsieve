@@ -118,7 +118,7 @@ def test_vscode_configuration_uses_installed_workspace_contracts() -> None:
         "10 Daily: Analyze JP Close and Prepare ChatGPT Request (Network)",
         "20 Daily: Analyze US Close and Prepare ChatGPT Request (Network)",
         "30 Weekly: Build Brief and Prepare ChatGPT Request (After JP and US)",
-        "40 ChatGPT: Import Saved Response and Show Explanation",
+        "40 ChatGPT: Import Saved Response and Display Explanation",
         "Advanced: Prepare ChatGPT Request from Latest Report",
         "Advanced: Show Portfolio",
         "Advanced: Import ChatGPT Response Only",
@@ -137,7 +137,7 @@ def test_vscode_configuration_uses_installed_workspace_contracts() -> None:
         "make daily-jp-ai",
         "make daily-us-ai",
         "make weekly-ai",
-        "make ai-import-show RESPONSE=${input:aiResponsePath} CONTROLLED=${input:aiControlled}",
+        "make ai-import RESPONSE=${input:aiResponsePath} CONTROLLED=${input:aiControlled}",
         "make ai-prepare",
         "make portfolio-show",
         "make ai-import RESPONSE=${input:aiResponsePath} CONTROLLED=${input:aiControlled}",
@@ -152,7 +152,7 @@ def test_vscode_configuration_uses_installed_workspace_contracts() -> None:
     assert import_task["type"] == "process"
     assert import_task["command"] == "make"
     assert import_task["args"] == [
-        "ai-import-show",
+        "ai-import",
         "RESPONSE=${input:aiResponsePath}",
         "CONTROLLED=${input:aiControlled}",
     ]
@@ -191,7 +191,7 @@ def test_vscode_configuration_uses_installed_workspace_contracts() -> None:
         "make daily-jp-ai",
         "make daily-us-ai",
         "make weekly-ai",
-        "make ai-import-show",
+        "make ai-import",
     ]
     assert all(launch["type"] == "node-terminal" for launch in operational_launches)
     assert all(launch["request"] == "launch" for launch in operational_launches)
@@ -278,7 +278,6 @@ def test_makefile_exposes_stable_entry_points() -> None:
         "weekly-ai",
         "ai-prepare",
         "ai-import",
-        "ai-import-show",
         "ai-show",
         "sync",
         "format",
@@ -322,11 +321,9 @@ def test_makefile_exposes_stable_entry_points() -> None:
     assert "scripts.portfolio_check" in daily_status_recipe
     assert "JQUANTS_API_KEY" not in daily_status_recipe
     assert "ALPHAVANTAGE_API_KEY" not in daily_status_recipe
-    ai_import_show_recipe = makefile.split("ai-import-show:", maxsplit=1)[1].split(
-        "\n\n", maxsplit=1
-    )[0]
-    assert "ai-import-show: ai-import" in makefile
-    assert "ai show latest" not in ai_import_show_recipe
+    ai_import_recipe = makefile.split("ai-import:", maxsplit=1)[1].split("\n\n", maxsplit=1)[0]
+    assert "ai import" in ai_import_recipe
+    assert "ai show latest" not in ai_import_recipe
 
 
 def test_setup_config_is_idempotent_and_does_not_overwrite(tmp_path: Path) -> None:
