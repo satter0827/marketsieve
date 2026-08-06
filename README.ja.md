@@ -17,21 +17,25 @@ MarketSieveは、検証済みの市場情報から再現可能な分析、過去
 
 ## 日常利用
 
-基本のAI動線では、新しいChatGPT Temporary Chatとファイルを使用します。API keyもブラウザ自動操作も使用しません。出力された絶対パスの依頼ファイルをアップロードし、ChatGPTのJSON回答を推奨パスへ保存してから、取込と表示を実行します。Project、Web検索、外部ツールは使用せず、Custom Instructionsは無効化します。
+VS Codeの「実行とデバッグ」を開くと、実行順を示す番号付き構成が先頭に並びます。初回は`01`から`03`を順番に実行します。保有銘柄または監視銘柄が変わった場合は`02`と`03`を再実行します。各市場の終値後に`10`または`20`、週末にだけ`30`を実行します。生成された依頼ファイルをChatGPTへ渡して回答JSONを保存したら、`40`で取込と表示まで完了します。同名のTasksも代替入口として利用できます。
 
-| 操作 | ターミナル | VS Code Task | 通信 | 生成物 |
+基本のAI動線では、新しいChatGPT Temporary Chatとファイルを使用します。API keyもブラウザ自動操作も使用しません。出力された絶対パスの依頼ファイルをアップロードし、ChatGPTのJSON回答を推奨パスへ保存します。Project、Web検索、外部ツールは使用せず、Custom Instructionsは無効化します。
+
+ChatGPT用のAPI keyは不要です。市場データ取得では、設定したproviderによって認証情報が必要になる場合があります。TaskはVS Codeプロセスの環境変数を引き継ぎます。`03`で不足と表示された場合は、必要な変数を設定した環境からVS Codeを起動し直します。値を`tasks.json`や`marketsieve.toml`へ書きません。
+
+| 操作 | ターミナル | VS Code 実行構成 | 通信 | 生成物 |
 | --- | --- | --- | --- | --- |
-| 日本株Closeと依頼生成 | `make daily-jp-ai` | `Daily Use: JP Close + ChatGPT Request (Network)` | 市場データ取得のみ | レポート、`request.json` |
-| 米国株Closeと依頼生成 | `make daily-us-ai` | `Daily Use: US Close + ChatGPT Request (Network)` | 市場データ取得のみ | レポート、`request.json` |
-| 週次Briefと依頼生成 | `make weekly-ai` | `Daily Use: Weekly Brief + ChatGPT Request` | なし | レポート、`request.json` |
-| 最新レポートから依頼生成 | `make ai-prepare` | `Daily Use: Prepare ChatGPT Request from Latest Report` | なし | `request.json` |
-| 保存した回答の取込 | `make ai-import RESPONSE=/absolute/path/response.json` | `Daily Use: Import ChatGPT Response` | なし | 回答、検証、説明 |
-| 最新説明の表示 | `make ai-show` | `Daily Use: Show Latest AI Explanation` | なし | 決定論的な説明 |
-| 設定確認 | `make doctor` | `Daily Use: Status` | なし | 診断結果 |
+| 1. 設定作成 | `make setup-config` | `01 First Run: Create Configuration` | なし | `marketsieve.toml` |
+| 2. ポートフォリオ取込 | `make portfolio-import PORTFOLIO=/absolute/path/holdings.csv` | `02 First Run: Import Portfolio CSV` | なし | 正規化済みポートフォリオ |
+| 3. 準備確認 | `make daily-status` | `03 First Run: Check Readiness` | なし | 診断と次のTask |
+| 10. 日本株終値分析 | `make daily-jp-ai` | `10 Daily: Analyze JP Close and Prepare ChatGPT Request (Network)` | 市場データ取得のみ | レポート、`request.json` |
+| 20. 米国株終値分析 | `make daily-us-ai` | `20 Daily: Analyze US Close and Prepare ChatGPT Request (Network)` | 市場データ取得のみ | レポート、`request.json` |
+| 30. 週次まとめ | `make weekly-ai` | `30 Weekly: Build Brief and Prepare ChatGPT Request (After JP and US)` | なし | レポート、`request.json` |
+| 40. 回答取込・表示 | `make ai-import RESPONSE=/absolute/path/response.json` | `40 ChatGPT: Import Saved Response and Display Explanation` | なし | 回答、検証、説明 |
 
 ChatGPTが返すのは、提示済みfact ID、表示順、数値を含まない事実間の関係だけです。MarketSieveが回答を検証し、変更不能なレポートの値から説明を生成します。既存のAPI・ローカルモデルAgentは高度な任意機能として引き続き利用できます。
 
-新しいTemporary Chat、Custom Instructions無効、Project・Web検索・外部ツール無効を確認した場合だけ、`make ai-import RESPONSE=... CONTROLLED=1`を使用します。通常の取込は確認済みと記録しません。
+新しいTemporary Chat、Custom Instructions無効、Project・Web検索・外部ツール無効を確認した場合だけ、取込時に`CONTROLLED=1`を選択します。通常の取込は確認済みと記録しません。API provider、個別のAI操作、デバッグは削除せず、番号付きの主動線より後ろにある詳細操作とRun and Debugへ分離しています。
 
 ## インストール
 
@@ -134,7 +138,7 @@ make check
 make evidence
 ```
 
-VS Codeはworkspaceの`.venv`を使用します。`make sync`の実行後、Test Explorerから通常実行、デバッグ、対話的なカバレッジ確認を行えます。Tasksは日常利用と品質ゲート、Run and Debugは汎用CLIと手動AI交換のデバッグ、Test Explorerはテストとカバレッジを担当します。対話的なカバレッジはローカル確認用とし、`make check`を正式なカバレッジGateとします。ローカルcacheと生成物は`.marketsieve`に集約し、repository rootに置く生成環境は`.venv`だけとします。
+VS Codeはworkspaceの`.venv`を使用します。`make sync`の実行後、「実行とデバッグ」を日常分析の主入口として使えます。Tasksは同じ日常操作と品質ゲートを提供し、番号付き構成より後ろの詳細操作はCLIコードのデバッグに使用します。Test Explorerはテストとカバレッジを担当します。対話的なカバレッジはローカル確認用とし、`make check`を正式なカバレッジGateとします。ローカルcacheと生成物は`.marketsieve`に集約し、repository rootに置く生成環境は`.venv`だけとします。
 
 `make check`はDevelop Gateを実行します。`make evidence`はこれに加えて、checksum付きreview bundleを`.marketsieve/artifacts/review/<commit>/`へ生成します。bundleはcode reviewの入力であり、review完了の証拠ではありません。アプリケーション結果はstdout、構造化JSON Lines logはstderrへ出力します。情報logを取得する場合は`--log-level INFO`、`.marketsieve/logs/`にも保存する場合は`--log-file`を指定します。
 
