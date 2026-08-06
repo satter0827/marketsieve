@@ -12,34 +12,17 @@ import subprocess
 import sys
 import tarfile
 import tempfile
-import tomllib
 import zipfile
 from collections.abc import Sequence
 from pathlib import Path
+
+from scripts.package_catalog import load_package_catalog
 
 ROOT = Path(__file__).parents[1]
 RUNTIME_WHEELHOUSE = ROOT / ".marketsieve" / "cache" / "runtime-wheelhouse"
 VERSION = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+$")
 COMMIT = re.compile(r"^[0-9a-f]{40}$")
 CHANGELOG_HEADING = re.compile(r"^## \[([^]]+)] - (\d{4}-\d{2}-\d{2})$", re.MULTILINE)
-PACKAGE_PROJECTS = (
-    ROOT / "packages" / "core" / "pyproject.toml",
-    ROOT / "packages" / "agent" / "pyproject.toml",
-    ROOT / "packages" / "extension-api" / "pyproject.toml",
-    ROOT / "packages" / "cli" / "pyproject.toml",
-    ROOT / "packages" / "source-csv" / "pyproject.toml",
-    ROOT / "packages" / "source-jquants" / "pyproject.toml",
-    ROOT / "packages" / "source-alphavantage" / "pyproject.toml",
-)
-PUBLIC_PACKAGES = (
-    "marketsieve",
-    "marketsieve-agent",
-    "marketsieve-extension-api",
-    "marketsieve-cli",
-    "marketsieve-source-csv",
-    "marketsieve-source-jquants",
-    "marketsieve-source-alphavantage",
-)
 GENERATED_ASSETS = ("constraints.txt", "VERIFY.md", "SHA256SUMS", "release.json")
 
 
@@ -61,10 +44,7 @@ def validate_inputs(version: str, commit: str) -> None:
 
 
 def validate_source_release(version: str) -> None:
-    versions = {
-        path.parent.name: tomllib.loads(path.read_text(encoding="utf-8"))["project"]["version"]
-        for path in PACKAGE_PROJECTS
-    }
+    versions = {spec.distribution: spec.project_version for spec in load_package_catalog()}
     if set(versions.values()) != {version}:
         raise RuntimeError(f"workspace package versions do not match {version}: {versions}")
     changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
@@ -78,10 +58,11 @@ def sha256(path: Path) -> str:
 
 
 def distributions(dist_dir: Path) -> tuple[tuple[Path, ...], tuple[Path, ...]]:
+    expected = len(load_package_catalog())
     wheels = tuple(sorted(dist_dir.glob("marketsieve*.whl")))
     sdists = tuple(sorted(dist_dir.glob("marketsieve*.tar.gz")))
-    if len(wheels) != 7 or len(sdists) != 7:
-        raise RuntimeError("release directory must contain seven project wheels and seven sdists")
+    if len(wheels) != expected or len(sdists) != expected:
+        raise RuntimeError("release directory must contain one wheel and sdist per catalog entry")
     return wheels, sdists
 
 
@@ -202,25 +183,25 @@ def verify_wheelhouse_assets(dist_dir: Path, version: str) -> None:
         raise RuntimeError("wheelhouse ZIP contents do not match release wheels")
 
 
-def verify_contents(wheels: tuple[Path, ...], sdists: tuple[Path, ...]) -> None:
+def verify_contents(dist_dir: Path) -> None:
+    catalog = load_package_catalog()
     violations: list[str] = []
-    for wheel in wheels:
+    for spec in catalog:
+        wheel = spec.wheel(dist_dir)
         with zipfile.ZipFile(wheel) as archive:
             names = archive.namelist()
+        required = [f"{spec.module}/__init__.py"]
+        if spec.role == "sdk":
+            required.append(f"{spec.module}/py.typed")
+        if any(not any(name.endswith(item) for name in names) for item in required):
+            violations.append(f"{wheel.name}: missing public module files")
         forbidden = ["/tests/", "/schemas/", ".marketsieve", "__pycache__"]
-        if wheel.name.startswith("marketsieve-"):
-            forbidden.extend(
-                (
-                    "marketsieve_cli/",
-                    "marketsieve_agent/",
-                    "marketsieve_extension_api/",
-                    "marketsieve_source_csv/",
-                    "marketsieve_source_jquants/",
-                    "marketsieve_source_alphavantage/",
-                )
-            )
+        forbidden.extend(
+            f"{other.module}/" for other in catalog if other.distribution != spec.distribution
+        )
         violations.extend(name for name in names if any(item in name for item in forbidden))
-    for sdist in sdists:
+    for spec in catalog:
+        sdist = spec.sdist(dist_dir)
         with tarfile.open(sdist) as archive:
             names = archive.getnames()
         sdist_forbidden = ("/tests/", "/schemas/", ".marketsieve", "__pycache__")
@@ -257,8 +238,8 @@ def build(version: str, commit: str, dist_dir: Path) -> None:
     if capture(("git", "rev-parse", "HEAD")) != commit:
         raise RuntimeError("commit does not match the checked-out HEAD")
     prepare_dist_dir(dist_dir)
-    for package in PUBLIC_PACKAGES:
-        run(("uv", "build", "--package", package, "--out-dir", str(dist_dir)))
+    for spec in load_package_catalog():
+        run(("uv", "build", "--package", spec.distribution, "--out-dir", str(dist_dir)))
     runtime_wheels = tuple(sorted(RUNTIME_WHEELHOUSE.glob("*.whl")))
     if not runtime_wheels:
         raise RuntimeError("locked runtime wheelhouse is empty; run make sync")
@@ -269,7 +250,7 @@ def build(version: str, commit: str, dist_dir: Path) -> None:
     run(("uv", "run", "twine", "check", *(str(path) for path in (*wheels, *sdists))))
     if any(metadata_version(wheel) != version for wheel in wheels):
         raise RuntimeError("built wheel versions do not match the requested version")
-    verify_contents(wheels, sdists)
+    verify_contents(dist_dir)
     write_wheelhouse_assets(dist_dir, version)
     manifest = {
         "version": version,
@@ -305,7 +286,7 @@ def verify(version: str, commit: str, dist_dir: Path) -> None:
             raise RuntimeError(f"release checksum mismatch: {path.name}")
     if any(metadata_version(wheel) != version for wheel in wheels):
         raise RuntimeError("wheel metadata versions do not match the request")
-    verify_contents(wheels, sdists)
+    verify_contents(dist_dir)
     verify_wheelhouse_assets(dist_dir, version)
     verify_secrets((*wheels, *sdists, *(dist_dir / name for name in GENERATED_ASSETS)))
     with tempfile.TemporaryDirectory(prefix="marketsieve-release-") as temp_dir:
@@ -325,32 +306,45 @@ def verify(version: str, commit: str, dist_dir: Path) -> None:
                 *(str(wheel) for wheel in wheels),
             )
         )
+        catalog = load_package_catalog()
+        imports = "; ".join(f"import {spec.module}" for spec in catalog)
         installed = capture(
             (
                 str(isolated),
                 "-c",
-                "import marketsieve; import marketsieve_agent; import marketsieve_cli; "
-                "import marketsieve_extension_api; "
-                "import marketsieve_source_csv; import marketsieve_source_jquants; "
-                "import marketsieve_source_alphavantage; "
-                "import marketsieve.analysis.indicators; "
+                imports + "; import marketsieve.analysis.indicators; "
                 "import marketsieve.data.daily; import marketsieve.domain; "
                 "import marketsieve.synthetic.daily; print(marketsieve.__version__)",
             )
         )
-        run((str(isolated), "-m", "marketsieve_cli", "doctor", "--output", "json"))
+        cli_module = next(spec.module for spec in catalog if spec.role == "cli")
+        run((str(isolated), "-m", cli_module, "doctor", "--output", "json"))
     if installed != version:
         raise RuntimeError("isolated installation version does not match the request")
+
+
+def export_pypi(version: str, commit: str, dist_dir: Path, output_dir: Path) -> None:
+    """Stage only repository-owned distributions from one verified release artifact."""
+
+    verify(version, commit, dist_dir)
+    if output_dir.exists() and tuple(output_dir.iterdir()):
+        raise RuntimeError("PyPI staging directory must be empty")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    wheels, sdists = distributions(dist_dir)
+    for path in (*wheels, *sdists):
+        shutil.copy2(path, output_dir / path.name)
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
-    for command in ("build", "verify"):
+    for command in ("build", "verify", "export-pypi"):
         child = subparsers.add_parser(command)
         child.add_argument("--version", required=True)
         child.add_argument("--commit", required=True)
         child.add_argument("--dist-dir", required=True, type=Path)
+        if command == "export-pypi":
+            child.add_argument("--output-dir", required=True, type=Path)
     return parser.parse_args()
 
 
@@ -358,8 +352,10 @@ def main() -> None:
     args = parse_args()
     if args.command == "build":
         build(args.version, args.commit, args.dist_dir)
-    else:
+    elif args.command == "verify":
         verify(args.version, args.commit, args.dist_dir)
+    else:
+        export_pypi(args.version, args.commit, args.dist_dir, args.output_dir)
 
 
 if __name__ == "__main__":

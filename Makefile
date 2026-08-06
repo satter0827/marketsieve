@@ -45,7 +45,7 @@ secret-check: ## Scan tracked files and the current diff without printing secret
 	uv run python scripts/secret_gate.py --base "$(BASE_SHA)"
 
 check: ## Run the complete development gate.
-	BASE_SHA="$(BASE_SHA)" EVIDENCE_DIR="$(EVIDENCE_DIR)" uv run python scripts/develop_gate.py check all
+	BASE_SHA="$(BASE_SHA)" EVIDENCE_DIR="$(EVIDENCE_DIR)" uv run python -m scripts.develop_gate check all
 
 doctor: ## Run offline installation diagnostics.
 	uv run marketsieve doctor
@@ -54,14 +54,7 @@ capabilities-json: ## Describe the CLI machine contract.
 	uv run marketsieve capabilities --output json
 
 build: ## Build all public distributions into the generated-artifact directory.
-	@mkdir -p "$(STATE_DIR)/artifacts/build"
-	uv build --package marketsieve-agent --out-dir "$(STATE_DIR)/artifacts/build"
-	uv build --package marketsieve --out-dir "$(STATE_DIR)/artifacts/build"
-	uv build --package marketsieve-cli --out-dir "$(STATE_DIR)/artifacts/build"
-	uv build --package marketsieve-extension-api --out-dir "$(STATE_DIR)/artifacts/build"
-	uv build --package marketsieve-source-csv --out-dir "$(STATE_DIR)/artifacts/build"
-	uv build --package marketsieve-source-jquants --out-dir "$(STATE_DIR)/artifacts/build"
-	uv build --package marketsieve-source-alphavantage --out-dir "$(STATE_DIR)/artifacts/build"
+	uv run python -m scripts.package_catalog build --out-dir "$(STATE_DIR)/artifacts/build"
 
 evidence: check evidence-bundle ## Run the development gate and create a review bundle.
 
@@ -81,11 +74,11 @@ governance-check: ## Compare checked-in rulesets with active GitHub settings.
 
 release-build: ## Build VERSION at COMMIT once into the release directory.
 	@test -n "$(VERSION)" && test -n "$(COMMIT)" || { echo "VERSION and COMMIT are required" >&2; exit 2; }
-	uv run python scripts/release_gate.py build --version "$(VERSION)" --commit "$(COMMIT)" --dist-dir "$(RELEASE_DIR)"
+	uv run python -m scripts.release_gate build --version "$(VERSION)" --commit "$(COMMIT)" --dist-dir "$(RELEASE_DIR)"
 
 release-verify: ## Verify an existing VERSION and COMMIT release directory.
 	@test -n "$(VERSION)" && test -n "$(COMMIT)" || { echo "VERSION and COMMIT are required" >&2; exit 2; }
-	python3 scripts/release_gate.py verify --version "$(VERSION)" --commit "$(COMMIT)" --dist-dir "$(RELEASE_DIR)"
+	python3 -m scripts.release_gate verify --version "$(VERSION)" --commit "$(COMMIT)" --dist-dir "$(RELEASE_DIR)"
 
 release-check: release-build release-verify ## Build once and verify a release candidate locally.
 

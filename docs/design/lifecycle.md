@@ -47,7 +47,7 @@ roadmap. Investigation begins as a dated note only when it is useful beyond a pu
 decision is accepted, the implementation change updates formal design and deletes or reduces the
 note so that it cannot become a competing authority.
 
-## Approved provider and model lifecycle
+## Provider and model lifecycle
 
 | Activity | Class | Completion evidence |
 |---|---|---|
@@ -55,11 +55,19 @@ note so that it cannot become a competing authority.
 | Review provider plans, terms, and raw-response retention | Human decision | Approved capabilities and retention policy are recorded |
 | Supply a provider or model credential | Manual procedure | Environment variable is configured outside the repository and a live smoke test succeeds |
 | Fetch a live snapshot | Manual procedure | User explicitly selects the source profile and retains the snapshot identity |
-| Render through FakeListLLM | Automated | Grounding, safety, and fallback tests pass without network access |
+| Render through a test-local model | Automated | Grounding, safety, and fallback tests pass without network access |
 | Send facts to a cloud model | Human decision | The user supplies `--allow-cloud` after reviewing the dry-run payload |
 | Change an indicator definition | Human decision | A new definition version and migration impact are approved |
 | Publish a GitHub Release | Human decision | Human-approved main commit and verified wheelhouse evidence are retained |
+| Configure PyPI Trusted Publishers | Manual procedure | Every catalog distribution trusts the repository workflow and protected `pypi` environment |
+| Publish catalog distributions | Human decision | Existing tag, successful matching main CI run, environment approval, PyPI OIDC records, and GitHub Release |
 
 Provider code never decides to weaken a request, switch destination, merge values, or retain raw
 responses beyond its approved policy. A source or model change returns through the same focused
 checks, full gate, evidence, semantic review, and commit-bound attestation sequence as core changes.
+
+After a human merges the release pull request, the `main` push CI must succeed before a stable tag
+is created at that exact commit. A maintainer then manually dispatches `publish.yml` with the tag
+and the successful CI run ID. The protected `pypi` environment supplies approval, while PyPI trusts
+that workflow and environment through OIDC. No repository or environment stores a long-lived PyPI
+token.

@@ -8,8 +8,11 @@ from importlib import metadata
 from marketsieve_extension_api import (
     DailyBarBundleImporter,
     DailyBarFetcher,
+    EconomicSeriesFetcher,
     EventFetcher,
     FinancialFetcher,
+    InstrumentUniverseFetcher,
+    InstrumentUniverseImporter,
 )
 
 ENTRY_POINT_GROUP = "marketsieve.sources"
@@ -17,6 +20,9 @@ IMPORTER_ENTRY_POINT_GROUP = "marketsieve.sources.daily_bars.importers"
 FETCHER_ENTRY_POINT_GROUP = "marketsieve.sources.daily_bars.fetchers"
 FINANCIAL_ENTRY_POINT_GROUP = "marketsieve.sources.financials.fetchers"
 EVENT_ENTRY_POINT_GROUP = "marketsieve.sources.events.fetchers"
+ECONOMIC_SERIES_ENTRY_POINT_GROUP = "marketsieve.sources.economic_series.fetchers"
+UNIVERSE_IMPORTER_ENTRY_POINT_GROUP = "marketsieve.sources.instrument_universe.importers"
+UNIVERSE_FETCHER_ENTRY_POINT_GROUP = "marketsieve.sources.instrument_universe.fetchers"
 
 
 def source_entry_points() -> metadata.EntryPoints:
@@ -43,6 +49,18 @@ def event_entry_points() -> metadata.EntryPoints:
     return metadata.entry_points(group=EVENT_ENTRY_POINT_GROUP)
 
 
+def economic_series_entry_points() -> metadata.EntryPoints:
+    return metadata.entry_points(group=ECONOMIC_SERIES_ENTRY_POINT_GROUP)
+
+
+def universe_importer_entry_points() -> metadata.EntryPoints:
+    return metadata.entry_points(group=UNIVERSE_IMPORTER_ENTRY_POINT_GROUP)
+
+
+def universe_fetcher_entry_points() -> metadata.EntryPoints:
+    return metadata.entry_points(group=UNIVERSE_FETCHER_ENTRY_POINT_GROUP)
+
+
 @dataclass(frozen=True, slots=True)
 class InstalledSource:
     """Package metadata available without importing plugin code."""
@@ -63,6 +81,9 @@ class SourcePluginRegistry:
         fetchers = {entry.name for entry in fetcher_entry_points()}
         financials = {entry.name for entry in financial_entry_points()}
         events = {entry.name for entry in event_entry_points()}
+        economic_series = {entry.name for entry in economic_series_entry_points()}
+        universe_importers = {entry.name for entry in universe_importer_entry_points()}
+        universe_fetchers = {entry.name for entry in universe_fetcher_entry_points()}
         return tuple(
             sorted(
                 (
@@ -77,6 +98,8 @@ class SourcePluginRegistry:
                                 ("daily_bars", importers | fetchers),
                                 ("financials", financials),
                                 ("events", events),
+                                ("economic_series", economic_series),
+                                ("instrument_universe", universe_importers | universe_fetchers),
                             )
                             if entry.name in names
                         ),
@@ -117,6 +140,31 @@ class SourcePluginRegistry:
         if not isinstance(candidate, EventFetcher):
             raise TypeError(f"source plugin {name!r} does not implement event fetch")
         return candidate
+
+    def load_economic_series_fetcher(self, name: str) -> EconomicSeriesFetcher:
+        candidate = self._load(name)
+        if not isinstance(candidate, EconomicSeriesFetcher):
+            raise TypeError(f"source plugin {name!r} does not implement economic-series fetch")
+        return candidate
+
+    def load_universe_importer(self, name: str) -> InstrumentUniverseImporter:
+        candidate = self._load_capability(name, universe_importer_entry_points())
+        if not isinstance(candidate, InstrumentUniverseImporter):
+            raise TypeError(f"source plugin {name!r} does not implement universe import")
+        return candidate
+
+    def load_universe_fetcher(self, name: str) -> InstrumentUniverseFetcher:
+        candidate = self._load_capability(name, universe_fetcher_entry_points())
+        if not isinstance(candidate, InstrumentUniverseFetcher):
+            raise TypeError(f"source plugin {name!r} does not implement universe fetch")
+        return candidate
+
+    @staticmethod
+    def _load_capability(name: str, entries: metadata.EntryPoints) -> object:
+        matches = tuple(entry for entry in entries if entry.name == name)
+        if len(matches) != 1:
+            raise ValueError("selected source capability is unavailable or ambiguous")
+        return matches[0].load()()
 
     def _load(self, name: str) -> object:
         matches = tuple(entry for entry in source_entry_points() if entry.name == name)

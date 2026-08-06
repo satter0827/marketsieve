@@ -16,6 +16,13 @@ The Offline Analysis Preview tests:
 - explicit insufficient history and the absence of future-information leakage across UTC offsets
   and daylight-saving folds;
 - stable evidence and results for identical inputs;
+- stable decision-report JSON and Markdown for identical inputs;
+- canonical report reconstruction, tamper detection, and all-indeterminate latest protection;
+- FRED pagination, missing observations, revision bounds, rate limits, and injected transport;
+- SEC filing-history pages, amendments, publication times, XBRL duplicates, fair-access failures,
+  and injected transport;
+- EDINET daily lists, parent-document corrections, XBRL-derived TSV scope, ZIP safety, credentials,
+  and injected transport;
 - the source contracts against synthetic transports;
 - stable snapshot, section, comparison, report, and evidence identities for identical inputs;
 - Japanese and English Rich, text, and schema-valid JSON projections;
@@ -66,12 +73,18 @@ After semantic review succeeds, `make review-attest REVIEWED_SHA=<full-commit-sh
 matching local evidence and clean HEAD before publishing the `Pre-PR Review` commit status. The
 develop ruleset requires that status for the current head; a later commit cannot inherit it.
 
-The Release Gate builds all seven public distributions and the locked multi-Python runtime
+The Release Gate builds every distribution in the root public-package catalog and the locked
+multi-Python runtime
 wheelhouse once, then verifies and installs the same checksummed artifact set on every supported
 Python version. Compatibility jobs do not compare against runner-local regenerated dependencies.
 It admits only a same-repository
 `develop -> main` pull request. Tags, GitHub Releases, and package publication remain separate
 human-authorized operations.
+
+The manual publish workflow accepts only an existing stable tag and a successful `main` push CI run
+for the same commit. It downloads that run's retained release artifact, repeats the checksum,
+content, secret, metadata, and isolated-install verification, and stages only catalog-owned wheels
+and source distributions for PyPI. It never rebuilds a distribution.
 
 Repository-owned machine contracts use JSON Schema Draft 2020-12. Each schema has a stable
 identifier and a SemVer payload version: breaking changes increment major, compatible field
@@ -95,13 +108,18 @@ make evidence
 A failure is corrected and the affected checks are rerun. Environment or tool failures are reported
 as such and are not presented as successful test evidence.
 
-## Approved 0.2 and 0.3 acceptance additions
+## Workbench and Agent acceptance
 
-The target gate adds deterministic reference vectors for every indicator, ambient-decimal-context
+The gate includes deterministic reference vectors for every indicator, ambient-decimal-context
 tests, snapshot identity and atomicity tests, publication-versus-retrieval availability tests, and
-contract suites shared by CSV, J-Quants, and Alpha Vantage. Network clients are injected. Default
-tests use synthetic responses and never require accounts, credentials, wall-clock timing, or
-network access. Live provider checks use an explicit marker and manual credentials.
+contract suites shared by CSV, J-Quants, Alpha Vantage, FRED, SEC, and EDINET. Network clients are
+injected.
+Financial-history tests cover knowledge-time exclusion, later restatement selection, compatible
+period matching, conflicting observations, stable identities, derived amounts and ratios, and
+explicit missing results. CLI tests confirm the typed calculation projects into the financial
+section without transferring calculation ownership to the application.
+Default tests use synthetic responses and never require accounts, credentials, wall-clock timing,
+or network access. Live provider checks use an explicit marker and manual credentials.
 
 CLI acceptance covers Japanese and English Rich and text projections, versioned JSON, partial
 sections, incompatible comparison warnings, installed plugin metadata without plugin import, and
@@ -109,15 +127,35 @@ execution of only the selected source profile. Package acceptance builds and ins
 extension API, CLI, and each source independently before verifying their wheelhouse combinations on
 Python 3.12 through 3.14.
 
-Agent acceptance uses FakeListLLM for ordinary tests and mocked transports for each real provider.
+Agent acceptance uses test-local models for ordinary tests and mocked transports for each real provider.
 It covers invalid schemas, unknown facts, numeric additions, recommendation language, timeouts,
 cloud consent, loopback restrictions, and deterministic fallback. Fake tests prove orchestration
 and safety behavior, not provider model behavior.
 
-CLI acceptance additionally verifies Fake as the default, a credential-free cloud dry-run over the
-same catalog hash, configuration-only local doctor, and refusal of cloud execution without consent.
+CLI acceptance additionally verifies that provider selection is mandatory, cloud dry-run is
+credential-free, local doctor is configuration-only, and cloud execution is refused without consent.
 
 Secret acceptance scans tracked files, the reviewed diff, generated evidence, distributions, and
 release assets without printing matched values. CI also scans repository history. Tests ensure
 credentials are removed from URLs, headers, exceptions, logs, subprocess environments, and stored
 request metadata.
+
+## Personal Close Brief acceptance
+
+Personal Close Brief acceptance adds:
+
+- complete reference cases for every held and unheld decision branch;
+- stable policy and decision identities for identical inputs;
+- explicit confidence reduction and indeterminate results for missing evidence;
+- partial-instrument success and all-instrument failure behavior in daily orchestration;
+- Japanese, U.S., daylight-saving, non-trading-day, stale-data, and future-data cases;
+- portfolio normalization without retained source files or personal identifiers;
+- conclusion-first Japanese and English Rich, text, quiet, JSON, and Markdown projections;
+- proof that model success or failure cannot alter a static report;
+- wheel-installed external adapter discovery and public conformance tests.
+
+The implemented canonical portfolio slice tests strict headers, row width, numeric and timezone
+validation, duplicate instruments, deterministic ordering and identity, source-byte non-retention,
+atomic latest replacement, tamper detection, symlink rejection, JSON Schema, and CLI round trips.
+
+Test doubles prove bounded agent behavior without entering production provider selection.

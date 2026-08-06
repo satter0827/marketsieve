@@ -33,12 +33,11 @@ failure includes a recovery action. JSON output conforms to `schemas/doctor-resu
 ```shell
 uv run marketsieve inspect MIC:SYMBOL --source-profile PROFILE
 uv run marketsieve compare MIC:SYMBOL MIC:SYMBOL --source-profile PROFILE
-uv run marketsieve report MIC:SYMBOL --source-profile PROFILE --format {rich,text,json}
 ```
 
 These commands use only verified local snapshots. `inspect` exposes all independent sections,
-`compare` reports comparability without ranking, and `report` projects the same section facts. JSON
-output conforms to inspect v2, comparison v1, and report v2 schemas. Partial data is successful
+and `compare` reports comparability without ranking. JSON output conforms to inspect v2 and
+comparison v1 schemas. Partial data is successful
 when completeness and missing reasons are explicit.
 
 ## Capability discovery
@@ -78,14 +77,13 @@ marketsieve snapshot verify ID
 marketsieve inspect MIC:SYMBOL --source-profile PROFILE
 marketsieve analyze INDICATOR MIC:SYMBOL --source-profile PROFILE
 marketsieve compare MIC:SYMBOL MIC:SYMBOL --source-profile PROFILE
-marketsieve report MIC:SYMBOL --source-profile PROFILE
 ```
 
 Only fetch and import commands may create source snapshots. Read commands never perform network
 access and explain the required acquisition command when no suitable snapshot exists. `inspect`
 projects independent sections; `analyze` exposes the approved indicator catalog and parameters;
-`compare` uses one knowledge-as-of instant; and `report` is a deterministic projection of the same
-facts rather than a separate analysis path.
+`compare` uses one knowledge-as-of instant. Durable investment decisions use the separate
+`decision-report/v1` artifact rather than a second projection of the equity view.
 
 `--config` selects an explicit configuration file, otherwise the current directory's
 `marketsieve.toml` is used when present. Source profiles bind each data kind to a distribution and
@@ -102,6 +100,9 @@ explicit.
 are implemented for daily-bar CSV snapshots. Import is the only CSV command that writes market-data
 state. `inspect` composes price, technical, financial, valuation, risk, event, and data-quality
 sections. Missing values remain unavailable and are never represented as zero values.
+The financial section includes the selected current and preceding compatible annual periods under
+`history` and deterministic derived metrics under `derived`. Its explicit `as_of` is the knowledge
+instant; observations available later are excluded.
 
 ### Implemented indicator commands
 
@@ -153,22 +154,140 @@ For Alpha Vantage financial statements, `--start` and `--end` filter the provide
 dividend, and split events are filtered by their provider-reported event dates. All values without
 a publication timestamp remain retrieval-bounded for knowledge-as-of use.
 
+### Implemented FRED extension
+
+The installed-source catalog reports FRED's `economic_series` capability without importing plugin
+code. Adapter users can load the explicitly selected entry point and call `EconomicSeriesFetcher`
+with a series ID, observation range, and knowledge date. The adapter has no CLI fetch route or
+implicit persistence yet; Personal Close Brief orchestration adds those application concerns.
+
+### Implemented SEC commands
+
+The same `source doctor` and `source fetch --kind financials` commands accept an SEC profile for
+XNAS and XNYS instruments. The profile supplies a ten-digit `cik`; `SEC_USER_AGENT` supplies the
+organization and contact email required for network access. `doctor` validates both without making
+a request. `--start` and `--end` select filing dates, and the stored facts retain the exact SEC
+acceptance time for knowledge-as-of use.
+
+### Implemented EDINET commands
+
+The same `source doctor` and `source fetch --kind financials` commands accept an EDINET profile for
+XTKS instruments. The profile supplies an `edinet_code`, supported document type codes, and explicit
+date and document budgets. `EDINET_API_KEY` is the only credential input. `doctor` validates the
+profile and credential presence without a request. Fetch creates filing-linked financial snapshots
+from official XBRL-derived TSV data and never performs ticker-to-issuer lookup.
+
 ## Agent explanation
 
 ```shell
-marketsieve agent explain MIC:SYMBOL --source-profile PROFILE --provider fake
-marketsieve agent explain MIC:SYMBOL --source-profile PROFILE --provider lmstudio
-marketsieve agent explain MIC:SYMBOL --source-profile PROFILE --provider openai --allow-cloud
-marketsieve agent explain MIC:SYMBOL --source-profile PROFILE --provider anthropic --allow-cloud
-marketsieve agent explain MIC:SYMBOL --source-profile PROFILE --provider google --allow-cloud
-marketsieve agent explain MIC:SYMBOL --source-profile PROFILE --provider openai --dry-run
+marketsieve agent doctor lmstudio
+marketsieve report explain {ID,latest} --provider lmstudio
+marketsieve report explain {ID,latest} --provider openai --allow-cloud
+marketsieve report explain {ID,latest} --provider anthropic --allow-cloud
+marketsieve report explain {ID,latest} --provider google --allow-cloud
+marketsieve report explain {ID,latest} --provider openai --dry-run
 ```
 
-Fake is the default. Real model names are explicit configuration and are not frozen in source code.
-Dry-run shows the credential-free outgoing fact payload. Unsafe, invalid, or unavailable model
+There is no default provider. Model names are explicit configuration and are not frozen in source
+code. Dry-run shows the credential-free outgoing report payload. Unsafe, invalid, or unavailable model
 output produces a warning on stderr and a deterministic template on stdout. No provider failure
-changes the selected destination.
+changes the selected report. Successful and template explanations are immutable artifacts below
+`.marketsieve/explanations`; report objects remain unchanged.
 
 `agent doctor PROVIDER` validates configuration without contacting a model. LM Studio endpoints are
 loopback-only unless `--allow-remote` is explicit. Provider model names and the optional LM Studio
 endpoint are read from `[agent.providers.NAME]`; credentials are never valid TOML settings.
+
+## Routine CLI
+
+Routine operation uses the following commands:
+
+```shell
+marketsieve init
+marketsieve portfolio import --broker rakuten --as-of TIMESTAMP PATH
+marketsieve portfolio show
+marketsieve daily {jp,us}
+marketsieve weekly
+marketsieve report list
+marketsieve report show {ID,latest}
+marketsieve report export {ID,latest} --format markdown
+marketsieve report explain {ID,latest} --provider PROVIDER
+```
+
+The broker-neutral path is:
+
+```shell
+marketsieve portfolio import --broker canonical --as-of TIMESTAMP PATH
+marketsieve portfolio show
+```
+
+Canonical CSV uses the exact header
+`kind,mic,symbol,currency,timezone,quantity,average_acquisition_price,account_type`.
+`holding` rows require positive quantity, acquisition price, and a non-empty account type. `watch`
+rows require those three fields to be empty. Instruments are equities identified by MIC, symbol,
+currency, and IANA timezone. Normalized holdings and watch items use a stable instrument order.
+
+The Rakuten path accepts only the observed CP932 `assetbalance(all)` shape whose portfolio-detail
+section explicitly states that no holdings exist:
+
+```shell
+marketsieve portfolio import --broker rakuten --as-of TIMESTAMP PATH
+```
+
+It creates a valid empty portfolio, retains the input digest, and does not retain the source path,
+bytes, customer identity, or account identity. JSON and stored objects retain the selected adapter
+name and version, dataset identity, and diagnostics. A non-empty Rakuten detail section is rejected
+until an anonymized real export defines its columns and semantics. The canonical CSV remains the
+input for holdings and watch items.
+
+`daily` explicitly acquires price, financial, and event data through the configured profile,
+validates each snapshot, and evaluates every held or watched instrument in the selected market.
+Price failure makes that instrument indeterminate. Financial or event failure leaves the price
+decision usable, records the missing evidence, and cannot silently reuse another provider. If every
+instrument is indeterminate, the command fails and does not update the latest reference.
+
+The detailed report section shows period-to-period revenue, EPS, and free-cash-flow results,
+the latest known filing and amendment context, and company-relative valuation history when the
+configured source supplies valuation facts. A single observation is labeled with a history count
+of one and is not presented as a range. These display facts do not alter the decision policy.
+
+`weekly` reads the latest eligible Japanese and U.S. reports and performs no network access. A
+missing or stale input names the daily command required to recover. `report show` and `report
+export` are read-only. `report explain` contacts only the explicitly selected model and stores an
+explanation separately from the report.
+
+`decision-report/v1` records `input_report_ids`. The field is empty for daily reports and contains
+exactly the sorted Japanese and U.S. report IDs for a weekly report. The default weekly eligibility
+window is seven days. `[routines.weekly].max_age_days` can set an integer from 1 through 14.
+
+Human output presents conclusion, attention items, changes, unchanged items, next action, data
+limitations, and detailed evidence in that order. `--quiet` retains the conclusion, attention
+items, and next action. JSON returns the canonical English-keyed decision-report contract without
+localized decorative prose.
+
+The change section compares action and confidence against the exact `previous_report_id` object.
+It marks a newly reviewed instrument as new and a removed instrument as outside the current target.
+The unchanged section contains only instruments whose action and confidence both remain equal.
+
+Advanced acquisition and inspection commands move below `marketsieve data`. Their semantics remain
+available, but the old top-level command paths are not preserved.
+
+Strategy Lab reads one explicit TOML specification and verified snapshot IDs:
+
+```shell
+marketsieve experiment run strategy.toml
+marketsieve experiment show RUN_ID
+marketsieve experiment compare LEFT_RUN_ID RIGHT_RUN_ID
+marketsieve experiment explain RUN_ID --provider lmstudio
+```
+
+The run, show, and compare commands are offline. `run` writes `experiment-run/v1` below
+`.marketsieve/experiments/objects`; identical specifications and snapshots produce the same run ID
+and bytes. `show` and `compare` do not recalculate a run. The output labels whether complete cost
+assumptions were supplied and never presents forward return as net profit.
+
+`experiment explain` contacts exactly one explicitly selected model under the same local and cloud
+consent rules as report explanation. The model selects stored fact IDs only. Prompt, provider,
+model, endpoint, locale, raw output, validation result, and deterministic rendering are stored as
+an immutable `experiment-explanation/v1` object below
+`.marketsieve/experiments/explanations/objects`. The experiment run remains unchanged.

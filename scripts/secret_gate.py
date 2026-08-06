@@ -92,7 +92,7 @@ ASSIGNMENT = re.compile(
     r"([A-Z0-9_.-]*(?:API[-_]?KEY|ACCESS[-_]?KEY|SECRET[-_]?KEY|PRIVATE[-_]?KEY|"
     r"ACCESS[-_]?TOKEN|AUTH[-_]?TOKEN|REFRESH[-_]?TOKEN|TOKEN|CLIENT[-_]?SECRET|"
     r"SECRET|PASSWORD))[\"']?"
-    r"\s*(?:=|:)\s*(\"[^\"\n]*\"|'[^'\n]*'|[^,}\s]+)"
+    r"\s*(?:=|:)\s*(\$\{\{[^}\n]+}}|\"[^\"\n]*\"|'[^'\n]*'|[^,}\s]+)"
 )
 CREDENTIAL_NAME = re.compile(
     r"(?i)(?:^|[_.-])(?:API[-_]?KEY|ACCESS[-_]?KEY|SECRET[-_]?KEY|PRIVATE[-_]?KEY|"
@@ -156,9 +156,21 @@ def _decode_text(payload: bytes) -> str | None:
         return None
 
 
+def _decode_labeled_text(payload: bytes, label: str) -> str | None:
+    text = _decode_text(payload)
+    if text is not None or not label.lower().endswith(".csv"):
+        return text
+    if len(payload) > MAX_TEXT_BYTES or b"\0" in payload:
+        return None
+    try:
+        return payload.decode("cp932")
+    except UnicodeDecodeError:
+        return None
+
+
 def _read_text(path: Path) -> str | None:
     try:
-        return _decode_text(path.read_bytes())
+        return _decode_labeled_text(path.read_bytes(), str(path))
     except OSError:
         return None
 
@@ -176,6 +188,21 @@ def _is_literal_credential(value: str) -> bool:
 
 def _python_label(label: str) -> bool:
     return label.rsplit("!", maxsplit=1)[-1].rsplit(":", maxsplit=1)[-1].endswith(".py")
+
+
+def _safe_github_workflow_assignment(label: str, name: str, value: str) -> bool:
+    normalized_label = label.rsplit("!", maxsplit=1)[-1].rsplit(":", maxsplit=1)[-1]
+    if ".github/workflows/" not in normalized_label or not normalized_label.endswith(
+        (".yml", ".yaml")
+    ):
+        return False
+    normalized_name = name.lower().replace("_", "-")
+    normalized_value = value.strip().strip("\"'")
+    if normalized_name == "id-token" and normalized_value in {"read", "write", "none"}:
+        return True
+    return normalized_name in {"gh-token", "github-token"} and normalized_value == (
+        "${{ github.token }}"
+    )
 
 
 def _python_target_name(node: ast.expr) -> str | None:
@@ -358,7 +385,11 @@ def _scan_text(label: str, text: str, *, scan_assignments: bool = True) -> list[
     for line_number, line in enumerate(text.splitlines(), start=1):
         if scan_assignments and not python_source:
             for assignment in ASSIGNMENT.finditer(line):
-                if _is_literal_credential(assignment.group(2)):
+                if _is_literal_credential(assignment.group(2)) and not (
+                    _safe_github_workflow_assignment(
+                        label, assignment.group(1), assignment.group(2)
+                    )
+                ):
                     findings.append(Finding(label, line_number, "credential_assignment"))
         for match in (*URL_CREDENTIAL.finditer(line), *URL_USERINFO_CREDENTIAL.finditer(line)):
             if _is_literal_credential(match.group(1)):
@@ -404,7 +435,7 @@ def _scan_archive_payload(payload: bytes, label: str, *, depth: int = 0) -> list
                         findings.append(Finding(member_label, 0, "unscannable_content"))
                         continue
                     member_payload = archive.read(zip_member)
-                    text = _decode_text(member_payload)
+                    text = _decode_labeled_text(member_payload, member_label)
                     if text is not None:
                         findings.extend(_scan_text(member_label, text))
                     nested_archive = _is_archive(zip_member.filename)
@@ -437,7 +468,7 @@ def _scan_archive_payload(payload: bytes, label: str, *, depth: int = 0) -> list
                         continue
                     handle = archive.extractfile(tar_member)
                     member_payload = handle.read() if handle is not None else b""
-                    text = _decode_text(member_payload)
+                    text = _decode_labeled_text(member_payload, member_label)
                     if text is not None:
                         findings.extend(_scan_text(member_label, text))
                     nested_archive = _is_archive(tar_member.name)
@@ -565,7 +596,7 @@ def scan_history(base: str) -> list[Finding]:
             if _is_archive(changed_path):
                 findings.extend(_scan_archive_payload(payload, label))
             else:
-                text = _decode_text(payload)
+                text = _decode_labeled_text(payload, changed_path)
                 if text is None:
                     if not _is_sensitive_path(changed_path, name):
                         findings.append(Finding(label, 0, "unscannable_content"))

@@ -8,12 +8,13 @@
     "schema_version": {"const": "1.0.0"},
     "operation": {"enum": ["doctor", "dry_run", "explain"]},
     "status": {"enum": ["ready", "not_ready", "model", "template"]},
-    "provider": {"enum": ["fake", "lmstudio", "openai", "anthropic", "google"]},
+    "provider": {"enum": ["lmstudio", "openai", "anthropic", "google"]},
     "model": {"type": ["string", "null"]},
     "endpoint": {"type": ["string", "null"]},
     "message": {"type": "string"},
-    "instrument": {"type": "string", "pattern": "^[^:]+:[^:]+$"},
-    "source_profile": {"type": "string", "minLength": 1},
+    "schema": {"const": "report-explanation/v1"},
+    "explanation_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "report_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
     "prompt_version": {"type": "string", "minLength": 1},
     "catalog_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
     "fact_count": {"type": "integer", "minimum": 0},
@@ -29,11 +30,11 @@
     },
     {
       "if": {"properties": {"operation": {"const": "dry_run"}}},
-      "then": {"required": ["endpoint", "prompt_version", "catalog_hash", "fact_count", "payload"]}
+      "then": {"required": ["endpoint", "report_id", "prompt_version", "catalog_hash", "fact_count", "payload"]}
     },
     {
       "if": {"properties": {"operation": {"const": "explain"}}},
-      "then": {"required": ["instrument", "source_profile", "prompt_version", "catalog_hash", "selected_fact_ids", "fallback_reason", "text"]}
+      "then": {"required": ["schema", "explanation_id", "report_id", "prompt_version", "catalog_hash", "selected_fact_ids", "fallback_reason", "text"]}
     }
   ],
   "additionalProperties": false

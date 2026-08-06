@@ -63,6 +63,21 @@ def test_secret_scan_reads_utf16_configuration(tmp_path: Path) -> None:
     assert [finding.kind for finding in scan_paths((path,))] == ["credential_assignment"]
 
 
+def test_secret_scan_reads_cp932_csv(tmp_path: Path) -> None:
+    key = "JQUANTS" + "_API_KEY"
+    path = tmp_path / "portfolio.csv"
+    path.write_text(f"銘柄,{key}=opaque-production-credential\n", encoding="cp932")
+
+    assert [finding.kind for finding in scan_paths((path,))] == ["credential_assignment"]
+
+
+def test_secret_scan_accepts_safe_cp932_csv(tmp_path: Path) -> None:
+    path = tmp_path / "portfolio.csv"
+    path.write_text("銘柄,評価額\n該当なし,0\n", encoding="cp932")
+
+    assert scan_paths((path,)) == []
+
+
 def test_secret_scan_fails_closed_for_oversized_content(tmp_path: Path) -> None:
     path = tmp_path / "large.bin"
     path.write_bytes(b"x" * (5 * 1024 * 1024 + 1))
@@ -115,6 +130,32 @@ def test_secret_scan_accepts_credential_references(tmp_path: Path, reference: st
     path = write(tmp_path / "settings.txt", f"{key}={reference}\n")
 
     assert scan_paths((path,)) == []
+
+
+def test_secret_scan_accepts_github_builtin_tokens_and_oidc_permission(
+    tmp_path: Path,
+) -> None:
+    workflow = tmp_path / ".github" / "workflows" / "publish.yml"
+    workflow.parent.mkdir(parents=True)
+    write(
+        workflow,
+        "permissions:\n"
+        "  id-token: write\n"
+        "env:\n"
+        "  GH_TOKEN: ${{ github.token }}\n"
+        "with:\n"
+        "  github-token: ${{ github.token }}\n",
+    )
+
+    assert scan_paths((workflow,)) == []
+
+
+def test_secret_scan_rejects_literal_token_in_github_workflow(tmp_path: Path) -> None:
+    workflow = tmp_path / ".github" / "workflows" / "publish.yml"
+    workflow.parent.mkdir(parents=True)
+    write(workflow, "env:\n  GH_TOKEN: opaque-production-credential\n")
+
+    assert [finding.kind for finding in scan_paths((workflow,))] == ["credential_assignment"]
 
 
 @pytest.mark.parametrize("parameter", ("apikey", "api_key", "access_token"))

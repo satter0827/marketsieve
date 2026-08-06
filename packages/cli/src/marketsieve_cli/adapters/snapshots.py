@@ -19,7 +19,7 @@ from marketsieve_extension_api import ImportedDailyBars, ImportedEvents, Importe
 
 SNAPSHOT_SCHEMA = "marketsieve-snapshot/v1"
 NORMALIZED_SCHEMA = "marketsieve-normalized-daily-bars/v1"
-INSTRUMENT_KEY = re.compile(r"^[A-Z0-9]{4}:[A-Z0-9]+$")
+INSTRUMENT_KEY = re.compile(r"^[A-Z0-9]{4}:[A-Z0-9][A-Z0-9.-]*$")
 SNAPSHOT_KINDS = frozenset({"daily_bars", "financials", "events"})
 
 
@@ -124,8 +124,33 @@ def _financial_document(imported: ImportedFinancials) -> dict[str, Any]:
         "version": imported.source_version,
     }
     return {
-        "schema": "marketsieve-normalized-financials/v1",
+        "schema": "marketsieve-normalized-financials/v2",
         "instrument": _instrument_document_from_request(imported),
+        "filings": [
+            {
+                "filing_id": filing.filing_id,
+                "issuer_id": filing.issuer_id,
+                "document_type": filing.document_type,
+                "published_at": filing.published_at.isoformat(),
+                "period": filing.period.value if filing.period is not None else None,
+                "fiscal_period_start": (
+                    filing.fiscal_period_start.isoformat()
+                    if filing.fiscal_period_start is not None
+                    else None
+                ),
+                "fiscal_period_end": (
+                    filing.fiscal_period_end.isoformat()
+                    if filing.fiscal_period_end is not None
+                    else None
+                ),
+                "accounting_standard": filing.accounting_standard,
+                "consolidation": filing.consolidation.value,
+                "currency": filing.currency,
+                "amends_filing_id": filing.amends_filing_id,
+                "provenance": provenance,
+            }
+            for filing in imported.filings
+        ],
         "facts": [
             {
                 "concept": fact.concept,
@@ -147,6 +172,7 @@ def _financial_document(imported: ImportedFinancials) -> dict[str, Any]:
                 "currency": fact.currency,
                 "scale": fact.scale,
                 "value": str(fact.value),
+                "filing_id": fact.filing_id,
                 "provenance": provenance,
             }
             for fact in imported.facts

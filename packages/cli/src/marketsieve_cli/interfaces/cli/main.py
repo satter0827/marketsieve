@@ -14,21 +14,62 @@ import click
 from marketsieve_cli.bootstrap import (
     build_agent_service,
     build_console_output,
+    build_daily_brief_service,
     build_diagnostics_service,
+    build_experiment_agent_service,
+    build_experiment_service,
     build_snapshot_service,
+    build_weekly_brief_service,
+    import_portfolio,
+    list_decision_reports,
+    project_decision_report,
+    read_decision_report,
+    read_portfolio,
+    read_screening,
+    render_decision_report,
+    run_screening,
     sdk_version,
+    update_screening,
 )
 
 OUTPUT_CHOICES = ("auto", "rich", "text", "json")
 CAPABILITIES_SCHEMA_VERSION = "2.0.0"
-COMMAND_METADATA = {
+COMMAND_METADATA: dict[str, dict[str, Any]] = {
+    "screen update": {
+        "output_schema": "urn:marketsieve:schema:instrument-universe:1.0.0",
+        "effects": {"network": True, "secrets": True, "optional_writes": ["universe"]},
+    },
+    "screen run": {
+        "output_schema": "urn:marketsieve:schema:screening-report:1.0.0",
+        "effects": {"network": False, "secrets": False, "optional_writes": ["screening_report"]},
+    },
+    "screen show": {
+        "output_schema": "urn:marketsieve:schema:screening-report:1.0.0",
+        "effects": {"network": False, "secrets": False, "optional_writes": []},
+    },
+    "experiment run": {
+        "output_schema": "urn:marketsieve:schema:experiment-run:1.0.0",
+        "effects": {"network": False, "secrets": False, "optional_writes": ["experiment"]},
+    },
+    "experiment show": {
+        "output_schema": "urn:marketsieve:schema:experiment-run:1.0.0",
+        "effects": {"network": False, "secrets": False, "optional_writes": []},
+    },
+    "experiment compare": {
+        "output_schema": "urn:marketsieve:schema:experiment-comparison:1.0.0",
+        "effects": {"network": False, "secrets": False, "optional_writes": []},
+    },
+    "experiment explain": {
+        "output_schema": "urn:marketsieve:schema:experiment-explanation:1.0.0",
+        "effects": {"network": True, "secrets": True, "optional_writes": ["explanation"]},
+    },
     "agent doctor": {
         "output_schema": "urn:marketsieve:schema:agent-result:1.0.0",
         "effects": {"network": False, "secrets": False, "optional_writes": []},
     },
-    "agent explain": {
+    "report explain": {
         "output_schema": "urn:marketsieve:schema:agent-result:1.0.0",
-        "effects": {"network": True, "secrets": True, "optional_writes": []},
+        "effects": {"network": True, "secrets": True, "optional_writes": ["explanation"]},
     },
     "capabilities": {
         "output_schema": "urn:marketsieve:schema:capabilities-result:2.0.0",
@@ -38,9 +79,29 @@ COMMAND_METADATA = {
         "output_schema": "urn:marketsieve:schema:doctor-result:1.0.0",
         "effects": {"network": False, "secrets": False, "optional_writes": ["log_file"]},
     },
-    "report": {
-        "output_schema": "urn:marketsieve:schema:report-result:2.0.0",
-        "effects": {"network": False, "secrets": False, "optional_writes": ["log_file"]},
+    "daily": {
+        "output_schema": "urn:marketsieve:schema:decision-report:1.0.0",
+        "effects": {"network": True, "secrets": True, "optional_writes": ["snapshot", "report"]},
+    },
+    "report list": {
+        "output_schema": "urn:marketsieve:schema:report-list:1.0.0",
+        "effects": {"network": False, "secrets": False, "optional_writes": []},
+    },
+    "report show": {
+        "output_schema": "urn:marketsieve:schema:decision-report:1.0.0",
+        "effects": {"network": False, "secrets": False, "optional_writes": []},
+    },
+    "report export": {
+        "output_schema": None,
+        "effects": {"network": False, "secrets": False, "optional_writes": []},
+    },
+    "portfolio import": {
+        "output_schema": "urn:marketsieve:schema:portfolio-result:2.0.0",
+        "effects": {"network": False, "secrets": False, "optional_writes": ["portfolio"]},
+    },
+    "portfolio show": {
+        "output_schema": "urn:marketsieve:schema:portfolio-result:2.0.0",
+        "effects": {"network": False, "secrets": False, "optional_writes": []},
     },
     "compare": {
         "output_schema": "urn:marketsieve:schema:comparison-result:1.0.0",
@@ -49,6 +110,10 @@ COMMAND_METADATA = {
     "source list": {
         "output_schema": "urn:marketsieve:schema:source-result:1.0.0",
         "effects": {"network": False, "secrets": False, "optional_writes": []},
+    },
+    "weekly": {
+        "output_schema": "urn:marketsieve:schema:decision-report:1.0.0",
+        "effects": {"network": False, "secrets": False, "optional_writes": ["report"]},
     },
     "source import": {
         "output_schema": "urn:marketsieve:schema:source-result:1.0.0",
@@ -179,48 +244,328 @@ def doctor(context: click.Context, output_mode: str) -> None:
         raise click.exceptions.Exit(1)
 
 
-@main.command()
-@click.argument("instrument")
-@click.option("--source-profile", required=True, help="Select the exact stored source profile.")
+@main.group()
+def portfolio() -> None:
+    """Import and inspect the local brokerage-neutral portfolio."""
+
+
+@portfolio.command("import")
+@click.argument("path", type=click.Path(path_type=Path, dir_okay=False, exists=True))
 @click.option(
-    "--format",
-    "report_format",
-    type=click.Choice(("rich", "text", "json")),
-    default="text",
-    show_default=True,
+    "--broker",
+    required=True,
+    help="Use 'canonical' or the name of one installed portfolio importer.",
+)
+@click.option("--as-of", required=True, help="Use an ISO 8601 timestamp with a UTC offset.")
+@output_option
+@click.pass_context
+def portfolio_import(
+    context: click.Context, path: Path, broker: str, as_of: str, output_mode: str
+) -> None:
+    """Import a portfolio CSV without retaining the source file."""
+
+    console = _console(context, output_mode)
+    try:
+        document = import_portfolio(path, broker=broker, as_of=as_of)
+    except (ImportError, LookupError, OSError, RuntimeError, TypeError, ValueError) as error:
+        console.emit_error("portfolio_import_failed", str(error))
+        raise click.exceptions.Exit(1) from None
+    console.emit_document(document, title="Portfolio")
+
+
+@portfolio.command("show")
+@output_option
+@click.pass_context
+def portfolio_show(context: click.Context, output_mode: str) -> None:
+    """Show the verified latest normalized portfolio without network access."""
+
+    console = _console(context, output_mode)
+    try:
+        document = read_portfolio()
+    except (LookupError, OSError, TypeError, ValueError) as error:
+        console.emit_error("portfolio_show_failed", str(error))
+        raise click.exceptions.Exit(1) from None
+    console.emit_document(document, title="Portfolio")
+
+
+@main.command()
+@click.argument("market", type=click.Choice(("jp", "us")))
+@click.option(
+    "--as-of",
+    default=None,
+    help="Use an explicit ISO 8601 knowledge time; defaults to the current time.",
 )
 @output_option
 @click.pass_context
-def report(
+def daily(context: click.Context, market: str, as_of: str | None, output_mode: str) -> None:
+    """Acquire one market and create its immutable Close Brief."""
+
+    console = _console(context, output_mode)
+    try:
+        instant = datetime.now().astimezone() if as_of is None else datetime.fromisoformat(as_of)
+        report = build_daily_brief_service(context.obj["config_path"]).run(market, as_of=instant)
+    except (LookupError, OSError, RuntimeError, TypeError, ValueError) as error:
+        console.emit_error("daily_failed", str(error))
+        raise click.exceptions.Exit(1) from None
+    if output_mode == "json":
+        console.emit_document(read_decision_report(report.report_id), title="Decision report")
+    else:
+        click.echo(project_decision_report(report.report_id), nl=False)
+
+
+@main.command()
+@click.option(
+    "--as-of",
+    default=None,
+    help="Use an explicit ISO 8601 knowledge time; defaults to the current time.",
+)
+@output_option
+@click.pass_context
+def weekly(context: click.Context, as_of: str | None, output_mode: str) -> None:
+    """Create the offline weekend briefing from eligible daily reports."""
+
+    console = _console(context, output_mode)
+    try:
+        instant = datetime.now().astimezone() if as_of is None else datetime.fromisoformat(as_of)
+        report = build_weekly_brief_service(context.obj["config_path"]).run(as_of=instant)
+    except (LookupError, OSError, RuntimeError, TypeError, ValueError) as error:
+        console.emit_error("weekly_failed", str(error))
+        raise click.exceptions.Exit(1) from None
+    if output_mode == "json":
+        console.emit_document(read_decision_report(report.report_id), title="Decision report")
+    else:
+        click.echo(project_decision_report(report.report_id), nl=False)
+
+
+@main.group()
+def screen() -> None:
+    """Update bounded universes and screen verified local data."""
+
+
+@screen.command("update")
+@click.argument("market", type=click.Choice(("jp", "us")))
+@output_option
+@click.pass_context
+def screen_update(context: click.Context, market: str, output_mode: str) -> None:
+    """Explicitly import or fetch one configured bounded universe."""
+
+    console = _console(context, output_mode)
+    try:
+        document = update_screening(context.obj["config_path"], market)
+    except (LookupError, OSError, RuntimeError, TypeError, ValueError) as error:
+        console.emit_error("screen_update_failed", str(error))
+        raise click.exceptions.Exit(1) from None
+    console.emit_document(document, title="Instrument universe")
+
+
+@screen.command("run")
+@click.argument("market", type=click.Choice(("jp", "us")))
+@click.option(
+    "--as-of",
+    default=None,
+    help="Use an explicit ISO 8601 knowledge time; defaults to the current time.",
+)
+@output_option
+@click.pass_context
+def screen_run(context: click.Context, market: str, as_of: str | None, output_mode: str) -> None:
+    """Screen verified local snapshots without network access."""
+
+    console = _console(context, output_mode)
+    try:
+        instant = datetime.now().astimezone() if as_of is None else datetime.fromisoformat(as_of)
+        document = run_screening(context.obj["config_path"], market, as_of=instant)
+    except (LookupError, OSError, RuntimeError, TypeError, ValueError) as error:
+        console.emit_error("screen_run_failed", str(error))
+        raise click.exceptions.Exit(1) from None
+    console.emit_document(document, title="Screening report")
+
+
+@screen.command("show")
+@click.argument("report_id")
+@click.option("--market", type=click.Choice(("jp", "us")), default=None)
+@output_option
+@click.pass_context
+def screen_show(
+    context: click.Context, report_id: str, market: str | None, output_mode: str
+) -> None:
+    """Show an exact report or the newest stored screening result."""
+
+    console = _console(context, output_mode)
+    try:
+        document = read_screening(context.obj["config_path"], report_id, market=market)
+    except (LookupError, OSError, TypeError, ValueError) as error:
+        console.emit_error("screen_show_failed", str(error))
+        raise click.exceptions.Exit(1) from None
+    console.emit_document(document, title="Screening report")
+
+
+@main.group()
+def experiment() -> None:
+    """Replay and compare deterministic decision policies offline."""
+
+
+@experiment.command("run")
+@click.argument("spec", type=click.Path(path_type=Path, dir_okay=False, exists=True))
+@output_option
+@click.pass_context
+def experiment_run(context: click.Context, spec: Path, output_mode: str) -> None:
+    """Run one fixed strategy specification against verified snapshots."""
+
+    console = _console(context, output_mode)
+    try:
+        document = build_experiment_service().run(spec)
+    except (KeyError, LookupError, OSError, TypeError, ValueError) as error:
+        console.emit_error("experiment_run_failed", str(error))
+        raise click.exceptions.Exit(1) from None
+    console.emit_document(document, title="Experiment run")
+
+
+@experiment.command("show")
+@click.argument("run_id")
+@output_option
+@click.pass_context
+def experiment_show(context: click.Context, run_id: str, output_mode: str) -> None:
+    """Show one immutable experiment run without network access."""
+
+    console = _console(context, output_mode)
+    try:
+        document = build_experiment_service().show(run_id)
+    except (LookupError, OSError, TypeError, ValueError) as error:
+        console.emit_error("experiment_show_failed", str(error))
+        raise click.exceptions.Exit(1) from None
+    console.emit_document(document, title="Experiment run")
+
+
+@experiment.command("compare")
+@click.argument("left_run_id")
+@click.argument("right_run_id")
+@output_option
+@click.pass_context
+def experiment_compare(
+    context: click.Context, left_run_id: str, right_run_id: str, output_mode: str
+) -> None:
+    """Compare deterministic metrics from two stored runs."""
+
+    console = _console(context, output_mode)
+    try:
+        document = build_experiment_service().compare(left_run_id, right_run_id)
+    except (LookupError, OSError, TypeError, ValueError) as error:
+        console.emit_error("experiment_compare_failed", str(error))
+        raise click.exceptions.Exit(1) from None
+    console.emit_document(document, title="Experiment comparison")
+
+
+@experiment.command("explain")
+@click.argument("run_id")
+@click.option(
+    "--provider",
+    type=click.Choice(("lmstudio", "openai", "anthropic", "google")),
+    required=True,
+)
+@click.option("--allow-cloud", is_flag=True, help="Allow this invocation to contact a cloud model.")
+@click.option("--allow-remote", is_flag=True, help="Allow a non-loopback LM Studio endpoint.")
+@output_option
+@click.pass_context
+def experiment_explain(
     context: click.Context,
-    instrument: str,
-    source_profile: str,
-    report_format: str,
+    run_id: str,
+    provider: str,
+    allow_cloud: bool,
+    allow_remote: bool,
     output_mode: str,
 ) -> None:
-    """Project one stored equity view as a durable offline report."""
+    """Explain stored experiment facts through one explicitly selected model."""
 
-    selected_output = report_format if output_mode == "auto" else output_mode
-    console = _console(context, selected_output)
+    console = _console(context, output_mode)
     try:
-        document = build_snapshot_service(context.obj["config_path"]).report(
-            instrument, source_profile
+        service = build_experiment_agent_service(context.obj["config_path"])
+        document = service.explain(  # type: ignore[attr-defined]
+            run_id,
+            provider,
+            context.obj["locale"],
+            allow_cloud=allow_cloud,
+            allow_remote=allow_remote,
         )
-    except (LookupError, RuntimeError, TypeError, ValueError, OSError) as error:
-        console.emit_error("report_failed", str(error))
+    except ImportError:
+        console.emit_error("agent_not_installed", "install the marketsieve-cli agent extra")
         raise click.exceptions.Exit(1) from None
-    console.emit_document(document, title="Equity report")
+    except (LookupError, RuntimeError, TypeError, ValueError, OSError) as error:
+        console.emit_error("experiment_agent_failed", str(error))
+        raise click.exceptions.Exit(1) from None
+    if document.get("status") == "template":
+        console.emit_warning(
+            "agent_template_fallback",
+            f"model output was not used ({document['validation']['reason']})",
+        )
+    console.emit_document(document, title="Experiment explanation")
+
+
+@main.group()
+def report() -> None:
+    """Read and explain immutable decision reports."""
+
+
+@report.command("list")
+@output_option
+@click.pass_context
+def report_list(context: click.Context, output_mode: str) -> None:
+    """List stored decision reports without contacting a provider."""
+
+    console = _console(context, output_mode)
+    try:
+        document = list_decision_reports()
+    except (LookupError, TypeError, ValueError, OSError) as error:
+        console.emit_error("report_list_failed", str(error))
+        raise click.exceptions.Exit(1) from None
+    console.emit_document(
+        document,
+        title="Decision reports",
+    )
+
+
+@report.command("show")
+@click.argument("report_id")
+@output_option
+@click.pass_context
+def report_show(context: click.Context, report_id: str, output_mode: str) -> None:
+    """Show an exact report ID or the newest stored report."""
+
+    console = _console(context, output_mode)
+    try:
+        document = read_decision_report(report_id) if output_mode == "json" else None
+        markdown = project_decision_report(report_id) if output_mode != "json" else None
+    except (LookupError, TypeError, ValueError, OSError) as error:
+        console.emit_error("report_show_failed", str(error))
+        raise click.exceptions.Exit(1) from None
+    if output_mode == "json":
+        assert document is not None
+        console.emit_document(document, title="Decision report")
+    else:
+        assert markdown is not None
+        click.echo(markdown, nl=False)
+
+
+@report.command("export")
+@click.argument("report_id")
+@click.option("--format", "export_format", type=click.Choice(("markdown",)), default="markdown")
+def report_export(report_id: str, export_format: str) -> None:
+    """Export a verified projection of an exact or latest report."""
+
+    del export_format
+    try:
+        markdown = render_decision_report(report_id)
+    except (LookupError, TypeError, ValueError, OSError) as error:
+        raise click.ClickException(str(error)) from None
+    click.echo(markdown, nl=False)
 
 
 @main.group()
 def agent() -> None:
-    """Explain verified equity facts without adding market values."""
+    """Check explicitly configured explanation providers."""
 
 
 @agent.command("doctor")
-@click.argument(
-    "provider", type=click.Choice(("fake", "lmstudio", "openai", "anthropic", "google"))
-)
+@click.argument("provider", type=click.Choice(("lmstudio", "openai", "anthropic", "google")))
 @click.option("--allow-remote", is_flag=True, help="Allow a non-loopback LM Studio endpoint.")
 @output_option
 @click.pass_context
@@ -241,38 +586,34 @@ def agent_doctor(
         raise click.exceptions.Exit(1)
 
 
-@agent.command("explain")
-@click.argument("instrument")
-@click.option("--source-profile", required=True, help="Select the exact stored source profile.")
+@report.command("explain")
+@click.argument("report_id")
 @click.option(
     "--provider",
-    type=click.Choice(("fake", "lmstudio", "openai", "anthropic", "google")),
-    default="fake",
-    show_default=True,
+    type=click.Choice(("lmstudio", "openai", "anthropic", "google")),
+    required=True,
 )
 @click.option("--allow-cloud", is_flag=True, help="Allow this invocation to contact a cloud model.")
 @click.option("--allow-remote", is_flag=True, help="Allow a non-loopback LM Studio endpoint.")
 @click.option("--dry-run", is_flag=True, help="Show the credential-free payload without a request.")
 @output_option
 @click.pass_context
-def agent_explain(
+def report_explain(
     context: click.Context,
-    instrument: str,
-    source_profile: str,
+    report_id: str,
     provider: str,
     allow_cloud: bool,
     allow_remote: bool,
     dry_run: bool,
     output_mode: str,
 ) -> None:
-    """Explain one verified view through exactly one selected provider."""
+    """Explain one immutable report through exactly one selected provider."""
 
     console = _console(context, output_mode)
     try:
         service = build_agent_service(context.obj["config_path"])
         document = service.explain(  # type: ignore[attr-defined]
-            instrument,
-            source_profile,
+            report_id,
             provider,
             context.obj["locale"],
             allow_cloud=allow_cloud,

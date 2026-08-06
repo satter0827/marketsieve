@@ -13,7 +13,7 @@ MarketSieveは、検証済みの市場情報から再現可能な分析、過去
 
 ## 現在の状態
 
-`0.3.0`はdevelop上のrelease candidateです。CSV、J-Quants、Alpha Vantageを独立した配布物として扱い、変更不能な検証済みスナップショット、価格・テクニカル・財務・valuation・risk・event・data qualityの総合確認、比較、レポート、説明専用Agentを提供します。FakeListLLMを既定とし、LM Studioと明示的に許可したOpenAI、Anthropic、Googleも同じgrounded pipelineを使用します。CLIは根拠と欠損理由を提示し、投資判断を推奨しません。
+`develop`には0.7.0のリリース候補があります。CSV、J-Quants、Alpha Vantage、FRED、SEC、EDINETを独立した配布物として扱い、変更不能な検証済みスナップショット、価格・テクニカル・財務・valuation・risk・event・data qualityの総合確認、比較、レポート、説明専用Agentを提供します。設定済みの`daily jp`と`daily us`は、ポートフォリオ銘柄を明示的に取得し、変更不能なClose Briefを保存します。`weekly`は有効な日米レポートと期限内の候補をオフラインで週末作戦会議へまとめ、保有判断と`残った候補`を分けて表示します。日米の銘柄集合は上限を指定して明示的に更新し、検証済みのローカル価格からオフラインで候補を抽出できます。候補の順序は根拠を確認でき、不透明な総合点を使いません。Agentは変更不能な判断レポートだけを読み、LM Studio、OpenAI、Anthropic、Googleのいずれかを明示した場合だけ動作します。説明は別成果物として保存され、レポートを変更しません。
 
 ## インストール
 
@@ -23,14 +23,21 @@ Python 3.12から3.14をサポートします。開発にはPython 3.13と[uv](h
 make sync
 ```
 
-SDK、extension API、CLI、Agent、CSV source、J-Quants source、Alpha Vantage sourceは独立した配布物としてビルドできます。
+SDK、extension API、CLI、Agent、CSV source、J-Quants source、Alpha Vantage source、FRED source、SEC source、EDINET sourceは独立した配布物としてビルドできます。
 
 ```shell
 make build
 ```
 
-公開releaseはPyPIではなく、checksum付きGitHub Release wheelhouseを使用します。assetを
-`release.json`で検証してwheelhouse ZIPを展開した後、offlineでinstallします。
+公開時は、独立した配布物をPyPIへ送り、同じ成果物をchecksum付きGitHub Release
+wheelhouseとして残します。通常はPyPIからinstallします。
+
+```shell
+python -m pip install "marketsieve-cli[all-sources]>=0.7,<0.8"
+```
+
+offlineで使用する場合は、assetを`release.json`で検証してwheelhouse ZIPを展開した後、
+indexを使わずにinstallします。
 
 ```shell
 python -m pip install --no-index --find-links ./marketsieve-wheelhouse \
@@ -41,7 +48,7 @@ python -m pip install --no-index --find-links ./marketsieve-wheelhouse \
 
 ## CLI
 
-公開`marketsieve-cli` distributionはSDKへ依存しますが、SDK wheelには含まれません。参照系コマンドはオフラインで動作します。プロバイダーから取得する場合だけ、明示的な`source fetch`が環境変数の認証情報を読み、ネットワークへ接続します。
+公開`marketsieve-cli` distributionはSDKへ依存しますが、SDK wheelには含まれません。参照系コマンドはオフラインで動作します。明示的な`source fetch`と`daily`取得だけが、選択したプロバイダーの環境変数を読み、ネットワークへ接続します。
 
 ```shell
 uv run marketsieve --version
@@ -63,10 +70,37 @@ uv run marketsieve snapshot verify SNAPSHOT_ID --output json
 uv run marketsieve inspect XTKS:7203 --source-profile offline-jp --output json
 uv run marketsieve analyze rsi XTKS:7203 --period 14 --source-profile offline-jp --output json
 uv run marketsieve compare XTKS:7203 XTKS:6758 --source-profile offline-jp --output json
-uv run marketsieve report XTKS:7203 --source-profile offline-jp --format rich
-uv run marketsieve agent explain XTKS:7203 --source-profile offline-jp --output json
-uv run marketsieve --config marketsieve.toml agent explain XTKS:7203 --source-profile offline-jp --provider openai --dry-run --output json
+uv run marketsieve report list --output json
+uv run marketsieve report show latest --output json
+uv run marketsieve report export latest --format markdown
+uv run marketsieve --config marketsieve.toml daily jp
+uv run marketsieve --config marketsieve.toml weekly
+uv run marketsieve --config marketsieve.toml screen update jp --output json
+uv run marketsieve --config marketsieve.toml screen run jp --output json
+uv run marketsieve --config marketsieve.toml screen show latest --market jp --output json
+uv run marketsieve --config marketsieve.toml report explain latest --provider openai --dry-run --output json
 ```
+
+canonical portfolio CSVのheaderは
+`kind,mic,symbol,currency,timezone,quantity,average_acquisition_price,account_type`です。
+`holding`は全項目を指定し、`watch`は末尾3項目を空にします。
+
+```shell
+uv run marketsieve portfolio import holdings.csv --broker canonical \
+  --as-of 2026-08-06T20:00:00+09:00
+uv run marketsieve portfolio show
+```
+
+楽天証券の空の`assetbalance(all)`は直接取り込めます。
+
+```shell
+uv run marketsieve portfolio import assetbalance.csv --broker rakuten \
+  --as-of 2026-08-06T12:48:40+09:00
+```
+
+保存するのは正規化結果と入力digestだけで、元CSVは保存しません。楽天adapterが受け付ける
+のは、検証済みの保有なし形式だけです。保有銘柄と監視銘柄は、匿名化した保有あり出力で
+形式を確認できるまでcanonical CSVを使用します。
 
 ## アーキテクチャ
 
@@ -88,9 +122,16 @@ VS Codeはworkspaceの`.venv`を使用し、依存同期、format、現在のテ
 
 変更は短命ブランチから`develop`へ統合します。人間が確認する`develop -> main` Pull Requestをリリース境界とします。手順は[Contributing](CONTRIBUTING.md)を参照してください。
 
+## プラグイン開発
+
+provider packageはCLI内部ではなく、データ種別ごとに小さく分けたextension APIへ依存します。
+[外部universe pluginの例](examples/instrument-universe-plugin/README.md)はworkspace catalogの外にあり、
+`marketsieve-extension-api>=0.7,<0.8`、entry point、公開conformance checkを示します。完全Gateは
+このwheelをbuildし、公開wheel一式と隔離環境へinstallします。
+
 ## Roadmap
 
-0.2 workbenchと0.3 grounded explanation Agentはdevelop上で完成しています。順序は[Roadmap](docs/roadmap.md)、制約は[正式設計](docs/design/README.md)を参照してください。
+今後の順序は[Roadmap](docs/roadmap.md)、制約は[正式設計](docs/design/README.md)を参照してください。
 
 ## ライセンス
 

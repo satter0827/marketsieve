@@ -16,6 +16,7 @@ from urllib.request import HTTPRedirectHandler, OpenerDirector, Request, build_o
 from zoneinfo import ZoneInfo
 
 from marketsieve.data.daily import Adjustment, DailyBar, Provenance
+from marketsieve.domain import Instrument
 from marketsieve_extension_api import (
     AvailabilityBasis,
     Consolidation,
@@ -32,10 +33,13 @@ from marketsieve_extension_api import (
     ImportedDailyBars,
     ImportedEvents,
     ImportedFinancials,
+    ImportedInstrumentUniverse,
     InstrumentProfile,
+    InstrumentUniverseFetcher,
     Revision,
     SourceConfiguration,
     SourceDiagnostic,
+    UniverseRequest,
 )
 
 API_BASE_URL = "https://api.jquants.com/v2"
@@ -90,7 +94,7 @@ class UrllibTransport:
             raise RuntimeError("J-Quants request failed before receiving a response") from error
 
 
-class JQuantsSource(DailyBarFetcher, FinancialFetcher, EventFetcher):
+class JQuantsSource(DailyBarFetcher, FinancialFetcher, EventFetcher, InstrumentUniverseFetcher):
     """Fetch exact TSE daily bars and matching instrument profile facts."""
 
     def __init__(
@@ -201,6 +205,64 @@ class JQuantsSource(DailyBarFetcher, FinancialFetcher, EventFetcher):
             bundle_hash=digest.hexdigest(),
             instrument_profile=profile,
             fetch_request=request,
+        )
+
+    def fetch_universe(self, request: UniverseRequest) -> ImportedInstrumentUniverse:
+        if request.market != "jp":
+            raise ValueError("J-Quants instrument universe supports only the jp market")
+        base_url, timeout = self._validated_settings(request.settings)
+        try:
+            api_key = self._credential()
+        except ValueError as error:
+            raise RuntimeError(str(error)) from None
+        if api_key is None:
+            raise RuntimeError(f"missing credential; set {API_KEY_ENV}")
+        headers = {"Accept": "application/json"}
+        headers["x-api-key"] = api_key
+        rows, bodies = self._pages(f"{base_url}/equities/master", {}, headers, timeout)
+        instruments: list[Instrument] = []
+        skipped = 0
+        for row in rows:
+            code = str(row.get("Code", ""))
+            if len(code) != 5 or not code.isdigit() or not code.endswith("0"):
+                skipped += 1
+                continue
+            try:
+                instruments.append(
+                    Instrument.create(
+                        symbol=code[:-1],
+                        mic="XTKS",
+                        currency="JPY",
+                        exchange_timezone="Asia/Tokyo",
+                    )
+                )
+            except ValueError:
+                skipped += 1
+        ordered = tuple(sorted(instruments, key=lambda item: (item.mic, item.symbol)))
+        identities = tuple((item.mic, item.symbol) for item in ordered)
+        if len(identities) != len(set(identities)):
+            raise ValueError("J-Quants returned duplicate instrument identities")
+        if not ordered:
+            raise ValueError("J-Quants returned no supported listed instruments")
+        selected = ordered[: request.limit]
+        return ImportedInstrumentUniverse(
+            request=request,
+            source_name="jquants",
+            source_version=SOURCE_VERSION,
+            dataset="equities/master",
+            retrieved_at=self._retrieved_at(),
+            instruments=selected,
+            source_hash=self._response_hash(bodies),
+            provider_total=len(ordered),
+            truncated=len(ordered) > len(selected),
+            diagnostics=tuple(
+                message
+                for condition, message in (
+                    (skipped > 0, f"unsupported_rows_skipped:{skipped}"),
+                    (len(ordered) > len(selected), f"limit_reached:{request.limit}"),
+                )
+                if condition
+            ),
         )
 
     def fetch_financials(self, request: FactFetchRequest) -> ImportedFinancials:

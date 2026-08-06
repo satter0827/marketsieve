@@ -18,8 +18,8 @@ from scripts.runtime_wheelhouse import SUPPORTED_PYTHON_VERSIONS, download_comma
 
 
 def test_release_inputs_require_pep440_version_and_complete_commit() -> None:
-    validate_inputs("0.3.0", "a" * 40)
-    validate_source_release("0.3.0")
+    validate_inputs("0.7.0", "a" * 40)
+    validate_source_release("0.7.0")
 
     with pytest.raises(ValueError, match="version"):
         validate_inputs("v0.1", "a" * 40)
@@ -48,6 +48,40 @@ def test_release_artifacts_are_secret_scanned(
             str(paths[1]),
         )
     ]
+
+
+def test_pypi_export_contains_only_public_wheels_and_sdists(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    release = tmp_path / "release"
+    release.mkdir()
+    public_wheel = release / "marketsieve-0.7.0-py3-none-any.whl"
+    public_sdist = release / "marketsieve-0.7.0.tar.gz"
+    runtime_wheel = release / "tzdata-2026.1-py2.py3-none-any.whl"
+    for path in (public_wheel, public_sdist, runtime_wheel):
+        path.write_bytes(path.name.encode())
+    monkeypatch.setattr(release_gate, "verify", lambda *_: None)
+    monkeypatch.setattr(release_gate, "distributions", lambda _: ((public_wheel,), (public_sdist,)))
+
+    output = tmp_path / "pypi"
+    release_gate.export_pypi("0.7.0", "a" * 40, release, output)
+
+    assert {path.name for path in output.iterdir()} == {
+        public_wheel.name,
+        public_sdist.name,
+    }
+
+
+def test_pypi_export_refuses_a_nonempty_staging_directory(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(release_gate, "verify", lambda *_: None)
+    output = tmp_path / "pypi"
+    output.mkdir()
+    (output / "unexpected").touch()
+
+    with pytest.raises(RuntimeError, match="must be empty"):
+        release_gate.export_pypi("0.7.0", "a" * 40, tmp_path / "release", output)
 
 
 def test_runtime_wheelhouse_downloads_every_supported_python_version(tmp_path: Path) -> None:
@@ -148,6 +182,18 @@ def test_review_changes_normalize_renames_as_delete_and_add(
     ]
 
 
+def test_review_capture_replaces_non_utf8_diff_bytes(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_run(command: tuple[str, ...], **options: Any) -> subprocess.CompletedProcess[str]:
+        assert command == ("git", "diff")
+        assert options["text"] is True
+        assert options["errors"] == "replace"
+        return subprocess.CompletedProcess(command, 0, stdout="safe�\n", stderr="")
+
+    monkeypatch.setattr("scripts.review_gate.subprocess.run", fake_run)
+
+    assert review_gate.capture("git", "diff") == "safe�"
+
+
 def test_review_patch_redacts_removed_credentials(tmp_path: Path) -> None:
     value = "sk-" + "A" * 24
     patch = tmp_path / "changes.patch"
@@ -215,11 +261,11 @@ def create_review_bundle(tmp_path: Path) -> Path:
             "doctor": {},
             "module_doctor": {},
             "capabilities": {},
-            "report": {
+            "analysis": {
                 "exit_code": 0,
                 "schema_valid": True,
                 "reproducible": True,
-                "report_id": "a" * 64,
+                "analysis_id": "a" * 64,
                 "section_statuses": {
                     "price": "available",
                     "technical": "partial",

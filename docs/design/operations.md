@@ -5,7 +5,11 @@
 MarketSieve currently supports local development, public distribution builds, offline analysis,
 immutable CSV snapshots, explicit J-Quants price, financial-summary, dividend, and earnings
 acquisition, and explicit Alpha Vantage price, profile, financial-statement, earnings, dividend,
-and split acquisition on Python 3.12 through 3.14. Python 3.13 is the primary development version.
+and split acquisition. It also builds and discovers independently installable FRED economic-series
+plus SEC and EDINET filing adapters on Python 3.12 through 3.14. Python 3.13 is the primary
+development version. The `daily jp` and `daily us` routines explicitly acquire configured price
+history, official financial facts, and corporate events, evaluate the latest local portfolio, and
+persist an immutable Close Brief.
 
 ```shell
 make sync
@@ -60,8 +64,63 @@ Generated command output is ephemeral and is not committed as a report or fixtur
 terminals receive Rich output, while redirection receives ANSI-free text. JSON output is selected
 explicitly for machine consumers.
 
+The decision-report adapter stores canonical JSON below `.marketsieve/reports/objects`, generated
+Markdown below `.marketsieve/reports/rendered`, and atomic per-session latest references below
+`.marketsieve/reports/refs`. An all-indeterminate report is retained for diagnosis but never
+replaces a usable latest reference. Daily routines use this store directly.
+
+Daily source selection is explicit and non-secret:
+
+```toml
+[routines.jp]
+source_profile = "japan"
+lookback_days = 400
+financial_lookback_days = 1500
+
+[routines.us]
+source_profile = "united-states"
+lookback_days = 400
+financial_lookback_days = 1500
+
+[routines.weekly]
+max_age_days = 7
+```
+
+`lookback_days` accepts 60 through 2,000 calendar days and defaults to 400. The routine uses the
+selected source profile for every instrument in that market and does not fall back to another
+provider. `financial_lookback_days` accepts 365 through 4,000 calendar days and defaults to 1,500.
+The routine also fetches events from 30 days before through 30 days after the market-local analysis
+date. Facts and events unavailable at `--as-of` are excluded even when the snapshot was retrieved
+later. Financial and event failures remain explicit optional-evidence diagnostics; price failure
+makes the instrument indeterminate. `--as-of` accepts an explicit offset-aware timestamp for
+reproducible operation; without it, the CLI uses the invocation time.
+
+`marketsieve weekly` is offline. It combines only the current `jp-latest` and `us-latest` reports
+when neither is future-dated or older than the configured limit. It never refreshes data or
+recalculates daily decisions. A missing or stale side returns the exact daily command needed before
+the weekend briefing can be created.
+
 Failures identify whether input validation, analysis prerequisites, or an internal contract caused
 the operation to stop. They do not expose environment secrets or silently switch data sources.
+
+Strategy Lab specifications identify immutable local daily-bar snapshots directly:
+
+```toml
+[experiment]
+start = "2025-01-01"
+end = "2025-12-31"
+
+[experiment.datasets]
+"XTKS:7203" = "<snapshot_sha256>"
+```
+
+`marketsieve experiment run strategy.toml` performs no acquisition. Runs are stored below
+`.marketsieve/experiments/objects`. Execution costs are optional, but commission, tax, and FX rates
+must be supplied together; no net-profit metric is calculated in the current implementation.
+`marketsieve experiment explain RUN_ID --provider PROVIDER` is the only Strategy Lab command that
+may contact a model. It stores the exact credential-free prompt, selected provider and model
+settings, raw model output, validation result, and deterministic fact rendering separately below
+`.marketsieve/experiments/explanations`. It never rewrites an experiment run.
 
 ## Unsupported operation
 
@@ -70,7 +129,7 @@ supported operations. When later milestones introduce them,
 their configuration, recovery, observability, and secret-handling procedures must be added here in
 the same change.
 
-## Approved 0.2 operation
+## Data workbench operation
 
 Shareable, non-secret source profiles and analysis settings live in `marketsieve.toml`. Generated
 snapshots, references, logs, caches, and artifacts live below `.marketsieve`. A source profile names
@@ -128,25 +187,56 @@ premium, and daily adjusted as premium. The adapter records the configured plan 
 probing or downgrading it. Raw responses are hashed but not persisted. Provider documentation and
 terms must be rechecked before a live release test or any change to raw-storage policy.
 
+FRED uses only `https://api.stlouisfed.org/fred/series/observations` and reads `FRED_API_KEY` from
+the invoking environment. The official contract reviewed on 2026-08-06 requires a 32-character
+lowercase alphanumeric API key, supports explicit real-time and observation bounds, permits up to
+100,000 observations per page, and reports throttling with HTTP 429. The adapter sends one exact
+historical knowledge date as both real-time bounds and uses `output_type=1`, `units=lin`, and
+ascending observation order. It neither retries rate limits nor stores raw responses. The
+[official endpoint contract](https://fred.stlouisfed.org/docs/api/fred/series_observations.html)
+is rechecked before a release or request-policy change.
+
+SEC uses only `https://data.sec.gov/submissions` and
+`https://data.sec.gov/api/xbrl/companyfacts`. It requires no API key. The profile declares a
+ten-digit CIK, while `SEC_USER_AGENT` supplies the organization and contact email required by SEC
+fair-access policy. The adapter stays below the published maximum of ten requests per second by
+making sequential bounded requests and leaves retry scheduling to the application. Official API
+and fair-access documentation were reviewed on 2026-08-06 and are rechecked before a release or
+request-policy change. See the
+[official EDGAR data API](https://www.sec.gov/search-filings/edgar-application-programming-interfaces)
+and the
+[fair-access guidance](https://www.sec.gov/search-filings/edgar-search-assistance/accessing-edgar-data).
+
+EDINET uses only `https://api.edinet-fsa.go.jp/api/v2/documents.json` and
+`https://api.edinet-fsa.go.jp/api/v2/documents/{docID}`. It reads `EDINET_API_KEY` from the invoking
+environment and sends it only as `Subscription-Key`. Historical list requests are sequential and
+bounded to 31 dates and 100 selected documents. The adapter uses official type 5 ZIP files, which
+contain XBRL-derived UTF-16 tab-separated values, and does not retain the archive. The official
+[EDINET API v2 specification](https://disclosure2dl.edinet-fsa.go.jp/guide/static/disclosure/download/ESE140206.pdf)
+and [operation guide](https://disclosure2dl.edinet-fsa.go.jp/guide/static/disclosure/WZEK0110.html)
+were reviewed on 2026-08-06 and are rechecked before a release or request-policy change.
+
 Content-addressed objects are written to a temporary sibling directory, verified, and atomically
 renamed. Raw responses are retained only when the adapter's approved terms policy permits local
 retention and its redaction step succeeds. Mutable references can be rebuilt from verified object
 manifests.
 
-GitHub Release is the approved distribution channel. Release evidence contains every wheel and
-source distribution, a wheelhouse archive, constraints, a SHA-256 manifest, and compatibility
-results. The build-once job includes locked runtime wheels for Python 3.12, 3.13, and 3.14 on the
-release runner platform; every compatibility job verifies and installs that same checksummed
-artifact without regenerating dependencies. PyPI publication remains disabled, so installation uses an unpacked wheelhouse with
-`pip --no-index --find-links`.
+Release evidence contains every wheel and source distribution, a wheelhouse archive, constraints,
+a SHA-256 manifest, and compatibility results. The build-once job includes locked runtime wheels
+for Python 3.12, 3.13, and 3.14 on the release runner platform; every compatibility job verifies
+and installs that same checksummed artifact without regenerating dependencies. The approved
+publish workflow creates a draft GitHub Release, uploads catalog-owned distributions through PyPI
+Trusted Publishing, and publishes the GitHub Release only after PyPI succeeds. A failure leaves a
+recoverable draft instead of presenting a partially completed release as final.
 
-## Approved 0.3 operation
+## Model operation
 
-FakeListLLM remains the default model. LM Studio accepts loopback endpoints by default. A cloud
+The CLI has no default model. LM Studio accepts loopback endpoints by default. A cloud
 provider requires explicit provider configuration and `--allow-cloud` on every invocation. Dry-run
 shows the credential-free fact payload without contacting a model. Provider, model, prompt version,
-fact-catalog hash, selected fact identifiers, output status, and fallback reason are recorded; API
-keys and unrestricted prompts or responses are not written to logs.
+fact-catalog hash, selected fact identifiers, output status, and fallback reason are recorded in a
+separate content-addressed explanation artifact; API keys and unrestricted prompts are not written
+to logs or report objects.
 
 The implemented configuration contains only model destinations:
 
@@ -162,3 +252,30 @@ model = "explicit-cloud-model"
 Cloud credentials are read from `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, or `GOOGLE_API_KEY` only
 after a non-dry-run invocation selects that provider. `LMSTUDIO_API_TOKEN` is optional. Dry-run and
 doctor perform no model request and do not read a cloud credential.
+
+## Personal operation
+
+The normal schedule is one Japanese close report after Tokyo trading, one U.S. close report after
+New York trading, and one combined report on the weekend. MarketSieve provides one-shot commands;
+the user owns invocation timing. A market session records its explicit as-of instant and never
+assumes that a wall-clock time proves market closure.
+
+Shareable source and policy settings remain in `marketsieve.toml`. Normalized portfolio snapshots,
+reports, rendered Markdown, and mutable latest references remain below `.marketsieve` and are
+ignored by version control. Source brokerage files are read once and not copied into local state.
+Portfolio objects live below `.marketsieve/portfolio/objects`; `refs/latest.json` is replaced
+atomically. The object contains normalized holdings and watch items plus the source digest, but no
+source path, original bytes, account number, or customer name. It also retains the importer name,
+importer version, dataset identity, and diagnostics needed to reproduce provenance.
+
+Routine output is optimized for a short review. A successful report may state that no action is
+needed. Warnings identify a concrete missing, stale, incompatible, or failed input and name the
+next command when recovery is possible. General legal disclaimers do not replace data-quality
+information.
+
+FRED credentials enter through `FRED_API_KEY`. Rakuten import uses a local file and no credential.
+The importer accepts only the fixture-proven CP932 no-holdings `assetbalance(all)` form, rejects
+non-empty or structurally different detail sections, and records the input digest without retaining
+the source path or contents. The committed fixture contains structural labels and zero values only.
+Live portfolio data and generated reports never enter tests, evidence bundles, distributions, or
+logs.

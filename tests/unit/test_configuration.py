@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from marketsieve_cli.adapters.config import Configuration
+from marketsieve_cli.adapters.config import Configuration, ScreeningProfile
 
 
 def test_explicit_configuration_resolves_one_exact_profile(tmp_path: Path) -> None:
@@ -97,6 +97,100 @@ def test_agent_provider_rejects_secret_or_unknown_configuration(tmp_path: Path) 
 
     with pytest.raises(ValueError, match="unsupported settings"):
         Configuration(path).agent_provider("openai")
+
+
+def test_daily_routine_configuration_is_explicit_and_bounded(tmp_path: Path) -> None:
+    path = tmp_path / "routine.toml"
+    path.write_text(
+        '[routines.jp]\nsource_profile = "japan"\nlookback_days = 500\n'
+        '[routines.us]\nsource_profile = "united-states"\n',
+        encoding="utf-8",
+    )
+    configuration = Configuration(path)
+
+    assert configuration.daily_profile("jp") == ("japan", 500, 1500)
+    assert configuration.daily_profile("us") == ("united-states", 400, 1500)
+
+    invalid = tmp_path / "invalid-routine.toml"
+    invalid.write_text('[routines.jp]\nsource_profile = "japan"\nlookback_days = 59\n')
+    with pytest.raises(ValueError, match="60 through 2000"):
+        Configuration(invalid).daily_profile("jp")
+
+    invalid.write_text('[routines.jp]\nsource_profile = "japan"\nfinancial_lookback_days = 364\n')
+    with pytest.raises(ValueError, match="365 through 4000"):
+        Configuration(invalid).daily_profile("jp")
+
+
+def test_daily_routine_configuration_never_guesses_a_profile() -> None:
+    with pytest.raises(LookupError, match="not configured"):
+        Configuration(None).daily_profile("jp")
+
+
+def test_weekly_routine_age_has_a_low_burden_default_and_bounds(tmp_path: Path) -> None:
+    assert Configuration(None).weekly_max_age_days() == 7
+
+    path = tmp_path / "weekly.toml"
+    path.write_text("[routines.weekly]\nmax_age_days = 5\n", encoding="utf-8")
+    assert Configuration(path).weekly_max_age_days() == 5
+
+    path.write_text("[routines.weekly]\nmax_age_days = 15\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="1 through 14"):
+        Configuration(path).weekly_max_age_days()
+
+
+def test_screening_configuration_is_explicit_and_bounded(tmp_path: Path) -> None:
+    path = tmp_path / "screening.toml"
+    path.write_text(
+        "[source_profiles.offline-us]\n"
+        'currency = "USD"\n'
+        'timezone = "America/New_York"\n'
+        "[source_profiles.offline-us.instrument_universe]\n"
+        'plugin = "csv"\n'
+        'operation = "import"\n'
+        "[source_profiles.offline-us.instrument_universe.settings]\n"
+        'path = "universe.csv"\n'
+        "[screening.us]\n"
+        'source_profile = "offline-us"\n'
+        "acquisition_limit = 80\n"
+        "display_limit = 10\n",
+        encoding="utf-8",
+    )
+    configuration = Configuration(path)
+
+    profile = configuration.source_profile("offline-us")
+    assert profile.binding("instrument_universe").operation == "import"
+    assert configuration.screening_profile("us") == ScreeningProfile("offline-us", 80, 100, 10)
+
+    path.write_text('[screening.us]\nsource_profile = "offline-us"\ndisplay_limit = 101\n')
+    with pytest.raises(ValueError, match="display_limit"):
+        Configuration(path).screening_profile("us")
+
+
+def test_universe_source_requires_explicit_operation(tmp_path: Path) -> None:
+    path = tmp_path / "source.toml"
+    path.write_text(
+        "[source_profiles.us]\n"
+        'currency = "USD"\n'
+        'timezone = "America/New_York"\n'
+        "[source_profiles.us.instrument_universe]\n"
+        'plugin = "sec"\n',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="operation is required"):
+        Configuration(path).source_profile("us")
+
+    path.write_text("routines = 1\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="routines configuration"):
+        Configuration(path).weekly_max_age_days()
+
+    path.write_text('routines.weekly = "invalid"\n', encoding="utf-8")
+    with pytest.raises(ValueError, match="TOML table"):
+        Configuration(path).weekly_max_age_days()
+
+    path.write_text('[routines.weekly]\nunknown = "invalid"\n', encoding="utf-8")
+    with pytest.raises(ValueError, match="unsupported settings"):
+        Configuration(path).weekly_max_age_days()
 
 
 def test_explicit_configuration_rejects_missing_invalid_and_secret_like_shapes(

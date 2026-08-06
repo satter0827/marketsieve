@@ -1,10 +1,15 @@
 """Grounded, explanation-only model pipeline."""
 
+from marketsieve_agent.experiment import (
+    ExperimentFact,
+    ExperimentFactCatalog,
+    build_experiment_prompt,
+    explain_experiment,
+)
 from marketsieve_agent.pipeline import (
     ExplanationResult,
     Fact,
     FactCatalog,
-    FakeModel,
     ModelPlan,
     explain,
 )
@@ -20,10 +25,11 @@ from marketsieve_agent.providers import (
 
 __all__ = [
     "AnthropicModel",
+    "ExperimentFact",
+    "ExperimentFactCatalog",
     "ExplanationResult",
     "Fact",
     "FactCatalog",
-    "FakeModel",
     "GoogleModel",
     "HttpResponse",
     "HttpTransport",
@@ -31,5 +37,7 @@ __all__ = [
     "ModelPlan",
     "OpenAIModel",
     "UrlLibTransport",
+    "build_experiment_prompt",
     "explain",
+    "explain_experiment",
 ]

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 from marketsieve_cli.application.equity import comparison_document, financial_section
 
 
@@ -16,6 +18,10 @@ def financial_fact(concept: str, value: str, start: str, end: str) -> dict[str, 
         "currency": "JPY",
         "scale": 1,
         "value": value,
+        "available_at": datetime(2026, 7, 31, tzinfo=UTC).isoformat(),
+        "published_at": datetime(2026, 7, 31, tzinfo=UTC).isoformat(),
+        "filing_id": f"{end}:{concept}",
+        "provenance": {"source": "fixture"},
     }
 
 
@@ -53,7 +59,33 @@ def test_financial_ratios_require_compatible_periods_and_keep_missing_reasons() 
     assert derived["revenue_growth"]["value"] == "0.2"
     assert derived["operating_margin"]["value"] == "0.2"
     assert derived["debt_to_equity"]["value"] == "0.25"
+    assert section["values"]["history"][0]["fiscal_period_end"] == "2026-03-31"
     assert section["status"] == "available"
+
+
+def test_financial_section_excludes_facts_after_explicit_knowledge_time() -> None:
+    known = financial_fact("revenue", "100", "2025-04-01", "2026-03-31")
+    future = {
+        **financial_fact("eps", "5", "2025-04-01", "2026-03-31"),
+        "available_at": datetime(2026, 8, 2, tzinfo=UTC).isoformat(),
+    }
+
+    section = financial_section(
+        {
+            "status": "available",
+            "as_of": datetime(2026, 8, 2, tzinfo=UTC).isoformat(),
+            "completeness": "1",
+            "values": {"facts": [known, future]},
+            "warnings": [],
+            "missing_reasons": [],
+            "provenance": [],
+            "evidence_id": "a" * 64,
+        },
+        knowledge_at=datetime(2026, 8, 1, tzinfo=UTC),
+    )
+
+    assert [fact["concept"] for fact in section["values"]["facts"]] == ["revenue"]
+    assert "eps" not in section["values"]["history"][0]["values"]
 
 
 def test_comparison_marks_currency_and_period_mismatches_without_ranking() -> None:
