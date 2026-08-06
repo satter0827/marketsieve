@@ -1,103 +1,47 @@
 # Quality
 
-Quality evidence is part of each behavior change. Planned checks do not count as evidence until the
-corresponding implementation and tests exist.
-
 ## Domain acceptance
 
-The Offline Analysis Preview tests:
-
-- ambiguous instruments, invalid market identifiers, and naive timestamps;
-- OHLC and volume invariants, date ordering, duplicates, and requested ranges;
-- raw versus adjusted semantics, completeness, and provenance;
-- deterministic Japanese and U.S. synthetic fixtures;
-- all seven indicator definitions independent of ambient decimal precision with exact warm-up
-  boundaries;
-- explicit insufficient history and the absence of future-information leakage across UTC offsets
-  and daylight-saving folds;
-- stable evidence and results for identical inputs;
-- stable decision-report JSON and Markdown for identical inputs;
-- canonical report reconstruction, tamper detection, and all-indeterminate latest protection;
-- FRED pagination, missing observations, revision bounds, rate limits, and injected transport;
-- SEC filing-history pages, amendments, publication times, XBRL duplicates, fair-access failures,
-  and injected transport;
-- EDINET daily lists, parent-document corrections, XBRL-derived TSV scope, ZIP safety, credentials,
-  and injected transport;
-- the source contracts against synthetic transports;
-- stable snapshot, section, comparison, report, and evidence identities for identical inputs;
-- Japanese and English Rich, text, and schema-valid JSON projections;
-- capability metadata against the actual command and option definitions;
-- user output, errors, and opt-in structured logs on their defined streams.
-
-Tests cover unit behavior, application integration, CLI execution, and structural boundaries. No
-test depends on network access, provider credentials, local portfolio data, or wall-clock timing.
-
-The CSV snapshot vertical slice additionally tests strict manifest metadata, publication and
-retrieval availability, path containment, deterministic object identity, idempotent import,
-normalized-content tamper detection, interrupted-write exclusion, explicit plugin metadata, and
-the offline import-to-inspect CLI path.
-
-Indicator acceptance uses fixed reference vectors for all seven definitions, exact warm-up
-boundaries, invalid parameter checks, stable evidence, canonical decimals, and an ambient Decimal
-context changed to two digits. CLI tests validate schema-conforming analysis from a stored CSV
-snapshot and explicit technical-section incompleteness.
+Reference tests cover Japanese and U.S. exchange identity, knowledge-time filtering, deterministic
+indicators, financial-history compatibility, held and unheld decision branches, candidate ordering,
+and exact previous-report comparison. Decimal behavior is independent from ambient context.
 
 ## Repository acceptance
 
-The SDK must not import the application, configuration, logging, network, database, delivery, or
-LLM infrastructure. Public artifacts must contain only allowlisted SDK files and required package
-metadata. Temporary notes, tests, caches, local configuration, the application, and generated
-reports remain excluded.
+The public SDK has no dependency on CLI, configuration, logging, network, persistence, broker, or
+external analysis infrastructure. Import Linter, AST boundary tests, explicit package manifests,
+and isolated wheel installation enforce that boundary. Every public distribution shares one minor
+release series.
 
-Documentation structure tests verify the formal-design index, local links, required design files,
-temporary-note naming, and the absence of duplicate legacy authorities.
+## Portfolio and watchlist acceptance
 
-Repository tests also verify rename-normalized evidence paths, VS Code interpreter and development
-dependency contracts, the ordered first-use and daily-analysis launch configurations and Tasks,
-exact Makefile delegation, the complete prompt-based CLI debug path, Ruleset drift detection, and
-timezone availability when the operating system has no timezone database.
+Tests cover canonical holding import, anonymous real-form Rakuten empty import, invalid encoding,
+contradictory balances, unsupported non-empty details, unknown sections, source-byte non-retention,
+atomic storage, tamper detection, and schema validation.
 
-## Evidence gates
+Watchlist tests cover supported MIC metadata, add, remove, no-op duplicate add, provenance
+enrichment, immutable history, dangling-reference rejection, tamper rejection, and
+holding-over-watchlist overlap resolution. Empty
+portfolio and watchlist readiness is successful.
 
-The Develop Gate runs formatting, lint, strict typing, import contracts, structure and behavior
-tests, branch-enabled coverage, schema validation, CLI smoke tests, package checks, public-artifact
-inspection, isolated installation, and whitespace validation once. Branch-enabled coverage must be
-at least 90 percent. Its machine-readable evidence is retained under
-`.marketsieve/artifacts/checks/<commit>/`. VS Code coverage is interactive local feedback and does
-not apply the repository-wide threshold or replace Develop Gate evidence.
+## Screening acceptance
 
-The Evidence Gate reuses that evidence. It creates `review.json` as the authoritative report,
-`summary.md` as its deterministic human projection, a text-only patch, supporting evidence, JSON
-Lines logs, and checksums under `.marketsieve/artifacts/review/<commit>/`. Schema, commit identity,
-references, summary projection, and checksums must validate before merge. This bundle is review
-input; it does not claim that semantic code review occurred.
+Tests cover explicit update, offline run, bounded refresh, configuration limits, partial price
+failure, rate limits, fetch truncation, missing bars, held-instrument exclusion, deterministic
+candidate order, and Alpha Vantage plan/outputsize/lookback validation before acquisition.
+Network-client contract tests inject transports and require no live account.
 
-After semantic review succeeds, `make review-attest REVIEWED_SHA=<full-commit-sha>` validates the
-matching local evidence and clean HEAD before publishing the `Pre-PR Review` commit status. The
-develop ruleset requires that status for the current head; a later commit cannot inherit it.
+## Analysis workspace acceptance
 
-The Release Gate builds every distribution in the root public-package catalog and the locked
-multi-Python runtime
-wheelhouse once, then verifies and installs the same checksummed artifact set on every supported
-Python version. Compatibility jobs do not compare against runner-local regenerated dependencies.
-It admits only a same-repository
-`develop -> main` pull request. Tags, GitHub Releases, and package publication remain separate
-human-authorized operations.
+Tests build context from immutable portfolio, watchlist, decision, and screening inputs. They verify
+stable context ID and bytes, exact previous deltas, evidence identifiers, missing-input diagnostics,
+holding and candidate separation, and matching Markdown.
 
-The manual publish workflow accepts only an existing stable tag and a successful `main` push CI run
-for the same commit. It downloads that run's retained release artifact, repeats the checksum,
-content, secret, metadata, and isolated-install verification, and stages only catalog-owned wheels
-and source distributions for PyPI. It never rebuilds a distribution.
-
-Repository-owned machine contracts use JSON Schema Draft 2020-12. Each schema has a stable
-identifier and a SemVer payload version: breaking changes increment major, compatible field
-additions increment minor, and clarifications that preserve constraints increment patch. Consumers
-reject unknown major versions. Established formats such as JUnit XML and coverage JSON remain in
-their native form rather than being wrapped in repository-specific schemas.
+Privacy tests reject quantities, acquisition prices, account types, CSV paths, personal identifiers,
+credentials, external research, and conversations in `context.json`. Existing reports and local
+legacy artifacts are neither modified nor automatically deleted.
 
 ## Required gate
-
-Every handoff runs the focused checks used during development and then:
 
 ```shell
 make format-check
@@ -105,68 +49,12 @@ make lint
 make typecheck
 make test
 make check
-make evidence
 ```
 
-A failure is corrected and the affected checks are rerun. Environment or tool failures are reported
-as such and are not presented as successful test evidence.
+Before publication, maintainers also run `make evidence`, review the final diff against
+`origin/develop`, and attest the frozen commit. Distribution checks build every catalog package and
+install each wheel independently on supported Python versions.
 
-## Workbench and Agent acceptance
-
-Manual AI exchange acceptance covers deterministic request IDs and bytes, private-field omission,
-raw JSON and single-code-block input, strict request and fact validation, bounded response size,
-trial numbering, separate immutable artifacts, and deterministic rendering. Package checks install
-`marketsieve-ai` independently and prove it has no CLI, persistence, browser, HTTP, configuration,
-or provider dependency. CLI and repository tests keep Make targets, VS Code Tasks, capabilities,
-and documented daily operations aligned. A release PR includes a synthetic request so a reviewer
-can complete one Temporary Chat upload, save, import, and show cycle without committing the chat.
-
-The gate includes deterministic reference vectors for every indicator, ambient-decimal-context
-tests, snapshot identity and atomicity tests, publication-versus-retrieval availability tests, and
-contract suites shared by CSV, J-Quants, Alpha Vantage, FRED, SEC, and EDINET. Network clients are
-injected.
-Financial-history tests cover knowledge-time exclusion, later restatement selection, compatible
-period matching, conflicting observations, stable identities, derived amounts and ratios, and
-explicit missing results. CLI tests confirm the typed calculation projects into the financial
-section without transferring calculation ownership to the application.
-Default tests use synthetic responses and never require accounts, credentials, wall-clock timing,
-or network access. Live provider checks use an explicit marker and manual credentials.
-
-CLI acceptance covers Japanese and English Rich and text projections, versioned JSON, partial
-sections, incompatible comparison warnings, installed plugin metadata without plugin import, and
-execution of only the selected source profile. Package acceptance builds and installs the SDK,
-extension API, CLI, and each source independently before verifying their wheelhouse combinations on
-Python 3.12 through 3.14.
-
-Agent acceptance uses test-local models for ordinary tests and mocked transports for each real provider.
-It covers invalid schemas, unknown facts, numeric additions, recommendation language, timeouts,
-cloud consent, loopback restrictions, and deterministic fallback. Fake tests prove orchestration
-and safety behavior, not provider model behavior.
-
-CLI acceptance additionally verifies that provider selection is mandatory, cloud dry-run is
-credential-free, local doctor is configuration-only, and cloud execution is refused without consent.
-
-Secret acceptance scans tracked files, the reviewed diff, generated evidence, distributions, and
-release assets without printing matched values. CI also scans repository history. Tests ensure
-credentials are removed from URLs, headers, exceptions, logs, subprocess environments, and stored
-request metadata.
-
-## Personal Close Brief acceptance
-
-Personal Close Brief acceptance adds:
-
-- complete reference cases for every held and unheld decision branch;
-- stable policy and decision identities for identical inputs;
-- explicit confidence reduction and indeterminate results for missing evidence;
-- partial-instrument success and all-instrument failure behavior in daily orchestration;
-- Japanese, U.S., daylight-saving, non-trading-day, stale-data, and future-data cases;
-- portfolio normalization without retained source files or personal identifiers;
-- conclusion-first Japanese and English Rich, text, quiet, JSON, and Markdown projections;
-- proof that model success or failure cannot alter a static report;
-- wheel-installed external adapter discovery and public conformance tests.
-
-The implemented canonical portfolio slice tests strict headers, row width, numeric and timezone
-validation, duplicate instruments, deterministic ordering and identity, source-byte non-retention,
-atomic latest replacement, tamper detection, symlink rejection, JSON Schema, and CLI round trips.
-
-Test doubles prove bounded agent behavior without entering production provider selection.
+CLI, Makefile, VS Code Tasks, Run and Debug configurations, capabilities metadata, schemas, and user
+documentation form one tested operational contract. VS Code JSON remains ASCII English so the
+shared entry point is stable across editor locales.

@@ -127,6 +127,7 @@ def test_fetches_bounded_us_exchange_universe_with_class_share_symbol() -> None:
     document = {
         "fields": ["cik", "name", "ticker", "exchange"],
         "data": [
+            [0, "American", "AAA", "NYSE American"],
             [1, "Berkshire", "BRK.B", "NYSE"],
             [2, "Microsoft", "MSFT", "Nasdaq"],
             [3, "Unsupported", "OTC", "OTC"],
@@ -134,13 +135,17 @@ def test_fetches_bounded_us_exchange_universe_with_class_share_symbol() -> None:
     }
     provider = source([response(document)])
 
-    imported = provider.fetch_universe(UniverseRequest("sec-us", "us", 1, {}))
+    imported = provider.fetch_universe(UniverseRequest("sec-us", "us", 1, {}, ("XNAS", "XNYS")))
 
     assert isinstance(provider, InstrumentUniverseFetcher)
     assert [(item.mic, item.symbol) for item in imported.instruments] == [("XNAS", "MSFT")]
     assert imported.provider_total == 2
     assert imported.truncated is True
-    assert imported.diagnostics == ("unsupported_rows_skipped:1", "limit_reached:1")
+    assert imported.diagnostics == (
+        "unsupported_rows_skipped:1",
+        "ineligible_mics_excluded:1",
+        "limit_reached:1",
+    )
 
 
 def source(

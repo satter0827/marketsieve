@@ -19,6 +19,7 @@ class UniverseRequest:
     market: str
     limit: int
     settings: Mapping[str, str]
+    eligible_mics: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.source_profile:
@@ -27,6 +28,15 @@ class UniverseRequest:
             raise ValueError("universe market must be jp or us")
         if not isinstance(self.limit, int) or isinstance(self.limit, bool) or self.limit <= 0:
             raise ValueError("universe limit must be a positive integer")
+        if (
+            self.eligible_mics != tuple(sorted(self.eligible_mics))
+            or len(self.eligible_mics) != len(set(self.eligible_mics))
+            or any(
+                len(item) != 4 or not item.isascii() or not item.isalnum() or item != item.upper()
+                for item in self.eligible_mics
+            )
+        ):
+            raise ValueError("universe eligible MICs must be unique, uppercase, and sorted")
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,6 +70,10 @@ class ImportedInstrumentUniverse:
             raise ValueError("imported universe instruments must be unique")
         if len(self.instruments) > self.request.limit:
             raise ValueError("imported universe exceeds the requested limit")
+        if self.request.eligible_mics and any(
+            item.mic not in self.request.eligible_mics for item in self.instruments
+        ):
+            raise ValueError("imported universe contains an ineligible MIC")
         if self.provider_total < len(self.instruments):
             raise ValueError("provider total must cover every imported instrument")
         if self.truncated != (self.provider_total > len(self.instruments)):

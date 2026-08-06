@@ -268,6 +268,7 @@ class ScreenPolicy(Protocol):
         decisions: tuple[InstrumentDecision, ...],
         *,
         as_of: datetime,
+        eligible_instruments: tuple[Instrument, ...] | None = None,
         processing_limit: int = 100,
         display_limit: int = 20,
         diagnostics: tuple[str, ...] = (),
@@ -287,6 +288,7 @@ class BalancedCandidateScreen:
         decisions: tuple[InstrumentDecision, ...],
         *,
         as_of: datetime,
+        eligible_instruments: tuple[Instrument, ...] | None = None,
         processing_limit: int = 100,
         display_limit: int = 20,
         diagnostics: tuple[str, ...] = (),
@@ -295,7 +297,15 @@ class BalancedCandidateScreen:
             raise ValueError("screening limits must be positive")
         if as_of.tzinfo is None or as_of.utcoffset() is None:
             raise ValueError("screening as_of must include a UTC offset")
-        allowed = {_instrument_identity(item) for item in universe.instruments[:processing_limit]}
+        selectable = universe.instruments if eligible_instruments is None else eligible_instruments
+        universe_identities = {_instrument_identity(item) for item in universe.instruments}
+        eligible_identities = tuple(_instrument_identity(item) for item in selectable)
+        if (
+            len(eligible_identities) != len(set(eligible_identities))
+            or not set(eligible_identities) <= universe_identities
+        ):
+            raise ValueError("eligible instruments must be a unique subset of the universe")
+        allowed = set(eligible_identities[:processing_limit])
         identities = tuple(_instrument_identity(item.instrument) for item in decisions)
         if len(identities) != len(set(identities)):
             raise ValueError("screening decisions must have unique instruments")
@@ -314,7 +324,7 @@ class BalancedCandidateScreen:
             message
             for condition, message in (
                 (
-                    len(universe.instruments) > processing_limit,
+                    len(selectable) > processing_limit,
                     f"processing_limit_reached:{processing_limit}",
                 ),
                 (len(ordered) > display_limit, f"display_limit_reached:{display_limit}"),

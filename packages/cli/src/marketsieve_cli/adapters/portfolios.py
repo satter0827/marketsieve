@@ -14,13 +14,12 @@ from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from marketsieve import Holding, PortfolioSnapshot, WatchItem
+from marketsieve import Holding, PortfolioSnapshot
 from marketsieve.domain import Instrument, InstrumentType
 from marketsieve_extension_api import ImportedPortfolioSnapshot
 
-PORTFOLIO_SCHEMA = "portfolio-result/v2"
+PORTFOLIO_SCHEMA = "portfolio-result/v3"
 CSV_HEADERS = (
-    "kind",
     "mic",
     "symbol",
     "currency",
@@ -77,9 +76,6 @@ def portfolio_document(
             }
             for item in snapshot.holdings
         ],
-        "watch_items": [
-            {"instrument": _instrument_document(item.instrument)} for item in snapshot.watch_items
-        ],
     }
     return {"object_id": object_id, **document} if object_id is not None else document
 
@@ -99,38 +95,25 @@ def import_canonical_csv(payload: bytes, *, as_of: datetime) -> ImportedPortfoli
     if reader.fieldnames is None or tuple(reader.fieldnames) != CSV_HEADERS:
         raise ValueError("portfolio CSV headers do not match the canonical format")
     holdings: list[Holding] = []
-    watch_items: list[WatchItem] = []
     try:
         rows = list(reader)
     except csv.Error as error:
         raise ValueError("portfolio CSV is malformed") from error
     if not rows:
-        raise ValueError("portfolio CSV must contain at least one row")
+        raise ValueError("canonical portfolio CSV must contain at least one holding")
     for row in rows:
         if None in row or any(value is None for value in row.values()):
             raise ValueError("portfolio CSV row width is invalid")
         instrument = _instrument(row)
-        kind = row["kind"].strip()
-        if kind == "holding":
-            try:
-                quantity = Decimal(row["quantity"].strip())
-                price = Decimal(row["average_acquisition_price"].strip())
-            except InvalidOperation as error:
-                raise ValueError("portfolio holding amount is invalid") from error
-            holdings.append(Holding(instrument, quantity, price, row["account_type"].strip()))
-        elif kind == "watch":
-            if any(
-                row[name].strip()
-                for name in ("quantity", "average_acquisition_price", "account_type")
-            ):
-                raise ValueError("portfolio watch rows must leave holding fields empty")
-            watch_items.append(WatchItem(instrument))
-        else:
-            raise ValueError("portfolio kind must be holding or watch")
+        try:
+            quantity = Decimal(row["quantity"].strip())
+            price = Decimal(row["average_acquisition_price"].strip())
+        except InvalidOperation as error:
+            raise ValueError("portfolio holding amount is invalid") from error
+        holdings.append(Holding(instrument, quantity, price, row["account_type"].strip()))
     holdings.sort(key=lambda item: (item.instrument.mic, item.instrument.symbol))
-    watch_items.sort(key=lambda item: (item.instrument.mic, item.instrument.symbol))
     return ImportedPortfolioSnapshot(
-        snapshot=PortfolioSnapshot(as_of, tuple(holdings), tuple(watch_items), "canonical_csv"),
+        snapshot=PortfolioSnapshot(as_of, tuple(holdings), (), "canonical_csv"),
         source_name="canonical",
         source_version="1.0.0",
         dataset="canonical-portfolio/v1",
@@ -242,7 +225,6 @@ def _parse_imported(value: dict[str, Any]) -> ImportedPortfolioSnapshot:
         "source_hash",
         "diagnostics",
         "holdings",
-        "watch_items",
     }:
         raise ValueError("portfolio schema is unsupported")
     holdings = tuple(
@@ -254,11 +236,8 @@ def _parse_imported(value: dict[str, Any]) -> ImportedPortfolioSnapshot:
         )
         for item in value["holdings"]
     )
-    watch_items = tuple(
-        WatchItem(_parse_instrument(item["instrument"])) for item in value["watch_items"]
-    )
     snapshot = PortfolioSnapshot(
-        datetime.fromisoformat(value["as_of"]), holdings, watch_items, value["source"]
+        datetime.fromisoformat(value["as_of"]), holdings, (), value["source"]
     )
     return ImportedPortfolioSnapshot(
         snapshot=snapshot,

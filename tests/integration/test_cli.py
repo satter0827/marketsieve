@@ -24,7 +24,6 @@ from marketsieve import (
 )
 from marketsieve.domain import Instrument
 from marketsieve_cli.adapters.reports import ReportStore, create_report
-from marketsieve_cli.application.agent import AgentService
 from marketsieve_cli.application.diagnostics import DiagnosticCheck, DiagnosticsService
 from marketsieve_cli.interfaces.cli import entrypoint, main
 from marketsieve_extension_api import (
@@ -47,7 +46,7 @@ from marketsieve_source_jquants import JQuantsSource
 
 ROOT = Path(__file__).parents[2]
 RAKUTEN_EMPTY_FIXTURE = ROOT / "tests/fixtures/rakuten/assetbalance-empty.csv"
-SCHEMAS = Path("schemas")
+SCHEMAS = ROOT / "schemas"
 
 
 def write_csv_bundle(path: Path) -> Path:
@@ -184,11 +183,10 @@ def test_capabilities_match_click_commands_and_validate_schema() -> None:
     assert result.exit_code == 0
     document = json.loads(result.stdout)
     validate("capabilities-result", document, major=2)
-    assert [item["name"] for item in document["commands"]] == [
-        "agent doctor",
-        "ai import",
-        "ai prepare report",
-        "ai show",
+    command_names = [item["name"] for item in document["commands"]]
+    assert command_names == [
+        "analysis build",
+        "analysis show",
         "analyze atr",
         "analyze ema",
         "analyze macd",
@@ -201,16 +199,15 @@ def test_capabilities_match_click_commands_and_validate_schema() -> None:
         "daily",
         "doctor",
         "experiment compare",
-        "experiment explain",
         "experiment run",
         "experiment show",
         "inspect",
         "portfolio import",
         "portfolio show",
-        "report explain",
         "report export",
         "report list",
         "report show",
+        "screen refresh",
         "screen run",
         "screen show",
         "screen update",
@@ -221,38 +218,20 @@ def test_capabilities_match_click_commands_and_validate_schema() -> None:
         "source fetch",
         "source import",
         "source list",
+        "watchlist add",
+        "watchlist remove",
+        "watchlist show",
         "weekly",
     ]
-    report = next(item for item in document["commands"] if item["name"] == "report explain")
-    assert {option["name"] for option in report["options"]} == {
-        "provider",
-        "allow_cloud",
-        "allow_remote",
-        "dry_run",
-        "output_mode",
-    }
     assert {option["name"] for option in document["global_options"]} == {
         "log_file",
         "log_level",
         "config_path",
         "locale",
     }
-    assert report["effects"] == {
-        "network": True,
-        "optional_writes": ["explanation"],
-        "secrets": True,
-    }
-    ai_import = next(item for item in document["commands"] if item["name"] == "ai import")
-    assert {option["name"] for option in ai_import["options"]} == {
-        "model_label",
-        "controlled",
-        "output_mode",
-    }
-    assert ai_import["effects"] == {
-        "network": False,
-        "optional_writes": ["ai_response", "ai_validation", "ai_explanation"],
-        "secrets": False,
-    }
+    assert not {"agent doctor", "ai import", "report explain", "experiment explain"} & set(
+        command_names
+    )
 
 
 def test_experiment_commands_project_service_documents(
@@ -275,14 +254,6 @@ def test_experiment_commands_project_service_documents(
         "right_run_id": right,
         "metric_deltas": {},
     }
-    explanation_document: dict[str, object] = {
-        "schema": "experiment-explanation/v1",
-        "explanation_id": "d" * 64,
-        "status": "model",
-        "provider": "lmstudio",
-        "model": "local-model",
-        "validation": {"status": "accepted", "reason": None},
-    }
 
     class StubExperimentService:
         def run(self, spec: Path) -> dict[str, object]:
@@ -297,33 +268,16 @@ def test_experiment_commands_project_service_documents(
             assert (left_run_id, right_run_id) == (left, right)
             return comparison_document
 
-    class StubExperimentAgentService:
-        def explain(
-            self, run_id: str, provider: str, locale: str, **options: bool
-        ) -> dict[str, object]:
-            assert (run_id, provider, locale) == (left, "lmstudio", "ja")
-            assert options == {"allow_cloud": False, "allow_remote": False}
-            return explanation_document
-
     strategy = tmp_path / "strategy.toml"
     strategy.write_text("[experiment]\n", encoding="utf-8")
     cli_module = importlib.import_module("marketsieve_cli.interfaces.cli.main")
     monkeypatch.setattr(cli_module, "build_experiment_service", StubExperimentService)
-    monkeypatch.setattr(
-        cli_module,
-        "build_experiment_agent_service",
-        lambda config_path: StubExperimentAgentService(),
-    )
     runner = CliRunner()
 
     results = (
         runner.invoke(main, ["experiment", "run", str(strategy), "--output", "json"]),
         runner.invoke(main, ["experiment", "show", left, "--output", "json"]),
         runner.invoke(main, ["experiment", "compare", left, right, "--output", "json"]),
-        runner.invoke(
-            main,
-            ["experiment", "explain", left, "--provider", "lmstudio", "--output", "json"],
-        ),
     )
 
     assert all(result.exit_code == 0 for result in results), [
@@ -332,7 +286,6 @@ def test_experiment_commands_project_service_documents(
     assert json.loads(results[0].stdout) == run_document
     assert json.loads(results[1].stdout) == run_document
     assert json.loads(results[2].stdout) == comparison_document
-    assert json.loads(results[3].stdout) == explanation_document
 
 
 def test_screen_commands_project_explicit_update_and_offline_results(
@@ -406,28 +359,15 @@ def test_experiment_commands_report_service_failures_without_tracebacks(
         def compare(self, left_run_id: str, right_run_id: str) -> dict[str, object]:
             raise ValueError(f"incompatible runs: {left_run_id}, {right_run_id}")
 
-    class FailedExperimentAgentService:
-        def explain(self, *args: object, **kwargs: object) -> dict[str, object]:
-            raise LookupError("missing experiment")
-
     strategy = tmp_path / "strategy.toml"
     strategy.write_text("[experiment]\n", encoding="utf-8")
     cli_module = importlib.import_module("marketsieve_cli.interfaces.cli.main")
     monkeypatch.setattr(cli_module, "build_experiment_service", FailedExperimentService)
-    monkeypatch.setattr(
-        cli_module,
-        "build_experiment_agent_service",
-        lambda config_path: FailedExperimentAgentService(),
-    )
     digest = "a" * 64
     results = (
         CliRunner().invoke(main, ["experiment", "run", str(strategy), "--output", "json"]),
         CliRunner().invoke(main, ["experiment", "show", digest, "--output", "json"]),
         CliRunner().invoke(main, ["experiment", "compare", digest, digest, "--output", "json"]),
-        CliRunner().invoke(
-            main,
-            ["experiment", "explain", digest, "--provider", "lmstudio", "--output", "json"],
-        ),
     )
 
     assert all(result.exit_code == 1 for result in results)
@@ -435,7 +375,6 @@ def test_experiment_commands_report_service_failures_without_tracebacks(
         "experiment_run_failed",
         "experiment_show_failed",
         "experiment_compare_failed",
-        "experiment_agent_failed",
     ]
     assert all("Traceback" not in result.output for result in results)
 
@@ -445,9 +384,8 @@ def test_canonical_portfolio_import_and_show_are_offline_and_deterministic() -> 
     with runner.isolated_filesystem():
         source = Path("portfolio.csv")
         source.write_text(
-            "kind,mic,symbol,currency,timezone,quantity,average_acquisition_price,account_type\n"
-            "watch,XNAS,MSFT,USD,America/New_York,,,\n"
-            "holding,XTKS,7203,JPY,Asia/Tokyo,10,2500,NISA\n",
+            "mic,symbol,currency,timezone,quantity,average_acquisition_price,account_type\n"
+            "XTKS,7203,JPY,Asia/Tokyo,10,2500,NISA\n",
             encoding="utf-8",
         )
         imported = runner.invoke(
@@ -471,14 +409,72 @@ def test_canonical_portfolio_import_and_show_are_offline_and_deterministic() -> 
         shown_document = json.loads(shown.stdout)
         assert imported_document == shown_document
         assert imported_document["holdings"][0]["instrument"]["symbol"] == "7203"
-        assert imported_document["watch_items"][0]["instrument"]["symbol"] == "MSFT"
+        assert "watch_items" not in imported_document
         assert not any(
             path.read_bytes() == source.read_bytes()
             for path in Path(".marketsieve/portfolio").rglob("*")
             if path.is_file()
         )
-    validate("portfolio-result", imported_document, major=2)
-    validate("portfolio-result", shown_document, major=2)
+    validate("portfolio-result", imported_document, major=3)
+    validate("portfolio-result", shown_document, major=3)
+
+
+def test_watchlist_and_analysis_workspace_complete_an_offline_cli_flow() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        source = Path("portfolio.csv")
+        source.write_text(
+            "mic,symbol,currency,timezone,quantity,average_acquisition_price,account_type\n"
+            "XTKS,7203,JPY,Asia/Tokyo,10,2500,NISA\n",
+            encoding="utf-8",
+        )
+        imported = runner.invoke(
+            main,
+            [
+                "portfolio",
+                "import",
+                str(source),
+                "--broker",
+                "canonical",
+                "--as-of",
+                "2026-08-06T20:00:00+09:00",
+                "--output",
+                "json",
+            ],
+        )
+        added = runner.invoke(main, ["watchlist", "add", "XNAS:MSFT", "--output", "json"])
+        shown = runner.invoke(main, ["watchlist", "show", "--output", "json"])
+        built = runner.invoke(main, ["analysis", "build", "--output", "json"])
+        first_bytes = Path(".marketsieve/analysis/context.json").read_bytes()
+        rebuilt = runner.invoke(main, ["analysis", "build", "--output", "json"])
+        displayed = runner.invoke(main, ["analysis", "show", "--output", "json"])
+
+        assert all(
+            result.exit_code == 0 for result in (imported, added, shown, built, rebuilt, displayed)
+        )
+        assert first_bytes == Path(".marketsieve/analysis/context.json").read_bytes()
+        added_document = json.loads(added.stdout)
+        shown_document = json.loads(shown.stdout)
+        context = json.loads(built.stdout)
+        validate("watchlist-result", added_document)
+        validate("watchlist-result", shown_document)
+        validate("analysis-context", context)
+        assert context == json.loads(rebuilt.stdout) == json.loads(displayed.stdout)
+        assert context["watchlist"]["items"][0]["key"] == "XNAS:MSFT"
+        assert "quantity" not in first_bytes.decode("utf-8")
+
+
+def test_watchlist_show_exposes_dangling_latest_object() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        added = runner.invoke(main, ["watchlist", "add", "XNAS:MSFT", "--output", "json"])
+        document = json.loads(added.stdout)
+        Path(f".marketsieve/watchlists/objects/{document['watchlist_id']}.json").unlink()
+
+        shown = runner.invoke(main, ["watchlist", "show", "--output", "json"])
+
+    assert shown.exit_code == 1
+    assert "watchlist object does not exist" in json.loads(shown.stderr)["message"]
 
 
 def test_rakuten_empty_portfolio_import_is_offline_and_private() -> None:
@@ -502,7 +498,7 @@ def test_rakuten_empty_portfolio_import_is_offline_and_private() -> None:
         assert imported.exit_code == 0, imported.output
         document = json.loads(imported.stdout)
         assert document["holdings"] == []
-        assert document["watch_items"] == []
+        assert "watch_items" not in document
         assert document["source"] == "rakuten_assetbalance_empty"
         assert document["source_name"] == "rakuten"
         assert document["source_version"] == "0.8.0"
@@ -513,7 +509,7 @@ def test_rakuten_empty_portfolio_import_is_offline_and_private() -> None:
             for path in Path(".marketsieve/portfolio").rglob("*")
             if path.is_file()
         )
-    validate("portfolio-result", document, major=2)
+    validate("portfolio-result", document, major=3)
 
 
 @pytest.mark.parametrize(
@@ -669,109 +665,17 @@ def test_csv_import_snapshot_and_price_inspect_are_one_offline_path(tmp_path: Pa
     assert analysis["indicator"]["values"] == {"sma": "108.5"}
 
 
-def test_report_commands_and_explicit_agent_share_one_immutable_report(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_report_commands_preserve_one_immutable_report() -> None:
     runner = CliRunner()
 
-    class LocalModel:
-        provider = "lmstudio"
-        model = "configured-local-model"
-
-        def invoke(self, prompt: str) -> str:
-            assert '"quantity"' not in prompt
-            assert "2300" not in prompt
-            return json.dumps(
-                {
-                    "section_order": ["XTKS:7203"],
-                    "selected_facts": [
-                        {
-                            "fact_id": "decision.XTKS:7203.action",
-                            "emphasis": "context",
-                        }
-                    ],
-                    "connections": ["保存済みの判断根拠を整理します。"],
-                },
-                ensure_ascii=False,
-            )
-
-    class FailedModel:
-        provider = "lmstudio"
-        model = "configured-local-model"
-
-        def invoke(self, prompt: str) -> str:
-            del prompt
-            raise RuntimeError("provider detail must not escape")
-
     with runner.isolated_filesystem():
-        Path("marketsieve.toml").write_text(
-            "[agent.providers.openai]\n"
-            'model = "configured-cloud-model"\n'
-            "[agent.providers.lmstudio]\n"
-            'model = "configured-local-model"\n',
-            encoding="utf-8",
-        )
         report_id = write_decision_report(Path(".marketsieve/reports"))
         report_path = Path(f".marketsieve/reports/objects/{report_id}.json")
         original_report = report_path.read_bytes()
         listed = runner.invoke(main, ["report", "list", "--output", "json"])
         shown = runner.invoke(main, ["report", "show", "latest", "--output", "json"])
         exported = runner.invoke(main, ["report", "export", "latest"])
-        preview = runner.invoke(
-            main,
-            [
-                "report",
-                "explain",
-                report_id,
-                "--provider",
-                "openai",
-                "--dry-run",
-                "--output",
-                "json",
-            ],
-        )
-        local_doctor = runner.invoke(main, ["agent", "doctor", "lmstudio", "--output", "json"])
-        refused_cloud = runner.invoke(
-            main,
-            [
-                "report",
-                "explain",
-                report_id,
-                "--provider",
-                "openai",
-                "--output",
-                "json",
-            ],
-        )
-        monkeypatch.setattr(AgentService, "_model", lambda *args, **kwargs: LocalModel())
-        explained = runner.invoke(
-            main,
-            [
-                "report",
-                "explain",
-                "latest",
-                "--provider",
-                "lmstudio",
-                "--output",
-                "json",
-            ],
-        )
-        monkeypatch.setattr(AgentService, "_model", lambda *args, **kwargs: FailedModel())
-        fallback = runner.invoke(
-            main,
-            [
-                "report",
-                "explain",
-                report_id,
-                "--provider",
-                "lmstudio",
-                "--output",
-                "json",
-            ],
-        )
-
         assert report_path.read_bytes() == original_report
-        assert len(tuple(Path(".marketsieve/explanations/objects").glob("*.json"))) == 2
 
     assert listed.exit_code == 0, listed.output
     list_document = json.loads(listed.stdout)
@@ -783,77 +687,6 @@ def test_report_commands_and_explicit_agent_share_one_immutable_report(
     assert shown_document["report_id"] == report_id
     assert exported.exit_code == 0
     assert exported.stdout.startswith("# Close Brief\n")
-    assert preview.exit_code == 0, preview.output
-    preview_document = json.loads(preview.stdout)
-    validate("agent-result", preview_document)
-    assert preview_document["operation"] == "dry_run"
-    assert preview_document["report_id"] == report_id
-    assert preview_document["model"] == "configured-cloud-model"
-    assert "credential" not in preview_document["payload"].casefold()
-    assert local_doctor.exit_code == 0
-    validate("agent-result", json.loads(local_doctor.stdout))
-    assert refused_cloud.exit_code == 1
-    assert "cloud consent" in refused_cloud.stderr
-    assert explained.exit_code == 0, explained.output
-    explanation = json.loads(explained.stdout)
-    validate("agent-result", explanation)
-    assert explanation["provider"] == "lmstudio"
-    assert explanation["report_id"] == report_id
-    assert explanation["schema"] == "report-explanation/v1"
-    assert fallback.exit_code == 0, fallback.output
-    fallback_document = json.loads(fallback.stdout)
-    validate("agent-result", fallback_document)
-    assert fallback_document["status"] == "template"
-    assert "provider detail" not in fallback_document["text"]
-    assert "provider detail" not in fallback.stderr
-
-
-def test_manual_ai_exchange_uses_the_same_immutable_report() -> None:
-    runner = CliRunner()
-
-    with runner.isolated_filesystem():
-        report_id = write_decision_report(Path(".marketsieve/reports"))
-        report_path = Path(f".marketsieve/reports/objects/{report_id}.json")
-        original_report = report_path.read_bytes()
-
-        prepared = runner.invoke(main, ["ai", "prepare", "report", "latest"])
-        assert prepared.exit_code == 0, prepared.output
-        request_path = next(Path(".marketsieve/ai/request/objects").glob("*.json"))
-        request = json.loads(request_path.read_text(encoding="utf-8"))
-        assert '"quantity"' not in request_path.read_text(encoding="utf-8")
-        assert "ChatGPTへアップロード" in prepared.output
-
-        response_path = Path("response.json")
-        response_path.write_text(
-            json.dumps(
-                {
-                    "request_id": request["request_id"],
-                    "section_order": ["XTKS:7203"],
-                    "selected_fact_ids": ["decision.XTKS:7203.action"],
-                    "connections": [],
-                },
-                ensure_ascii=False,
-            ),
-            encoding="utf-8",
-        )
-        imported = runner.invoke(
-            main,
-            ["ai", "import", str(response_path), "--controlled", "--output", "json"],
-        )
-        shown = runner.invoke(main, ["ai", "show", "latest", "--output", "json"])
-
-        assert report_path.read_bytes() == original_report
-        assert len(tuple(Path(".marketsieve/ai/response/objects").glob("*.json"))) == 1
-        assert len(tuple(Path(".marketsieve/ai/validation/objects").glob("*.json"))) == 1
-        assert len(tuple(Path(".marketsieve/ai/explanation/objects").glob("*.json"))) == 1
-
-    assert imported.exit_code == 0, imported.output
-    explanation = json.loads(imported.stdout)
-    validate("report-ai-explanation", explanation)
-    assert explanation["service"] == "chatgpt"
-    assert explanation["report_id"] == report_id
-    assert shown.exit_code == 0
-    assert json.loads(shown.stdout) == explanation
 
 
 def test_jquants_doctor_and_fetch_use_only_explicit_profile(

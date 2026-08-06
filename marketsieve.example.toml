@@ -63,11 +63,17 @@ max_age_days = 7
 [screening.jp]
 source_profile = "japan"
 acquisition_limit = 100
+eligible_mics = ["XTKS"]
+fetch_limit = 20
+lookback_days = 100
 processing_limit = 100
 display_limit = 20
 
 [screening.us]
 source_profile = "us"
 acquisition_limit = 100
+eligible_mics = ["XNAS", "XNYS"]
+fetch_limit = 20
+lookback_days = 100
 processing_limit = 100
 display_limit = 20

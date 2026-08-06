@@ -1,0 +1,156 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:marketsieve:schema:analysis-context:1.0.0",
+  "title": "MarketSieve Analysis Context",
+  "type": "object",
+  "required": [
+    "context_id", "schema", "as_of", "portfolio", "watchlist", "decision_reports",
+    "screening_reports", "previous_deltas", "input_artifact_ids", "missing", "diagnostics",
+    "constraints"
+  ],
+  "properties": {
+    "context_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "schema": {"const": "analysis-context/v1"},
+    "as_of": {"type": "string", "format": "date-time"},
+    "portfolio": {
+      "type": "object",
+      "required": ["object_id", "as_of", "source", "source_name", "dataset", "diagnostics", "holdings"],
+      "properties": {
+        "object_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "as_of": {"type": "string", "format": "date-time"},
+        "source": {"type": "string"}, "source_name": {"type": "string"}, "dataset": {"type": "string"},
+        "diagnostics": {"type": "array", "items": {"type": "string"}},
+        "holdings": {"type": "array", "items": {"$ref": "#/$defs/instrument"}}
+      },
+      "additionalProperties": false
+    },
+    "watchlist": {"$ref": "#/$defs/watchlist"},
+    "decision_reports": {"type": "array", "items": {"$ref": "#/$defs/decisionReport"}},
+    "screening_reports": {"type": "array", "items": {"$ref": "#/$defs/screeningReport"}},
+    "previous_deltas": {"type": "array", "items": {"$ref": "#/$defs/delta"}},
+    "input_artifact_ids": {"type": "array", "items": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "uniqueItems": true},
+    "missing": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "diagnostics": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "constraints": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "instrument": {
+      "type": "object",
+      "required": ["key", "mic", "symbol", "currency", "timezone", "type"],
+      "properties": {
+        "key": {"type": "string"}, "mic": {"type": "string"}, "symbol": {"type": "string"},
+        "currency": {"type": "string"}, "timezone": {"type": "string"}, "type": {"const": "equity"}
+      },
+      "additionalProperties": false
+    },
+    "watchInstrument": {
+      "type": "object",
+      "required": ["mic", "symbol", "currency", "timezone", "type"],
+      "properties": {
+        "mic": {"type": "string"}, "symbol": {"type": "string"}, "currency": {"type": "string"},
+        "timezone": {"type": "string"}, "type": {"const": "equity"}
+      },
+      "additionalProperties": false
+    },
+    "watchItem": {
+      "type": "object",
+      "required": ["key", "instrument", "source_screen_report_id"],
+      "properties": {
+        "key": {"type": "string"}, "instrument": {"$ref": "#/$defs/watchInstrument"},
+        "source_screen_report_id": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"}
+      },
+      "additionalProperties": false
+    },
+    "watchRevision": {
+      "type": "object",
+      "required": ["watchlist_id", "schema", "as_of", "previous_watchlist_id", "change", "items"],
+      "properties": {
+        "watchlist_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "schema": {"const": "watchlist-result/v1"}, "as_of": {"type": "string", "format": "date-time"},
+        "previous_watchlist_id": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+        "change": {
+          "type": "object", "required": ["operation", "instrument"],
+          "properties": {"operation": {"enum": ["add", "remove", "add_provenance"]}, "instrument": {"type": "string"}},
+          "additionalProperties": false
+        },
+        "items": {"type": "array", "items": {"$ref": "#/$defs/watchItem"}}
+      },
+      "additionalProperties": false
+    },
+    "watchlist": {
+      "type": "object", "required": ["latest_id", "items", "history"],
+      "properties": {
+        "latest_id": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+        "items": {"type": "array", "items": {"$ref": "#/$defs/watchItem"}},
+        "history": {"type": "array", "items": {"$ref": "#/$defs/watchRevision"}}
+      },
+      "additionalProperties": false
+    },
+    "decisionInstrument": {
+      "type": "object", "required": ["symbol", "mic", "currency", "timezone", "type"],
+      "properties": {
+        "symbol": {"type": "string"}, "mic": {"type": "string"}, "currency": {"type": "string"},
+        "timezone": {"type": "string"}, "type": {"const": "equity"}
+      },
+      "additionalProperties": false
+    },
+    "policy": {
+      "type": "object", "required": ["name", "version", "settings"],
+      "properties": {"name": {"type": "string"}, "version": {"type": "string"}, "settings": {"type": "object"}},
+      "additionalProperties": false
+    },
+    "decision": {
+      "type": "object",
+      "required": ["instrument", "held", "action", "confidence", "evidence", "next_earnings_date", "revenue_growth", "eps_growth", "free_cash_flow", "valuation", "fundamentals", "invalidation_conditions", "next_action", "policy"],
+      "properties": {
+        "instrument": {"$ref": "#/$defs/decisionInstrument"}, "held": {"type": "boolean"},
+        "action": {"type": "string"}, "confidence": {"type": "string"},
+        "evidence": {"type": "array", "items": {"type": "object"}},
+        "next_earnings_date": {"type": ["string", "null"]}, "revenue_growth": {"type": ["string", "null"]},
+        "eps_growth": {"type": ["string", "null"]}, "free_cash_flow": {"type": ["string", "null"]},
+        "valuation": {"type": "object"}, "fundamentals": {"type": "object"},
+        "invalidation_conditions": {"type": "array", "items": {"type": "string"}},
+        "next_action": {"type": "string"}, "policy": {"$ref": "#/$defs/policy"}
+      },
+      "additionalProperties": false
+    },
+    "decisionReport": {
+      "type": "object",
+      "required": ["report_id", "session", "as_of", "policy", "decisions", "candidate_decisions", "previous_report_id", "input_report_ids", "screening_report_ids", "diagnostics"],
+      "properties": {
+        "report_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "session": {"type": "string"},
+        "as_of": {"type": "string", "format": "date-time"}, "policy": {"$ref": "#/$defs/policy"},
+        "decisions": {"type": "array", "items": {"$ref": "#/$defs/decision"}},
+        "candidate_decisions": {"type": "array", "items": {"$ref": "#/$defs/decision"}},
+        "previous_report_id": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+        "input_report_ids": {"type": "array", "items": {"type": "string", "pattern": "^[0-9a-f]{64}$"}},
+        "screening_report_ids": {"type": "array", "items": {"type": "string", "pattern": "^[0-9a-f]{64}$"}},
+        "diagnostics": {"type": "array", "items": {"type": "string"}}
+      },
+      "additionalProperties": false
+    },
+    "screeningReport": {
+      "type": "object",
+      "required": ["schema", "report_id", "universe_id", "as_of", "policy", "processed_count", "eligible_count", "candidates", "diagnostics"],
+      "properties": {
+        "schema": {"const": "screening-report/v1"}, "report_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "universe_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "as_of": {"type": "string", "format": "date-time"},
+        "policy": {"type": "object"}, "processed_count": {"type": "integer", "minimum": 0},
+        "eligible_count": {"type": "integer", "minimum": 0},
+        "candidates": {"type": "array", "items": {"type": "object"}},
+        "diagnostics": {"type": "array", "items": {"type": "string"}}
+      },
+      "additionalProperties": false
+    },
+    "delta": {
+      "type": "object", "required": ["session", "current_report_id", "previous_report_id", "changes"],
+      "properties": {
+        "session": {"type": "string"}, "current_report_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "previous_report_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "changes": {"type": "array", "items": {"type": "object"}}
+      },
+      "additionalProperties": false
+    }
+  }
+}

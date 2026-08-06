@@ -1,40 +1,37 @@
 {
   "version": "2.0.0",
   "tasks": [
-    {"label": "01 First Run: Create Configuration", "detail": "Run once. An existing marketsieve.toml is never overwritten.", "type": "process", "command": "make", "args": ["setup-config"], "problemMatcher": []},
-    {"label": "02 First Run: Import Portfolio CSV", "detail": "Import the canonical holdings CSV. Import time is used as as-of; the source file is not retained.", "type": "process", "command": "make", "args": ["portfolio-import", "PORTFOLIO=${input:portfolioPath}"], "problemMatcher": []},
-    {"label": "03 First Run: Check Readiness", "detail": "Check configuration, portfolio, credentials, and the next operation.", "type": "process", "command": "make", "args": ["daily-status"], "problemMatcher": []},
-    {"label": "10 Daily: Analyze JP Close and Prepare ChatGPT Request (Network)", "detail": "Run after the Japanese market closes. The terminal prints the upload file and next action.", "type": "process", "command": "make", "args": ["daily-jp-ai"], "problemMatcher": []},
-    {"label": "20 Daily: Analyze US Close and Prepare ChatGPT Request (Network)", "detail": "Run after the U.S. market closes. The terminal prints the upload file and next action.", "type": "process", "command": "make", "args": ["daily-us-ai"], "problemMatcher": []},
-    {"label": "30 Weekly: Build Brief and Prepare ChatGPT Request (After JP and US)", "detail": "Run on the weekend after both daily reports. This operation is offline.", "type": "process", "command": "make", "args": ["weekly-ai"], "problemMatcher": []},
-    {"label": "40 ChatGPT: Import Saved Response and Display Explanation", "detail": "Run after saving the ChatGPT JSON response. Import displays only the validated explanation.", "type": "process", "command": "make", "args": ["ai-import", "RESPONSE=${input:aiResponsePath}", "CONTROLLED=${input:aiControlled}"], "problemMatcher": []},
-    {"label": "Advanced: Prepare ChatGPT Request from Latest Report", "type": "process", "command": "make", "args": ["ai-prepare"], "problemMatcher": []},
-    {"label": "Advanced: Show Portfolio", "type": "process", "command": "make", "args": ["portfolio-show"], "problemMatcher": []},
-    {"label": "Advanced: Import ChatGPT Response Only", "type": "process", "command": "make", "args": ["ai-import", "RESPONSE=${input:aiResponsePath}", "CONTROLLED=${input:aiControlled}"], "problemMatcher": []},
-    {"label": "Advanced: Show Latest AI Explanation Only", "type": "process", "command": "make", "args": ["ai-show"], "problemMatcher": []},
-    {"label": "Developer: Sync", "type": "shell", "command": "make sync", "problemMatcher": []},
-    {"label": "Developer: Format", "type": "shell", "command": "make format", "problemMatcher": []},
-    {"label": "Developer: Test Current File", "type": "shell", "command": "make test TEST=${relativeFile}", "problemMatcher": []},
-    {"label": "Developer: Check", "type": "shell", "command": "make check", "group": "test", "problemMatcher": []},
-    {"label": "Developer: Review Evidence", "type": "shell", "command": "make evidence", "group": "test", "problemMatcher": []}
+    {"label": "First Run: Create Configuration", "type": "process", "command": "make", "args": ["setup-config"], "problemMatcher": []},
+    {"label": "First Run: Import Rakuten Portfolio", "type": "process", "command": "make", "args": ["portfolio-import", "BROKER=rakuten", "PORTFOLIO=${input:portfolioPath}"], "problemMatcher": []},
+    {"label": "First Run: Check Readiness", "type": "process", "command": "make", "args": ["daily-status"], "problemMatcher": []},
+    {"label": "Discovery: Refresh JP Candidates (Network)", "type": "process", "command": "make", "args": ["screen-refresh-jp"], "problemMatcher": []},
+    {"label": "Discovery: Refresh US Candidates (Network)", "type": "process", "command": "make", "args": ["screen-refresh-us"], "problemMatcher": []},
+    {"label": "Discovery: Update JP Universe Only (Network)", "type": "process", "command": "make", "args": ["screen-update-jp"], "problemMatcher": []},
+    {"label": "Discovery: Update US Universe Only (Network)", "type": "process", "command": "make", "args": ["screen-update-us"], "problemMatcher": []},
+    {"label": "Discovery: Run JP Screening Offline", "type": "process", "command": "make", "args": ["screen-run-jp"], "problemMatcher": []},
+    {"label": "Discovery: Run US Screening Offline", "type": "process", "command": "make", "args": ["screen-run-us"], "problemMatcher": []},
+    {"label": "Daily: Add Watchlist Instrument", "type": "process", "command": "make", "args": ["watchlist-add", "INSTRUMENT=${input:instrument}"], "problemMatcher": []},
+    {"label": "Daily: Remove Watchlist Instrument", "type": "process", "command": "make", "args": ["watchlist-remove", "INSTRUMENT=${input:instrument}"], "problemMatcher": []},
+    {"label": "Daily: Show Watchlist", "type": "process", "command": "make", "args": ["watchlist-show"], "problemMatcher": []},
+    {"label": "Daily: Analyze JP Watchlist (Network)", "type": "process", "command": "make", "args": ["daily-jp"], "problemMatcher": []},
+    {"label": "Daily: Analyze US Watchlist (Network)", "type": "process", "command": "make", "args": ["daily-us"], "problemMatcher": []},
+    {"label": "Daily: Build Weekly Brief", "type": "process", "command": "make", "args": ["weekly"], "problemMatcher": []},
+    {"label": "Daily: Show Portfolio", "type": "process", "command": "make", "args": ["portfolio-show"], "problemMatcher": []},
+    {"label": "Analysis: Build Workspace", "type": "process", "command": "make", "args": ["analysis-build"], "problemMatcher": []},
+    {"label": "Analysis: Show Workspace", "type": "process", "command": "make", "args": ["analysis-show"], "problemMatcher": []},
+    {"label": "Analysis: Build and Verify Workspace", "type": "process", "command": "make", "args": ["analysis-demo"], "problemMatcher": []},
+    {"label": "Developer: Sync", "type": "process", "command": "make", "args": ["sync"], "problemMatcher": []},
+    {"label": "Developer: Format", "type": "process", "command": "make", "args": ["format"], "problemMatcher": []},
+    {"label": "Developer: Format Check", "type": "process", "command": "make", "args": ["format-check"], "problemMatcher": []},
+    {"label": "Developer: Lint", "type": "process", "command": "make", "args": ["lint"], "problemMatcher": []},
+    {"label": "Developer: Type Check", "type": "process", "command": "make", "args": ["typecheck"], "problemMatcher": []},
+    {"label": "Developer: Test Current File", "type": "process", "command": "make", "args": ["test", "TEST=${relativeFile}"], "problemMatcher": []},
+    {"label": "Developer: Check", "type": "process", "command": "make", "args": ["check"], "group": "test", "problemMatcher": []},
+    {"label": "Developer: Review Evidence", "type": "process", "command": "make", "args": ["evidence"], "group": "test", "problemMatcher": []},
+    {"label": "Developer: Build Distributions", "type": "process", "command": "make", "args": ["build"], "problemMatcher": []}
   ],
   "inputs": [
-    {
-      "id": "portfolioPath",
-      "type": "promptString",
-      "description": "Absolute path to the portfolio CSV"
-    },
-    {
-      "id": "aiResponsePath",
-      "type": "promptString",
-      "description": "Absolute path to the saved ChatGPT response JSON"
-    },
-    {
-      "id": "aiControlled",
-      "type": "pickString",
-      "description": "Were all required Temporary Chat conditions verified?",
-      "options": ["0", "1"],
-      "default": "0"
-    }
+    {"id": "portfolioPath", "type": "promptString", "description": "Absolute path to the Rakuten assetbalance(all) CSV"},
+    {"id": "instrument", "type": "promptString", "description": "Instrument in MIC:SYMBOL form", "default": "XTKS:7203"}
   ]
 }

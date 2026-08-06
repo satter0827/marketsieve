@@ -3,8 +3,6 @@ name = "marketsieve-workspace"
 version = "0.0.0"
 requires-python = ">=3.12,<3.15"
 dependencies = [
-    "marketsieve-agent",
-    "marketsieve-ai",
     "marketsieve-cli",
     "marketsieve-import-rakuten",
     "marketsieve-source-csv",
@@ -36,8 +34,6 @@ required-version = ">=0.12,<0.13"
 
 [tool.uv.workspace]
 members = [
-    "packages/agent",
-    "packages/ai",
     "packages/cli",
     "packages/core",
     "packages/extension-api",
@@ -51,8 +47,6 @@ members = [
 ]
 
 [tool.uv.sources]
-marketsieve-agent = { workspace = true }
-marketsieve-ai = { workspace = true }
 marketsieve-cli = { workspace = true }
 marketsieve-import-rakuten = { workspace = true }
 marketsieve-source-csv = { workspace = true }
@@ -67,18 +61,6 @@ distribution = "marketsieve"
 path = "packages/core"
 module = "marketsieve"
 role = "sdk"
-
-[[tool.marketsieve.public-packages]]
-distribution = "marketsieve-agent"
-path = "packages/agent"
-module = "marketsieve_agent"
-role = "agent"
-
-[[tool.marketsieve.public-packages]]
-distribution = "marketsieve-ai"
-path = "packages/ai"
-module = "marketsieve_ai"
-role = "ai"
 
 [[tool.marketsieve.public-packages]]
 distribution = "marketsieve-extension-api"
@@ -146,8 +128,6 @@ line-length = 100
 src = [
     "examples/instrument-universe-plugin/src",
     "examples/portfolio-importer-plugin/src",
-    "packages/agent/src",
-    "packages/ai/src",
     "packages/cli/src",
     "packages/core/src",
     "packages/extension-api/src",
@@ -174,8 +154,6 @@ cache_dir = ".marketsieve/cache/mypy"
 files = [
     "examples/instrument-universe-plugin/src",
     "examples/portfolio-importer-plugin/src",
-    "packages/agent/src",
-    "packages/ai/src",
     "packages/cli/src",
     "packages/core/src",
     "packages/extension-api/src",
@@ -196,7 +174,7 @@ warn_unused_ignores = true
 [tool.coverage.run]
 branch = true
 data_file = ".marketsieve/coverage/data"
-source = ["marketsieve", "marketsieve_agent", "marketsieve_ai", "marketsieve_cli", "marketsieve_extension_api", "marketsieve_import_rakuten", "marketsieve_source_csv", "marketsieve_source_jquants", "marketsieve_source_alphavantage", "marketsieve_source_fred", "marketsieve_source_sec", "marketsieve_source_edinet"]
+source = ["marketsieve", "marketsieve_cli", "marketsieve_extension_api", "marketsieve_import_rakuten", "marketsieve_source_csv", "marketsieve_source_jquants", "marketsieve_source_alphavantage", "marketsieve_source_fred", "marketsieve_source_sec", "marketsieve_source_edinet"]
 omit = ["*/marketsieve_cli/__main__.py"]
 
 [tool.coverage.report]
@@ -207,7 +185,7 @@ skip_covered = true
 output = ".marketsieve/coverage/coverage.json"
 
 [tool.importlinter]
-root_packages = ["marketsieve", "marketsieve_agent", "marketsieve_ai", "marketsieve_cli", "marketsieve_extension_api", "marketsieve_import_rakuten", "marketsieve_source_csv", "marketsieve_source_jquants", "marketsieve_source_alphavantage", "marketsieve_source_fred", "marketsieve_source_sec", "marketsieve_source_edinet"]
+root_packages = ["marketsieve", "marketsieve_cli", "marketsieve_extension_api", "marketsieve_import_rakuten", "marketsieve_source_csv", "marketsieve_source_jquants", "marketsieve_source_alphavantage", "marketsieve_source_fred", "marketsieve_source_sec", "marketsieve_source_edinet"]
 
 [[tool.importlinter.contracts]]
 name = "Application dependencies point inward"
@@ -217,8 +195,6 @@ layers = [
     "marketsieve_cli.bootstrap",
     "marketsieve_cli.adapters",
     "marketsieve_cli.application",
-    "marketsieve_agent",
-    "marketsieve_ai",
     "marketsieve_import_rakuten",
     "marketsieve_source_csv",
     "marketsieve_source_jquants",

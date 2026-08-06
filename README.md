@@ -1,219 +1,102 @@
 # MarketSieve
 
-[![CI](https://github.com/satter0827/marketsieve/actions/workflows/ci.yml/badge.svg)](https://github.com/satter0827/marketsieve/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+MarketSieve is a deterministic analysis workbench for Japanese and U.S. equities. It acquires
+explicit market data, stores immutable evidence, calculates reproducible decisions and candidate
+screens, and builds a static workspace that external tools such as Codex can analyze.
 
-MarketSieve is an open-source Python foundation for reproducible analysis of Japanese and U.S.
-equities. The public SDK and CLI application have separate dependency
-boundaries so market logic can remain independent from data providers, report agents, and delivery
-channels.
-
-[日本語版 README](README.ja.md)
-
-## Purpose
-
-MarketSieve turns verified market facts into reproducible analyses, historical experiments, and
-evidence-backed reports. Replaceable application boundaries keep the SDK independent from email,
-LINE, LLM providers, and databases.
-
-## Current status
-
-`develop` contains the 0.8.0 release candidate. It provides the data workbench:
-independent CSV, J-Quants, Alpha Vantage, FRED, SEC, and EDINET sources; immutable verified
-snapshots; price,
-financial, and event inspection; seven deterministic technical indicators; and an explanation-only
-Agent. Configured `daily jp` and `daily us` commands explicitly acquire portfolio instruments and
-write immutable Close Brief reports. `weekly` combines eligible daily reports offline as the
-weekend briefing. Daily reports use knowledge-time-correct financial trends and known earnings
-dates when those optional source capabilities are configured. They also show known filing
-amendments and company-relative valuation ranges built only from explicitly acquired local
-history. The Agent reads only an immutable decision report and requires an explicit LM Studio,
-OpenAI, Anthropic, or Google provider. Its output is stored separately and cannot change a report.
-Bounded Japanese and U.S. universes can be updated explicitly, then screened offline from verified
-local price snapshots. Candidate order exposes its inputs and never uses an opaque score. The
-weekend briefing includes fresh stored candidates in a section separate from portfolio decisions.
+MarketSieve does not run a language model, send messages, place orders, or persist external research
+and conversations. `buy_candidate` and other decision actions identify research states, not trade
+instructions.
 
 ## Daily use
 
-Open **Run and Debug** in VS Code. The numbered launch configurations at the top define the complete
-operating order. Run `01` through `03` once, `10` or `20` after the corresponding market closes,
-`30` only at the weekend after both daily reports, and `40` after saving ChatGPT's JSON response.
-Run `02` again whenever holdings or watch items change, followed by `03` to recheck readiness. Tasks
-with the same labels remain available as an alternative entry point.
+Open **Run and Debug** in VS Code and use the numbered configurations from top to bottom. First use
+requires `01` through `03`. An empty portfolio and empty watchlist are valid; continue with bounded
+discovery (`10` or `20`) or add a known instrument (`30`).
 
-The primary AI workflow uses a new ChatGPT Temporary Chat through files; it does not require an API
-key or automate a browser. Upload the printed absolute request path, save the JSON response, then
-use task `40` to import and show it. Use no Project, web search, or external tools, and disable
-Custom Instructions.
-
-The ChatGPT exchange needs no API key. A configured market-data provider may require its own
-credential. Tasks inherit the VS Code process environment. If task `03` reports a missing variable,
-restart VS Code from an environment that defines it. Never put credential values in `tasks.json` or
-`marketsieve.toml`.
-
-| Operation | Terminal | VS Code launch configuration | Network | Output |
+| Use | Terminal | VS Code launch | Network | Result |
 | --- | --- | --- | --- | --- |
-| 1. Create configuration | `make setup-config` | `01 First Run: Create Configuration` | No | `marketsieve.toml` |
-| 2. Import portfolio | `make portfolio-import PORTFOLIO=/absolute/path/holdings.csv` | `02 First Run: Import Portfolio CSV` | No | normalized portfolio |
-| 3. Check readiness | `make daily-status` | `03 First Run: Check Readiness` | No | diagnostics and next task |
-| 10. JP close analysis | `make daily-jp-ai` | `10 Daily: Analyze JP Close and Prepare ChatGPT Request (Network)` | Market data only | report and `request.json` |
-| 20. US close analysis | `make daily-us-ai` | `20 Daily: Analyze US Close and Prepare ChatGPT Request (Network)` | Market data only | report and `request.json` |
-| 30. Weekly brief | `make weekly-ai` | `30 Weekly: Build Brief and Prepare ChatGPT Request (After JP and US)` | No | report and `request.json` |
-| 40. Import and display response | `make ai-import RESPONSE=/absolute/path/response.json` | `40 ChatGPT: Import Saved Response and Display Explanation` | No | response, validation, explanation |
+| Create configuration | `make setup-config` | `01 First Run: Create Configuration` | No | `marketsieve.toml` |
+| Import Rakuten portfolio | `make portfolio-import BROKER=rakuten PORTFOLIO=/absolute/path.csv` | `02 First Run: Import Rakuten Portfolio` | No | immutable holdings state |
+| Check readiness | `make daily-status` | `03 Daily Use: Check Readiness` | No | next-action diagnostics |
+| Discover JP candidates | `make screen-refresh-jp` | `10 Discovery: Refresh JP Candidates (Network)` | Yes | universe, price snapshots, screening report |
+| Discover US candidates | `make screen-refresh-us` | `20 Discovery: Refresh US Candidates (Network)` | Yes | universe, price snapshots, screening report |
+| Add an instrument | `make watchlist-add INSTRUMENT=XTKS:7203` | `30 Watchlist: Add Instrument` | No | immutable watchlist revision |
+| Analyze JP instruments | `make daily-jp` | `40 Daily Use: Analyze JP Watchlist (Network)` | Yes | static daily report |
+| Analyze US instruments | `make daily-us` | `50 Daily Use: Analyze US Watchlist (Network)` | Yes | static daily report |
+| Build weekly brief | `make weekly` | `60 Weekly Use: Build Brief` | No | static weekly report |
+| Build analysis workspace | `make analysis-build` | `70 Analysis: Build Workspace` | No | `context.json`, `analysis.md` |
+| Show analysis workspace | `make analysis-show` | `80 Analysis: Show Workspace` | No | verified static analysis |
 
-ChatGPT selects supplied fact IDs, their order, and non-numeric relationships. MarketSieve validates
-that selection and renders values from the immutable report. Existing direct API and local-model
-Agent commands remain available as optional advanced workflows.
-Use `CONTROLLED=1` only after confirming the new Temporary Chat, disabled Custom Instructions, and
-disabled Project, web search, and external tools. The default records no such attestation. Existing
-API providers, individual AI operations, and debug launchers remain available after the numbered
-workflow as advanced operations.
+Market-data credentials stay in the invoking environment. The product itself has no model-provider
+cost. J-Quants, Alpha Vantage, FRED, SEC, and EDINET availability and cost depend on the selected
+provider account and plan.
 
-## Installation
+## External analysis
 
-Python 3.12 through 3.14 is supported. Development uses Python 3.13 and
-[uv](https://docs.astral.sh/uv/).
+After `make analysis-build`, point Codex or another external research tool at:
 
-```shell
-make sync
+```text
+.marketsieve/analysis/README.md
+.marketsieve/analysis/context.json
+.marketsieve/analysis/analysis.md
 ```
 
-The SDK, extension API, CLI, manual AI exchange, Agent, CSV source, J-Quants source, Alpha Vantage source, FRED source,
-SEC source, and EDINET source build as independent artifacts:
+`context.json` contains evidence identifiers, static decisions, screening candidates, exact previous
+report deltas, missing inputs, and diagnostics. It omits position quantities, acquisition prices,
+account types, local CSV paths, personal identifiers, and credentials. External news research and
+the human discussion remain outside MarketSieve's canonical artifacts.
+
+## Watchlist and screening
 
 ```shell
-make build
+uv run marketsieve watchlist add XTKS:7203
+uv run marketsieve watchlist add XNAS:MSFT
+uv run marketsieve watchlist add XTKS:7203 --from-screen REPORT_ID
+uv run marketsieve watchlist remove XTKS:7203
+uv run marketsieve watchlist show
+
+uv run marketsieve --config marketsieve.toml screen refresh jp
+uv run marketsieve --config marketsieve.toml screen refresh us
+uv run marketsieve --config marketsieve.toml screen update jp
+uv run marketsieve --config marketsieve.toml screen run jp
 ```
 
-Release artifacts are published both as a checksummed GitHub Release wheelhouse and as independent
-PyPI distributions. Install the normal CLI and all source adapters from PyPI:
+`screen refresh` has configured acquisition, fetch, lookback, processing, and display limits. It does
+not retry, switch providers, or shorten the requested range. Partial failures and rate limits remain
+visible as report diagnostics. Adding a screening result to the watchlist always requires an explicit
+human command.
+
+## Static reports and Strategy Lab
 
 ```shell
-python -m pip install "marketsieve-cli[all-sources]>=0.8,<0.9"
-```
-
-For an offline installation, verify the GitHub Release assets against `release.json`, extract the
-wheelhouse ZIP, and install without an index:
-
-```shell
-python -m pip install --no-index --find-links ./marketsieve-wheelhouse \
-  "marketsieve-cli[all-sources]"
-```
-
-Install `marketsieve-cli[all]` from the same wheelhouse to include the optional Agent as well as all
-sources.
-
-## CLI
-
-The public `marketsieve-cli` distribution depends on, but is not included in, the SDK wheel. Read
-commands are offline. Explicit `source fetch` and `daily` acquisition read the selected provider
-credential from the environment and access the network.
-
-```shell
-uv run marketsieve --version
-make doctor
-make capabilities-json
-```
-
-`make capabilities-json` describes commands, options, schemas, exit codes, streams, and side
-effects for AI clients. Inspection, analysis, comparison, and report commands read only verified
-local snapshots; acquisition is always explicit.
-
-The direct commands expose all output modes:
-
-```shell
-uv run marketsieve doctor --output json
-uv run marketsieve capabilities --output json
-uv run marketsieve source list --output json
-uv run marketsieve source import ./example-bundle --output json
-uv run marketsieve --config marketsieve.toml source fetch us XNAS:MSFT --start 2026-01-01 --end 2026-07-31 --output json
-uv run marketsieve snapshot verify SNAPSHOT_ID --output json
-uv run marketsieve inspect XTKS:7203 --source-profile offline-jp --output json
-uv run marketsieve analyze rsi XTKS:7203 --period 14 --source-profile offline-jp --output json
-uv run marketsieve compare XTKS:7203 XTKS:6758 --source-profile offline-jp --output json
 uv run marketsieve report list --output json
-uv run marketsieve report show latest --output json
-uv run marketsieve report export latest --format markdown
-uv run marketsieve --config marketsieve.toml daily jp
-uv run marketsieve --config marketsieve.toml weekly
+uv run marketsieve report show latest
+uv run marketsieve report export latest
+
 uv run marketsieve experiment run strategy.toml --output json
 uv run marketsieve experiment show RUN_ID --output json
 uv run marketsieve experiment compare LEFT_RUN_ID RIGHT_RUN_ID --output json
-uv run marketsieve experiment explain RUN_ID --provider lmstudio --output json
-uv run marketsieve --config marketsieve.toml screen update jp --output json
-uv run marketsieve --config marketsieve.toml screen run jp --output json
-uv run marketsieve --config marketsieve.toml screen show latest --market jp --output json
-uv run marketsieve --config marketsieve.toml report explain latest --provider openai --dry-run --output json
 ```
 
-The canonical portfolio CSV header is
-`kind,mic,symbol,currency,timezone,quantity,average_acquisition_price,account_type`.
-Use `holding` with all fields or `watch` with the final three fields empty:
+Daily and weekly reports, screening reports, Markdown projections, and Strategy Lab runs remain
+deterministic and immutable. The balanced medium-term component is a deterministic Decision Policy.
+
+## Packages
+
+The workspace builds independent distributions for the SDK, extension API, CLI, Rakuten importer,
+and CSV, J-Quants, Alpha Vantage, FRED, SEC, and EDINET sources. The public `marketsieve` SDK has no
+CLI, configuration, logging, network, database, delivery, or model-provider dependency.
 
 ```shell
-uv run marketsieve portfolio import holdings.csv --broker canonical \
-  --as-of 2026-08-06T20:00:00+09:00
-uv run marketsieve portfolio show
-```
-
-An empty Rakuten Securities `assetbalance(all)` export can be imported directly:
-
-```shell
-uv run marketsieve portfolio import assetbalance.csv --broker rakuten \
-  --as-of 2026-08-06T12:48:40+09:00
-```
-
-MarketSieve stores normalized content and the input digest, not the source CSV. The Rakuten adapter
-currently accepts only the verified no-holdings form. Use the canonical CSV for holdings and watch
-items until an anonymized non-empty export defines that broker format.
-
-## Architecture
-
-The public SDK lives under `packages/core`, the implemented extension contract under
-`packages/extension-api`, provider adapters under `packages/source-*`, and the CLI under
-`packages/cli`. The SDK cannot import application or infrastructure libraries. See the
-[documentation index](docs/README.md) and formal
-[Architecture](docs/design/architecture.md) for the dependency rules.
-
-## Development
-
-The Makefile is the shared entry point for people, coding agents, VS Code, and CI. Use `make help`
-to list the available operations. Run tests and the complete local gate before opening a pull
-request:
-
-```shell
+make sync
+make format-check
+make lint
+make typecheck
 make test
 make check
-make evidence
+make build
 ```
 
-VS Code uses the workspace `.venv`. After `make sync`, Run and Debug is the primary daily-analysis
-entry point. Tasks mirror the same daily operations and own quality gates; the detailed launch
-configurations after the numbered workflow debug CLI code. Test Explorer owns tests and coverage.
-Interactive coverage is local feedback, while `make check` is the authoritative coverage gate.
-Local caches and generated artifacts are kept under `.marketsieve`; `.venv` is the only generated
-environment at the repository root.
-
-`make check` runs the Develop Gate. `make evidence` additionally creates a checksummed review bundle
-under `.marketsieve/artifacts/review/<commit>/`. Application results use stdout and structured JSON
-Lines logs use stderr. Pass `--log-level INFO` to collect informational evidence and `--log-file`
-to also retain it under `.marketsieve/logs/`.
-
-Changes move through short-lived branches into `develop`. A human-reviewed `develop -> main` pull
-request is the release boundary. See [Contributing](CONTRIBUTING.md) for the workflow.
-
-## Plugin development
-
-Provider packages depend on the small, data-kind-specific extension API rather than CLI internals.
-The [external universe plugin example](examples/instrument-universe-plugin/README.md) is outside the
-workspace catalog, declares `marketsieve-extension-api>=0.8,<0.9`, registers one entry point, and
-uses the public conformance check. The complete gate builds its wheel and installs it against the
-public wheel set in an isolated environment.
-
-## Roadmap
-
-See the [Roadmap](docs/roadmap.md) and the [formal design](docs/design/README.md).
-
-## License
-
-MarketSieve is licensed under the [MIT License](LICENSE).
+See [documentation](docs/README.md), [formal design](docs/design/README.md), and
+[contribution workflow](CONTRIBUTING.md).

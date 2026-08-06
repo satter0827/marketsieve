@@ -120,6 +120,11 @@ def test_universe_request_rejects_implicit_or_unbounded_input(
         UniverseRequest(*values, {})
 
 
+def test_universe_request_rejects_invalid_eligible_mics() -> None:
+    with pytest.raises(ValueError, match="eligible MICs"):
+        UniverseRequest("sec-us", "us", 1, {}, ("XNYS", "XNAS"))
+
+
 @pytest.mark.parametrize(
     ("changes", "message"),
     (

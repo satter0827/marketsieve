@@ -5,8 +5,6 @@ requires-python = ">=3.12, <3.15"
 [manifest]
 members = [
     "marketsieve",
-    "marketsieve-agent",
-    "marketsieve-ai",
     "marketsieve-cli",
     "marketsieve-extension-api",
     "marketsieve-import-rakuten",
@@ -574,46 +572,18 @@ dependencies = [
 requires-dist = [{ name = "tzdata", specifier = ">=2025.2" }]
 
 [[package]]
-name = "marketsieve-agent"
-version = "0.8.0"
-source = { editable = "packages/agent" }
-dependencies = [
-    { name = "marketsieve" },
-]
-
-[package.metadata]
-requires-dist = [{ name = "marketsieve", editable = "packages/core" }]
-
-[[package]]
-name = "marketsieve-ai"
-version = "0.8.0"
-source = { editable = "packages/ai" }
-dependencies = [
-    { name = "marketsieve" },
-]
-
-[package.metadata]
-requires-dist = [{ name = "marketsieve", editable = "packages/core" }]
-
-[[package]]
 name = "marketsieve-cli"
 version = "0.8.0"
 source = { editable = "packages/cli" }
 dependencies = [
     { name = "click" },
     { name = "marketsieve" },
-    { name = "marketsieve-ai" },
     { name = "marketsieve-extension-api" },
     { name = "rich" },
 ]
 
 [package.optional-dependencies]
-agent = [
-    { name = "marketsieve-agent" },
-]
 all = [
-    { name = "marketsieve-agent" },
-    { name = "marketsieve-ai" },
     { name = "marketsieve-import-rakuten" },
     { name = "marketsieve-source-alphavantage" },
     { name = "marketsieve-source-csv" },
@@ -636,10 +606,6 @@ all-sources = [
 requires-dist = [
     { name = "click", specifier = ">=8.1,<9" },
     { name = "marketsieve", editable = "packages/core" },
-    { name = "marketsieve-agent", marker = "extra == 'agent'", editable = "packages/agent" },
-    { name = "marketsieve-agent", marker = "extra == 'all'", editable = "packages/agent" },
-    { name = "marketsieve-ai", editable = "packages/ai" },
-    { name = "marketsieve-ai", marker = "extra == 'all'", editable = "packages/ai" },
     { name = "marketsieve-extension-api", editable = "packages/extension-api" },
     { name = "marketsieve-import-rakuten", marker = "extra == 'all'", editable = "packages/import-rakuten" },
     { name = "marketsieve-import-rakuten", marker = "extra == 'all-sources'", editable = "packages/import-rakuten" },
@@ -657,7 +623,7 @@ requires-dist = [
     { name = "marketsieve-source-sec", marker = "extra == 'all-sources'", editable = "packages/source-sec" },
     { name = "rich", specifier = ">=14,<15" },
 ]
-provides-extras = ["agent", "all-sources", "all"]
+provides-extras = ["all-sources", "all"]
 
 [[package]]
 name = "marketsieve-extension-api"
@@ -780,8 +746,6 @@ name = "marketsieve-workspace"
 version = "0.0.0"
 source = { virtual = "." }
 dependencies = [
-    { name = "marketsieve-agent" },
-    { name = "marketsieve-ai" },
     { name = "marketsieve-cli" },
     { name = "marketsieve-import-rakuten" },
     { name = "marketsieve-source-alphavantage" },
@@ -809,8 +773,6 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "marketsieve-agent", editable = "packages/agent" },
-    { name = "marketsieve-ai", editable = "packages/ai" },
     { name = "marketsieve-cli", editable = "packages/cli" },
     { name = "marketsieve-import-rakuten", editable = "packages/import-rakuten" },
     { name = "marketsieve-source-alphavantage", editable = "packages/source-alphavantage" },

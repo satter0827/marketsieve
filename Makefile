@@ -3,12 +3,11 @@ SHELL := /bin/sh
 
 STATE_DIR ?= .marketsieve
 TEST ?=
-RESPONSE ?=
-REPORT ?= latest
 CONFIG ?= marketsieve.toml
-CONTROLLED ?= 0
 PORTFOLIO ?=
 BROKER ?= canonical
+INSTRUMENT ?=
+SCREEN_REPORT ?=
 AS_OF ?= $(shell date +"%Y-%m-%dT%H:%M:%S%z")
 BASE_SHA ?= origin/develop
 HEAD_SHA ?= HEAD
@@ -24,7 +23,7 @@ RELEASE_DIR ?= $(STATE_DIR)/artifacts/release/$(COMMIT)
 export UV_CACHE_DIR := $(abspath $(STATE_DIR))/cache/uv
 export PYTHONPYCACHEPREFIX := $(abspath $(STATE_DIR))/cache/python
 
-.PHONY: help setup-config portfolio-import portfolio-show daily-status daily-jp-ai daily-us-ai weekly-ai ai-prepare ai-import ai-show doctor sync format format-check lint typecheck test secret-check check capabilities-json build evidence evidence-bundle evidence-validate review-attest governance-check release-build release-verify release-check clean-generated
+.PHONY: help setup-config portfolio-import portfolio-show daily-status screen-refresh-jp screen-refresh-us screen-update-jp screen-update-us screen-run-jp screen-run-us watchlist-add watchlist-remove watchlist-show daily-jp daily-us weekly analysis-build analysis-show analysis-demo doctor sync format format-check lint typecheck test secret-check check capabilities-json build evidence evidence-bundle evidence-validate review-attest governance-check release-build release-verify release-check clean-generated
 
 help: ## Show daily-use commands first, followed by developer commands.
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z0-9_-]+:.*## / {printf "%-22s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -58,31 +57,56 @@ daily-status: doctor ## Check configuration, portfolio, reports, and installatio
 	@uv run marketsieve report list --output json
 	@uv run python -m scripts.portfolio_check "$(CONFIG)"
 
-daily-jp-ai: ## Daily JP close report (Network), then prepare a ChatGPT request.
+screen-refresh-jp: ## Discover bounded JP candidates and store a static report (Network).
+	@test -f "$(CONFIG)" || { echo "Missing $(CONFIG). Next VS Code operation: 01 First Run: Create Configuration" >&2; exit 2; }
+	uv run marketsieve --config "$(CONFIG)" screen refresh jp
+
+screen-refresh-us: ## Discover bounded US candidates and store a static report (Network).
+	@test -f "$(CONFIG)" || { echo "Missing $(CONFIG). Next VS Code operation: 01 First Run: Create Configuration" >&2; exit 2; }
+	uv run marketsieve --config "$(CONFIG)" screen refresh us
+
+screen-update-jp: ## Update the bounded JP universe only (Network).
+	uv run marketsieve --config "$(CONFIG)" screen update jp
+
+screen-update-us: ## Update the bounded US universe only (Network).
+	uv run marketsieve --config "$(CONFIG)" screen update us
+
+screen-run-jp: ## Screen stored JP snapshots without acquisition (Offline).
+	uv run marketsieve --config "$(CONFIG)" screen run jp
+
+screen-run-us: ## Screen stored US snapshots without acquisition (Offline).
+	uv run marketsieve --config "$(CONFIG)" screen run us
+
+watchlist-add: ## Add INSTRUMENT=MIC:SYMBOL, optionally SCREEN_REPORT=ID (Offline).
+	@test -n "$(INSTRUMENT)" || { echo "INSTRUMENT is required. Next: make watchlist-add INSTRUMENT=XTKS:7203" >&2; exit 2; }
+	uv run marketsieve watchlist add "$(INSTRUMENT)" $(if $(SCREEN_REPORT),--from-screen "$(SCREEN_REPORT)",)
+
+watchlist-remove: ## Remove INSTRUMENT=MIC:SYMBOL (Offline).
+	@test -n "$(INSTRUMENT)" || { echo "INSTRUMENT is required. Next: make watchlist-remove INSTRUMENT=XTKS:7203" >&2; exit 2; }
+	uv run marketsieve watchlist remove "$(INSTRUMENT)"
+
+watchlist-show: ## Show the current watchlist and history IDs (Offline).
+	uv run marketsieve watchlist show
+
+daily-jp: ## Analyze JP holdings and watchlist, then store a static report (Network).
 	@test -f "$(CONFIG)" || { echo "Missing $(CONFIG). Next VS Code operation: 01 First Run: Create Configuration" >&2; exit 2; }
 	uv run marketsieve --config "$(CONFIG)" daily jp
-	uv run marketsieve ai prepare report latest
 
-daily-us-ai: ## Daily US close report (Network), then prepare a ChatGPT request.
+daily-us: ## Analyze US holdings and watchlist, then store a static report (Network).
 	@test -f "$(CONFIG)" || { echo "Missing $(CONFIG). Next VS Code operation: 01 First Run: Create Configuration" >&2; exit 2; }
 	uv run marketsieve --config "$(CONFIG)" daily us
-	uv run marketsieve ai prepare report latest
 
-weekly-ai: ## Weekly brief (Offline), then prepare a ChatGPT request.
+weekly: ## Build the static weekly brief from eligible JP and US reports (Offline).
 	@test -f "$(CONFIG)" || { echo "Missing $(CONFIG). Next VS Code operation: 01 First Run: Create Configuration" >&2; exit 2; }
 	uv run marketsieve --config "$(CONFIG)" weekly
-	uv run marketsieve ai prepare report latest
 
-ai-prepare: ## Prepare ChatGPT request from REPORT=latest (Offline).
-	uv run marketsieve ai prepare report "$(REPORT)"
+analysis-build: ## Build context.json and analysis.md for an external analysis tool (Offline).
+	uv run marketsieve analysis build
 
-ai-import: ## Import RESPONSE=... (Offline); add CONTROLLED=1 only after checking chat conditions.
-	@test -n "$(RESPONSE)" || { echo "RESPONSE is required. Next: make ai-import RESPONSE=/absolute/path/response.json" >&2; exit 2; }
-	@test -f "$(RESPONSE)" || { echo "Response file not found: $(RESPONSE)" >&2; exit 2; }
-	uv run marketsieve ai import "$(RESPONSE)" $(if $(filter 1,$(CONTROLLED)),--controlled,)
+analysis-show: ## Verify and show the current static analysis workspace (Offline).
+	uv run marketsieve analysis show
 
-ai-show: ## Show the latest validated AI explanation (Offline).
-	uv run marketsieve ai show latest
+analysis-demo: analysis-build analysis-show ## Build and verify the workspace from current local artifacts.
 
 doctor: ## Run offline installation diagnostics.
 	uv run marketsieve doctor
