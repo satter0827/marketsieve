@@ -80,12 +80,13 @@ def test_csv_universe_is_strict_sorted_bounded_and_content_identified(tmp_path: 
     path = tmp_path / "us.csv"
     path.write_text(
         "symbol,mic,currency,timezone,as_of\n"
+        "AAA,XASE,USD,America/New_York,2026-08-01T12:00:00+00:00\n"
         "MSFT,XNAS,USD,America/New_York,2026-08-01T12:00:00+00:00\n"
         "BRK.B,XNYS,USD,America/New_York,2026-08-01T12:00:00+00:00\n",
         encoding="utf-8",
     )
     importer = CsvInstrumentUniverseImporter()
-    request = UniverseRequest("offline-us", "us", 1, {})
+    request = UniverseRequest("offline-us", "us", 1, {}, ("XNAS", "XNYS"))
 
     imported = importer.import_universe(path, request)
 
@@ -93,7 +94,7 @@ def test_csv_universe_is_strict_sorted_bounded_and_content_identified(tmp_path: 
     assert [(item.mic, item.symbol) for item in imported.instruments] == [("XNAS", "MSFT")]
     assert imported.provider_total == 2
     assert imported.truncated is True
-    assert imported.diagnostics == ("limit_reached:1",)
+    assert imported.diagnostics == ("ineligible_mics_excluded:1", "limit_reached:1")
     assert len(imported.source_hash) == 64
 
 

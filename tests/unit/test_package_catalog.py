@@ -13,8 +13,6 @@ def test_workspace_catalog_has_unique_buildable_public_packages() -> None:
 
     assert {spec.role for spec in catalog} >= {
         "sdk",
-        "agent",
-        "ai",
         "extension-api",
         "cli",
         "adapter",

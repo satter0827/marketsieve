@@ -24,7 +24,6 @@ from marketsieve import (
     WatchItem,
 )
 from marketsieve.domain import Instrument
-from marketsieve_cli.adapters.explanations import ExplanationStore
 from marketsieve_cli.adapters.reports import (
     ReportStore,
     create_report,
@@ -402,39 +401,3 @@ def test_report_document_rejects_an_incorrect_identity() -> None:
 
     with pytest.raises(ValueError, match="report ID"):
         report_document(replace(report, report_id="a" * 64))
-
-
-def test_explanation_store_is_content_addressed_separate_and_tamper_evident(
-    tmp_path: Path,
-) -> None:
-    report = _report()
-    reports = ReportStore(tmp_path / "reports")
-    reports.put(report)
-    store = ExplanationStore(tmp_path / "explanations")
-    value = {
-        "schema_version": "1.0.0",
-        "operation": "explain",
-        "status": "model",
-        "provider": "lmstudio",
-        "model": "local-model",
-        "prompt_version": "decision-report-selection-v1",
-        "report_id": report.report_id,
-        "catalog_hash": "b" * 64,
-        "selected_fact_ids": ["report.session"],
-        "fallback_reason": None,
-        "text": "保存済みレポートの説明",
-    }
-
-    first = store.put(value)
-    second = store.put(value)
-
-    assert first == second
-    assert store.show(first["explanation_id"]) == first
-    assert reports.show(report.report_id) == report
-    path = tmp_path / "explanations/objects" / f"{first['explanation_id']}.json"
-    path.write_bytes(path.read_bytes().replace("説明".encode(), "変更".encode()))
-    with pytest.raises(ValueError, match="canonical"):
-        store.show(first["explanation_id"])
-
-    with pytest.raises(ValueError, match="reserved"):
-        store.put({**value, "schema": "changed"})

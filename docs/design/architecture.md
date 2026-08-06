@@ -19,24 +19,8 @@ calculations. `marketsieve-extension-api` defines the implemented data-kind capa
 `marketsieve-source-sec` implements explicit SEC filing, company-fact, and instrument-universe
 acquisition, and
 `marketsieve-source-edinet` implements explicit EDINET filing and XBRL-derived acquisition.
-`marketsieve-cli` owns the executable application and immutable
-snapshot store.
-The `marketsieve-ai` distribution implements deterministic request generation, strict response
-validation, and fact-owned rendering for a human-mediated AI service. It depends only on the public
-`marketsieve` SDK and owns no HTTP client, browser automation, CLI, configuration, or persistence.
-The optional `marketsieve-agent` distribution implements decision-report fact selection,
-deterministic safe fallback, and an injectable LM Studio OpenAI-compatible adapter. LM Studio uses
-one bounded non-streaming request, follows no redirects, and accepts only loopback endpoints unless
-remote access is separately allowed. OpenAI uses its fixed Responses endpoint only after explicit
-cloud consent, disables storage and tools, and has an independent mocked-transport contract. The
-Anthropic adapter separately implements the fixed Messages API, API-version, authentication, and
-text-block contract with the same consent and request bounds. Google uses the fixed Gemini
-Interactions endpoint, header-based authentication, JSON response format, and a completed
-single-text contract. The CLI loads this optional distribution only for provider diagnostics and
-`report explain`, derives
-its fact catalog only from an immutable decision report, omits quantities and acquisition prices,
-and never gives a model tools, source access, or calculation ownership. The CLI persists model and
-template output below `.marketsieve/explanations` without modifying report objects.
+`marketsieve-cli` owns the executable application, immutable snapshot and report stores, independent
+watchlist history, bounded screening orchestration, and the static analysis workspace projection.
 
 The `marketsieve_cli` package owns the command-line interface, offline diagnostics, use-case
 orchestration, and console presentation. It is independently installable and is never included in
@@ -58,7 +42,7 @@ marketsieve SDK
 - The SDK contains domain semantics, deterministic analysis, channel-neutral results, and only
   those public ports that have a working implementation and tests.
 - Application services own use-case orchestration and source-selection policy.
-- Adapters own provider, file, persistence, delivery, and other I/O details.
+- Adapters own provider, file, persistence, and other I/O details.
 - Interfaces translate external input and output and do not implement market rules.
 - Dependencies point inward; the SDK never imports application or infrastructure packages.
 
@@ -314,9 +298,8 @@ sandbox boundary.
 
 Network acquisition and offline consumption are different use cases. `source fetch` and `source
 import` create immutable objects below `.marketsieve/data/objects`. Inspection, analysis, and
-comparison read verified snapshots and never trigger an implicit refresh. Model explanation reads
-a verified decision report instead. Mutable references are rebuildable indexes and are not
-evidence authorities.
+comparison read verified snapshots and never trigger an implicit refresh. Mutable references are
+rebuildable indexes and are not evidence authorities.
 
 An equity view is a composition of independent instrument, price, technical, financial, valuation,
 risk, event, and data-quality sections. Each section owns status, completeness, missing reasons,
@@ -328,37 +311,20 @@ caches, and artifacts live below `.marketsieve`. Credentials enter only through 
 environment variables and are never copied into configuration, snapshots, logs, review evidence,
 or distributions.
 
-## Model explanation boundary
+## Static analysis workspace boundary
 
-The primary non-API path prepares one content-addressed `report-ai-request/v1` object from a
-validated report. A person uploads that file to a new ChatGPT Temporary Chat and imports the saved
-response. ChatGPT may select supplied fact IDs, section order, and bounded non-numeric connective
-text; it cannot introduce facts or calculations. The CLI stores request, original response,
-validation, and deterministic explanation as separate immutable objects below `.marketsieve/ai`.
-Only latest references and the response inbox path are mutable. Report objects are never changed.
-The response object stores the exact imported bytes as Base64 with a SHA-256 digest; UTF-8 text is
-included only when decoding succeeds, so malformed input remains reproducible without lossy repair.
+The CLI projects verified portfolio, watchlist, decision-report, and screening-report objects into
+one `analysis-context/v1` document. The context ID is the SHA-256 digest of canonical semantic JSON.
+`analysis.md` is a deterministic projection of that document, and `README.md` defines how an
+external analysis tool should read the directory.
 
-The request excludes portfolio quantity, acquisition price, source evidence identifiers, personal
-data, personal concentration thresholds, and credentials. Import accepts UTF-8 JSON or one
-otherwise-empty JSON code fence and rejects
-unknown fields, request mismatch, changed catalogs, unknown or duplicate facts, omitted selected
-sections, invalid order, unsafe connections, and responses over 65,536 bytes. Repeated imports are
-numbered trials without changing the request identity.
-
-Weekly requests include both portfolio decisions and remaining candidate decisions. Candidate fact
-IDs use the `candidate` namespace and candidate sections use the `candidate:` prefix, so a symbol
-cannot be confused with a portfolio-decision section or fact.
-
-The optional `marketsieve-agent` distribution consumes a validated decision report. Provider
-packages remain outside the SDK. A model chooses fact identifiers,
-section order, and bounded non-numeric connective text; a deterministic renderer inserts factual
-values and evidence. The agent owns no source, calculation, file, tool, delivery, or trading access.
-
-Test-local models validate the application pipeline without entering production selection. Each
-real provider has separate mocked-transport contract tests. LM Studio is local and loopback-only
-by default. Cloud use requires an explicit invocation flag and never becomes a fallback for a
-failed local or cloud provider.
+The projection contains exchange-qualified instrument identity, input artifact IDs, evidence,
+invalidation conditions, next actions, exact previous-report deltas, missing inputs, and
+diagnostics. It excludes position quantity, acquisition price, account type, source file path,
+personal identity, and credentials. External research and conversations never enter the canonical
+workspace. Free-form portfolio-import diagnostics are not copied across this boundary; only a safe
+omission count is exposed. Workspace reads validate the complete declared context structure before
+returning it as `analysis-context/v1`.
 
 ## Decision report storage
 
@@ -371,11 +337,11 @@ Explicit acquisition or import
     -> typed analysis context
     -> deterministic decision policy
     -> immutable decision report
-    -> Rich, text, JSON, Markdown, or optional model explanation
+    -> Rich, text, JSON, or Markdown
 ```
 
 The SDK owns portfolio, policy, decision, evidence, and report semantics without owning a clock,
-configuration, persistence, provider, renderer, or LLM. The CLI adapter serializes
+configuration, persistence, provider, or renderer. The CLI adapter serializes
 `decision-report/v1` as canonical sorted JSON, derives its SHA-256 report ID from semantic content,
 and generates deterministic Markdown from the validated report. The JSON object is evidence
 authority; Markdown and latest references are replaceable indexes and projections.
@@ -392,14 +358,21 @@ entering or leaving the reviewed portfolio explicitly.
 
 ## Personal Close Brief application architecture
 
-The CLI imports either one strict broker-neutral UTF-8 CSV or the verified no-holdings form of a
-Rakuten Securities CP932 `assetbalance(all)` export into a brokerage-neutral portfolio snapshot
-and content-addressed local store. It retains only normalized values and the source SHA-256 digest.
+The CLI imports either one holdings-only broker-neutral UTF-8 CSV or the verified no-holdings form
+of a Rakuten Securities CP932 twelve-column `assetbalance(all)` export into a brokerage-neutral
+portfolio snapshot and content-addressed local store. It retains only normalized values and the
+source SHA-256 digest.
 The source file is never copied below `.marketsieve`. The extension API defines portfolio import
 from the independently installable working Rakuten package. The immutable portfolio object retains
 the adapter name and version, dataset identity, source digest, and diagnostics beside the normalized
-snapshot. Application services read only the normalized snapshot. Its implemented
-economic-series capability is provided by the independently installable FRED package. The CLI owns
+snapshot. Broker imports never own watchlist items. Independent content-addressed watchlist
+revisions live below `.marketsieve/watchlists` and record the exact previous revision and optional
+screening provenance. Revision knowledge times are monotonic; a mutation older than its predecessor
+is rejected. Daily analysis composes holdings and watchlist in memory and gives holdings
+precedence over duplicate watchlist entries. The composed snapshot uses the later of the portfolio
+and watchlist revision times, so a backdated analysis rejects future watchlist state. Application
+services read only normalized values. The implemented economic-series capability is provided by the
+independently installable FRED package. The CLI owns
 source selection and report orchestration in addition to content-addressed storage and Markdown
 presentation. The implemented daily service selects one currency-qualified market from the latest
 portfolio and explicitly fetches price, financial, and event data for each instrument through one
@@ -425,14 +398,10 @@ IDs therefore participate in the report digest. Daily reports cannot claim input
 weekly report requires exactly two.
 
 Application use cases replace the growing snapshot-service orchestration surface. Acquisition,
-portfolio import, daily reporting, weekly reporting, report lookup, and model explanation have
-separate inputs and results. A small application-local content-addressed store may share atomic
+portfolio import, watchlist editing, daily reporting, weekly reporting, report lookup, and analysis
+projection have separate inputs and results. A small application-local content-addressed store may share atomic
 write and checksum mechanics across data, portfolio, and report repositories; their normalized
 schemas and validation remain separate.
-
-The production agent consumes a validated decision report. It cannot fetch data, read portfolio
-files, recalculate a decision, or replace a failed explanation with a different report. Test-model
-behavior remains in tests only.
 
 The root workspace package catalog is the authority for public distribution names, paths, import
 packages, build order, and isolation checks. Build scripts and tests derive their package sets from
@@ -442,9 +411,8 @@ that catalog instead of maintaining independent lists.
 
 The SDK owns immutable experiment specifications, replay windows, decisions, metrics, comparisons,
 and the pure replay function. The replay engine accepts already validated daily bars and has no
-filesystem, configuration, provider, model, or network dependency. Application code owns TOML
-input, snapshot resolution, content-addressed run storage, projections, and optional model
-explanations.
+filesystem, configuration, provider, or network dependency. Application code owns TOML input,
+snapshot resolution, content-addressed run storage, and projections.
 
 ## Screening domain
 
@@ -455,8 +423,10 @@ Only non-held `buy_candidate`, `wait_for_pullback`, and `wait_for_earnings` deci
 
 Candidate order is action priority, confidence priority, descending supporting-evidence count,
 then MIC and symbol. Supporting evidence count is exposed directly and is not a hidden aggregate
-score. Processing and display limits are positive explicit inputs. Reaching either limit produces a
-diagnostic, and a decision outside the processed universe is rejected.
+score. The caller may provide an explicit eligible subset of the immutable universe; this keeps
+MIC filtering and the evaluated set identical without changing universe provenance. Processing and
+display limits are positive explicit inputs. Reaching either limit produces a diagnostic, and a
+decision outside the processed eligible subset is rejected.
 
 The CLI separates acquisition from evaluation. `screen update jp|us` executes the configured
 instrument-universe `import` or `fetch` operation with an explicit acquisition limit. It stores the
@@ -470,6 +440,14 @@ instruments use the same decision policy but cannot enter candidate results. Scr
 content-addressed canonical JSON below `.marketsieve/screening/reports`, with market-specific latest
 references. `screen show` resolves an exact ID, a market latest reference, or the newest latest
 report across both markets.
+
+`screen refresh jp|us` validates daily-source compatibility before I/O. The universe request
+applies `eligible_mics` before `acquisition_limit`, then the refresh fetches at most `fetch_limit`
+compatible instruments for `lookback_days` and invokes the same offline screen. Its default
+knowledge time is fixed after all acquisition completes. Refresh exposes no historical-time option;
+historical evaluation uses offline `screen run`. It never retries, switches providers, or shortens
+a request. Excluded MICs, fetch limits, rate limits, partial failures, and missing evidence remain
+deterministic report diagnostics.
 
 The weekly use case reads, but never refreshes, the latest market-specific screening reports. It
 accepts only reports within the configured weekly age window. Candidate decisions and their source

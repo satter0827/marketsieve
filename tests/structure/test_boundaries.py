@@ -10,8 +10,6 @@ FORBIDDEN_SDK_IMPORTS = {
     "http",
     "logging",
     "marketsieve_cli",
-    "marketsieve_agent",
-    "marketsieve_ai",
     "marketsieve_extension_api",
     "marketsieve_import_rakuten",
     "marketsieve_source_csv",
@@ -53,26 +51,6 @@ def test_application_depends_on_public_sdk() -> None:
     imports = set().union(*(imported_roots(path) for path in application_source.rglob("*.py")))
 
     assert "marketsieve" in imports
-
-
-def test_ai_is_independent_from_cli_sources_and_io() -> None:
-    ai_source = ROOT / "packages" / "ai" / "src" / "marketsieve_ai"
-    imports = set().union(*(imported_roots(path) for path in ai_source.rglob("*.py")))
-
-    assert not imports & {
-        "click",
-        "http",
-        "marketsieve_cli",
-        "marketsieve_extension_api",
-        "marketsieve_import_rakuten",
-        "marketsieve_source_csv",
-        "marketsieve_source_jquants",
-        "marketsieve_source_alphavantage",
-        "marketsieve_source_fred",
-        "marketsieve_source_sec",
-        "marketsieve_source_edinet",
-        "os",
-    }
 
 
 def test_extension_and_source_packages_follow_inward_dependencies() -> None:

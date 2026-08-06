@@ -188,7 +188,12 @@ class CsvInstrumentUniverseImporter:
                 )
             except (KeyError, TypeError, ValueError) as error:
                 raise ValueError(f"invalid instrument-universe value on CSV line {line}") from error
-        ordered = tuple(sorted(instruments, key=lambda item: (item.mic, item.symbol)))
+        ordered_all = tuple(sorted(instruments, key=lambda item: (item.mic, item.symbol)))
+        ordered = tuple(
+            item
+            for item in ordered_all
+            if not request.eligible_mics or item.mic in request.eligible_mics
+        )
         identities = tuple((item.mic, item.symbol) for item in ordered)
         if len(identities) != len(set(identities)):
             raise ValueError("instrument-universe CSV contains duplicate instruments")
@@ -205,5 +210,15 @@ class CsvInstrumentUniverseImporter:
             source_hash=hashlib.sha256(raw).hexdigest(),
             provider_total=len(ordered),
             truncated=len(ordered) > len(selected),
-            diagnostics=(f"limit_reached:{request.limit}",) if len(ordered) > len(selected) else (),
+            diagnostics=tuple(
+                message
+                for condition, message in (
+                    (
+                        len(ordered_all) > len(ordered),
+                        f"ineligible_mics_excluded:{len(ordered_all) - len(ordered)}",
+                    ),
+                    (len(ordered) > len(selected), f"limit_reached:{request.limit}"),
+                )
+                if condition
+            ),
         )

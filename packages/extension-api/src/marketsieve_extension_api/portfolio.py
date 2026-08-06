@@ -43,6 +43,8 @@ class ImportedPortfolioSnapshot:
             self.diagnostics
         ):
             raise ValueError("portfolio diagnostics must be non-empty and unique")
+        if self.snapshot.watch_items:
+            raise ValueError("portfolio importers own holdings only; use the watchlist separately")
 
 
 @runtime_checkable

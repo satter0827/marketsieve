@@ -238,7 +238,12 @@ class JQuantsSource(DailyBarFetcher, FinancialFetcher, EventFetcher, InstrumentU
                 )
             except ValueError:
                 skipped += 1
-        ordered = tuple(sorted(instruments, key=lambda item: (item.mic, item.symbol)))
+        ordered_all = tuple(sorted(instruments, key=lambda item: (item.mic, item.symbol)))
+        ordered = tuple(
+            item
+            for item in ordered_all
+            if not request.eligible_mics or item.mic in request.eligible_mics
+        )
         identities = tuple((item.mic, item.symbol) for item in ordered)
         if len(identities) != len(set(identities)):
             raise ValueError("J-Quants returned duplicate instrument identities")
@@ -259,6 +264,10 @@ class JQuantsSource(DailyBarFetcher, FinancialFetcher, EventFetcher, InstrumentU
                 message
                 for condition, message in (
                     (skipped > 0, f"unsupported_rows_skipped:{skipped}"),
+                    (
+                        len(ordered_all) > len(ordered),
+                        f"ineligible_mics_excluded:{len(ordered_all) - len(ordered)}",
+                    ),
                     (len(ordered) > len(selected), f"limit_reached:{request.limit}"),
                 )
                 if condition

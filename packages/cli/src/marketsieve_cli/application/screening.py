@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -16,6 +16,7 @@ from marketsieve import (
     ScreeningReport,
 )
 from marketsieve.data.daily import DailyBar
+from marketsieve.domain import Instrument
 from marketsieve.portfolio import Holding
 from marketsieve_cli.contracts import ScreeningConfiguration
 from marketsieve_extension_api import (
@@ -28,6 +29,8 @@ from marketsieve_extension_api import (
 
 class ConfigurationReader(Protocol):
     def screening_configuration(self, market: str) -> ScreeningConfiguration: ...
+
+    def screening_refresh_configuration(self, market: str) -> ScreeningConfiguration: ...
 
 
 class UniversePluginRegistry(Protocol):
@@ -44,6 +47,18 @@ class SnapshotReader(Protocol):
 
 class PortfolioReader(Protocol):
     def latest_snapshot(self) -> PortfolioSnapshot: ...
+
+
+class DailyDataService(Protocol):
+    def fetch(
+        self,
+        profile_name: str,
+        instrument_key: str,
+        start: Any,
+        end: Any,
+        adjustment: str,
+        kind: str = "daily_bars",
+    ) -> dict[str, object]: ...
 
 
 class ScreeningRepository(Protocol):
@@ -66,19 +81,25 @@ class ScreeningService:
         portfolios: PortfolioReader,
         store: ScreeningRepository,
         configuration: ConfigurationReader,
+        data: DailyDataService | None = None,
     ) -> None:
         self._registry = registry
         self._snapshots = snapshots
         self._portfolios = portfolios
         self._store = store
         self._configuration = configuration
+        self._data = data
 
     def update(self, market: str) -> InstrumentUniverse:
         screening = self._configuration.screening_configuration(market)
         settings = dict(screening.settings)
         path_value = settings.pop("path", None)
         request = UniverseRequest(
-            screening.source_profile, market, screening.acquisition_limit, settings
+            screening.source_profile,
+            market,
+            screening.acquisition_limit,
+            settings,
+            screening.eligible_mics,
         )
         imported: ImportedInstrumentUniverse
         if screening.operation == "import":
@@ -97,7 +118,38 @@ class ScreeningService:
             raise ValueError("universe operation must be import or fetch")
         return self._store.put_universe(imported)
 
-    def run(self, market: str, *, as_of: datetime) -> ScreeningReport:
+    def refresh(self, market: str) -> ScreeningReport:
+        """Acquire a bounded universe and bounded price set, then screen it offline."""
+
+        if self._data is None:
+            raise RuntimeError("screen refresh requires a configured daily data service")
+        screening = self._configuration.screening_refresh_configuration(market)
+        universe = self.update(market)
+        acquisition_as_of = datetime.now().astimezone()
+        diagnostics: list[str] = []
+        compatible = self._compatible_instruments(universe, screening, diagnostics)
+        selected = compatible[: screening.fetch_limit]
+        if len(compatible) > len(selected):
+            diagnostics.append(f"refresh_fetch_limit_reached:{screening.fetch_limit}")
+        for instrument in selected:
+            key = f"{instrument.mic}:{instrument.symbol}"
+            end = acquisition_as_of.astimezone(instrument.exchange_timezone).date()
+            try:
+                self._data.fetch(
+                    screening.source_profile,
+                    key,
+                    end - timedelta(days=screening.lookback_days),
+                    end,
+                    "raw",
+                )
+            except (LookupError, OSError, RuntimeError, TypeError, ValueError) as error:
+                diagnostics.append(f"{key}:refresh_{self._failure_code(error)}")
+        report_as_of = datetime.now().astimezone()
+        return self.run(market, as_of=report_as_of, extra_diagnostics=tuple(diagnostics))
+
+    def run(
+        self, market: str, *, as_of: datetime, extra_diagnostics: tuple[str, ...] = ()
+    ) -> ScreeningReport:
         if as_of.tzinfo is None or as_of.utcoffset() is None:
             raise ValueError("screening as_of must include a UTC offset")
         screening = self._configuration.screening_configuration(market)
@@ -105,10 +157,11 @@ class ScreeningService:
         if universe.as_of.astimezone(UTC) > as_of.astimezone(UTC):
             raise ValueError("screening as_of must not predate the universe")
         holdings = self._holdings(as_of)
-        diagnostics = list(universe.diagnostics)
+        diagnostics = [*universe.diagnostics, *extra_diagnostics]
+        compatible = self._compatible_instruments(universe, screening, diagnostics)
         policy = BalancedMediumTermPolicy()
         decisions = []
-        for instrument in universe.instruments[: screening.processing_limit]:
+        for instrument in compatible[: screening.processing_limit]:
             key = (instrument.mic, instrument.symbol)
             evidence_ids: tuple[str, ...]
             try:
@@ -144,11 +197,40 @@ class ScreeningService:
             universe,
             tuple(decisions),
             as_of=as_of,
+            eligible_instruments=compatible,
             processing_limit=screening.processing_limit,
             display_limit=screening.display_limit,
             diagnostics=tuple(sorted(set(diagnostics))),
         )
         return self._store.put_report(report, market=market)
+
+    @staticmethod
+    def _compatible_instruments(
+        universe: InstrumentUniverse,
+        screening: ScreeningConfiguration,
+        diagnostics: list[str],
+    ) -> tuple[Instrument, ...]:
+        compatible = tuple(
+            instrument
+            for instrument in universe.instruments
+            if instrument.mic in screening.eligible_mics
+        )
+        excluded = sorted(
+            {instrument.mic for instrument in universe.instruments} - set(screening.eligible_mics)
+        )
+        diagnostics.extend(f"incompatible_mic_excluded:{mic}" for mic in excluded)
+        return compatible
+
+    @staticmethod
+    def _failure_code(error: Exception) -> str:
+        text = str(error).lower()
+        if "rate" in text or "limit" in text:
+            return "rate_limit"
+        if "credential" in text or "api key" in text or "authentication" in text:
+            return "credential"
+        if "range" in text or "history" in text:
+            return "insufficient_data"
+        return f"failed_{type(error).__name__}"
 
     def show(self, report_id: str, *, market: str | None = None) -> ScreeningReport:
         return self._store.resolve_report(report_id, market)

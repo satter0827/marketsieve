@@ -13,14 +13,14 @@ from marketsieve_cli.adapters.portfolios import (
     portfolio_document,
 )
 
-HEADER = "kind,mic,symbol,currency,timezone,quantity,average_acquisition_price,account_type\n"
+HEADER = "mic,symbol,currency,timezone,quantity,average_acquisition_price,account_type\n"
 
 
 def payload() -> bytes:
     return (
         HEADER
-        + "watch,XNAS,MSFT,USD,America/New_York,,,\n"
-        + "holding,XTKS,7203,JPY,Asia/Tokyo,10.5,2500,NISA\n"
+        + "XTKS,7203,JPY,Asia/Tokyo,10.5,2500,NISA\n"
+        + "XNAS,MSFT,USD,America/New_York,2,300,taxable\n"
     ).encode()
 
 
@@ -41,10 +41,8 @@ def test_canonical_import_is_sorted_typed_and_source_bytes_are_not_stored(tmp_pa
     assert store.latest_snapshot() == imported.snapshot
     assert [
         (item.instrument.mic, item.instrument.symbol) for item in restored.snapshot.holdings
-    ] == [("XTKS", "7203")]
-    assert [
-        (item.instrument.mic, item.instrument.symbol) for item in restored.snapshot.watch_items
-    ] == [("XNAS", "MSFT")]
+    ] == [("XNAS", "MSFT"), ("XTKS", "7203")]
+    assert restored.snapshot.watch_items == ()
     assert original not in (tmp_path / "portfolio" / "objects" / f"{object_id}.json").read_bytes()
 
 
@@ -53,10 +51,9 @@ def test_canonical_import_is_sorted_typed_and_source_bytes_are_not_stored(tmp_pa
     [
         (b"", "headers"),
         ((HEADER + "").encode(), "at least one"),
-        ((HEADER + "watch,XNAS,MSFT,USD,America/New_York,1,,\n").encode(), "leave"),
-        ((HEADER + "holding,XTKS,7203,JPY,Asia/Tokyo,nope,1,NISA\n").encode(), "amount"),
-        ((HEADER + "other,XTKS,7203,JPY,Asia/Tokyo,,,\n").encode(), "kind"),
-        ((HEADER + "watch,XNAS,MSFT,USD,Nowhere/Unknown,,,\n").encode(), "timezone"),
+        ((HEADER + "XTKS,7203,JPY,Asia/Tokyo,nope,1,NISA\n").encode(), "amount"),
+        ((HEADER + "XTKS,7203,JPY,Nowhere/Unknown,1,1,NISA\n").encode(), "timezone"),
+        ((HEADER + "XTKS,7203,JPY,Asia/Tokyo,1,1,\n").encode(), "account type"),
     ],
 )
 def test_canonical_import_rejects_ambiguous_input(body: bytes, error: str) -> None:
@@ -67,7 +64,7 @@ def test_canonical_import_rejects_ambiguous_input(body: bytes, error: str) -> No
 def test_import_rejects_futureless_timestamp_duplicate_and_oversized_source() -> None:
     with pytest.raises(ValueError, match="UTC offset"):
         import_canonical_csv(payload(), as_of=datetime(2026, 8, 6))
-    duplicate = payload() + b"watch,XNAS,MSFT,USD,America/New_York,,,\n"
+    duplicate = payload() + b"XNAS,MSFT,USD,America/New_York,2,300,taxable\n"
     with pytest.raises(ValueError, match="unique"):
         import_canonical_csv(duplicate, as_of=datetime(2026, 8, 6, tzinfo=UTC))
     with pytest.raises(ValueError, match="4 MiB"):

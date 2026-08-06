@@ -109,6 +109,24 @@ def test_screen_reports_processing_and_display_bounds() -> None:
             processing_limit=2,
         )
 
+    selected = (source.instruments[2],)
+    filtered = BalancedCandidateScreen().screen(
+        source,
+        (decision("CCC", DecisionAction.BUY_CANDIDATE, DecisionConfidence.HIGH, 1),),
+        as_of=source.as_of,
+        eligible_instruments=selected,
+        processing_limit=1,
+    )
+    assert filtered.processed_count == 1
+
+    with pytest.raises(ValueError, match="unique subset"):
+        BalancedCandidateScreen().screen(
+            source,
+            (),
+            as_of=source.as_of,
+            eligible_instruments=(selected[0], selected[0]),
+        )
+
 
 def test_screen_reports_display_bound_and_rejects_invalid_invocations() -> None:
     source = universe("AAA", "BBB")

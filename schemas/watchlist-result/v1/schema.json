@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:marketsieve:schema:watchlist-result:1.0.0",
+  "title": "MarketSieve Watchlist Result",
+  "type": "object",
+  "required": ["watchlist_id", "schema", "as_of", "previous_watchlist_id", "change", "items"],
+  "properties": {
+    "watchlist_id": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+    "schema": {"const": "watchlist-result/v1"},
+    "as_of": {"type": ["string", "null"], "format": "date-time"},
+    "previous_watchlist_id": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+    "change": {
+      "type": ["object", "null"],
+      "required": ["operation", "instrument"],
+      "properties": {
+        "operation": {"enum": ["add", "remove", "add_provenance"]},
+        "instrument": {"type": "string", "pattern": "^(XTKS|XNAS|XNYS):.+$"}
+      },
+      "additionalProperties": false
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["key", "instrument", "source_screen_report_id"],
+        "properties": {
+          "key": {"type": "string", "pattern": "^(XTKS|XNAS|XNYS):.+$"},
+          "instrument": {"$ref": "#/$defs/instrument"},
+          "source_screen_report_id": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "history_ids": {"type": "array", "items": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "instrument": {
+      "type": "object",
+      "required": ["mic", "symbol", "currency", "timezone", "type"],
+      "properties": {
+        "mic": {"enum": ["XTKS", "XNAS", "XNYS"]},
+        "symbol": {"type": "string", "minLength": 1},
+        "currency": {"enum": ["JPY", "USD"]},
+        "timezone": {"enum": ["Asia/Tokyo", "America/New_York"]},
+        "type": {"const": "equity"}
+      },
+      "additionalProperties": false
+    }
+  }
+}

@@ -6,16 +6,23 @@ from marketsieve_extension_api import SourceDiagnostic
 
 def test_portfolio_readiness_accepts_holdings_or_watch_items() -> None:
     assert supported_markets(
-        {"holdings": [{"instrument": {"currency": "JPY"}}], "watch_items": []}
+        {"holdings": [{"instrument": {"currency": "JPY"}}]}, {"items": []}
     ) == frozenset({"jp"})
     assert supported_markets(
-        {"holdings": [], "watch_items": [{"instrument": {"currency": "USD"}}]}
+        {"holdings": []}, {"items": [{"instrument": {"currency": "USD"}}]}
     ) == frozenset({"us"})
 
 
-def test_portfolio_readiness_rejects_an_empty_portfolio() -> None:
-    with pytest.raises(ValueError, match="no holdings or watch items"):
-        supported_markets({"holdings": [], "watch_items": []})
+def test_portfolio_readiness_accepts_an_empty_portfolio_and_watchlist() -> None:
+    assert supported_markets({"holdings": []}, {"items": []}) == frozenset()
+
+
+def test_portfolio_readiness_rejects_nonempty_unsupported_market() -> None:
+    with pytest.raises(ValueError, match="JPY or USD"):
+        supported_markets(
+            {"holdings": [{"instrument": {"currency": "EUR"}}]},
+            {"items": []},
+        )
 
 
 def test_portfolio_readiness_uses_each_configured_provider_diagnostic() -> None:

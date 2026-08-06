@@ -2,80 +2,78 @@
 
 ## Product objective
 
-MarketSieve helps a full-time worker operate a small personal portfolio of Japanese and U.S.
-equities without turning routine analysis into another full-time job. It converts explicit market,
-portfolio, and policy inputs into reproducible close-of-market and weekly decisions.
+MarketSieve helps a full-time worker review a small Japanese and U.S. equity portfolio without
+turning analysis into a second full-time job. It converts explicit data and policy inputs into
+reproducible static decisions, candidate screens, and history-comparable analysis context.
 
-The product optimizes for short, evidence-backed review sessions. It may conclude that no action is
-needed. It does not place orders, automate a brokerage session, run continuously, or deliver
-notifications.
+MarketSieve does not run a language model, send messages, place orders, automate a brokerage
+session, or persist external research and conversations.
 
 ## Implemented foundation
 
 - **FND-01:** `marketsieve` is a typed, I/O-independent public SDK.
-- **FND-02:** Market identity, time, daily bars, financial facts, events, economic series,
-  indicators, provenance, and evidence use deterministic public semantics.
-- **FND-03:** CSV, J-Quants, Alpha Vantage, FRED, SEC, and EDINET are explicit acquisition paths
-  with no implicit fallback or provider merging.
-- **FND-04:** Verified immutable snapshots support offline inspection, analysis, comparison, and
-  reporting.
-- **FND-05:** The optional agent can explain only an immutable decision-report fact catalog through
-  an explicitly selected local or cloud model. Explanation artifacts cannot modify report objects.
-- **FND-06:** A manual AI service can explain an immutable report through a content-addressed file
-  exchange without an API key. Request, response, validation, and explanation remain separate, and
-  the renderer accepts only report-owned values selected by validated fact IDs.
-- **FND-07:** Local and CI gates verify tests, dependency direction, distributions, and isolated
-  installation on supported Python versions.
-- **FND-08:** FRED supplies explicit economic-series observations with observation, retrieval, and
-  revision time semantics.
-- **FND-09:** Financial acquisitions preserve filing identity, amendment linkage, public time, and
-  fact-to-filing provenance so historical analysis can exclude facts not yet available.
-- **FND-10:** Financial trends select only compatible annual observations known at the requested
-  instant and retain deterministic period, metric, and evidence identities.
+- **FND-02:** Market identity, time, observations, indicators, provenance, decisions, and evidence
+  use deterministic public semantics.
+- **FND-03:** CSV, J-Quants, Alpha Vantage, FRED, SEC, and EDINET are explicit sources with no
+  implicit fallback, retry, provider merging, or request shortening.
+- **FND-04:** Verified immutable snapshots support offline inspection, comparison, screening,
+  reporting, and Strategy Lab runs.
+- **FND-05:** Repository gates verify dependency direction, schemas, distributions, isolated
+  installation, static types, formatting, lint, and tests.
+- **FND-06:** Static analysis context exposes only verified local artifacts and privacy-bounded
+  projections for external tools.
 
-## Personal Close Brief
+## Portfolio and watchlist
 
-- **PCB-01:** A portfolio snapshot represents holdings and watch items without brokerage-specific
-  types in the SDK.
-- **PCB-02:** A versioned decision policy produces an explicit held or unheld decision, confidence,
-  supporting evidence, opposing evidence, invalidation conditions, and next action.
-- **PCB-03:** `daily jp`, `daily us`, and `weekly` create immutable static reports from explicit
-  inputs and never require an LLM.
-- **PCB-04:** The same inputs, policy, configuration, and as-of instant produce the same decision,
-  report identity, JSON, and Markdown.
-- **PCB-05:** A partial run retains failed instruments as indeterminate. A run with no analyzable
-  instrument does not update a latest-report reference.
-- **PCB-06:** Human output leads with the conclusion, items needing attention, changes, and the next
-  action. No-action days are successful outcomes.
-- **PCB-07:** A verified no-holdings Rakuten `assetbalance(all)` export maps to an empty normalized
-  portfolio without retaining the source path, source bytes, customer identity, or account identity.
-  Unverified non-empty detail formats fail explicitly.
-- **PCB-08:** An agent explanation consumes an immutable decision report and cannot alter its
-  decisions, values, evidence, or identity.
-- **PCB-09:** External adapters can be independently developed and installed against a versioned
-  extension API with public conformance tests.
+- **PFW-01:** Broker import owns holdings only. `portfolio-result/v3` contains no watchlist item.
+- **PFW-02:** A verified empty twelve-column Rakuten `assetbalance(all)` export becomes a valid
+  empty holdings observation without retaining its path, bytes, customer identity, or account
+  identity.
+- **PFW-03:** Unsupported non-empty Rakuten details, contradictory security balances, unknown
+  sections, malformed rows, and invalid encoding fail explicitly.
+- **PFW-04:** Watchlist revisions are independent content-addressed objects with exact previous
+  revision and optional screening provenance.
+- **PFW-05:** Daily analysis composes the latest holdings and watchlist in memory. A holding wins
+  when the same instrument appears in both sources.
+- **PFW-06:** Empty holdings and an empty watchlist are ready states. Readiness points to bounded
+  discovery or explicit watchlist entry.
+
+## Decisions and screening
+
+- **DEC-01:** The balanced medium-term Decision Policy is deterministic and produces an explicit
+  held or unheld action, confidence, evidence, invalidation conditions, and next action.
+- **DEC-02:** Daily and weekly commands create immutable `decision-report/v1` JSON and deterministic
+  Markdown without model execution.
+- **DEC-03:** `screen update` and `screen run` retain explicit acquisition and offline-evaluation
+  boundaries.
+- **DEC-04:** `screen refresh` performs bounded universe acquisition, bounded daily-bar acquisition,
+  and offline screening in that order.
+- **DEC-05:** Fetch, lookback, processing, and display limits are configuration values. Partial
+  failure, rate limit, truncation, and missing data remain diagnostics.
+- **DEC-06:** Candidate actions identify additional-research states and never authorize a purchase.
+  Promotion to the watchlist requires an explicit human command.
+
+## Static analysis workspace
+
+- **ANL-01:** `analysis build` writes `README.md`, canonical `analysis-context/v1` JSON, and
+  deterministic `analysis.md` below `.marketsieve/analysis`.
+- **ANL-02:** Context contains artifact IDs, as-of times, holdings identities, watchlist history,
+  latest decision and screening reports, exact previous deltas, evidence, missing inputs, and
+  diagnostics.
+- **ANL-03:** Context excludes quantities, acquisition prices, account types, local CSV paths,
+  personal identifiers, and credentials.
+- **ANL-04:** Identical verified inputs produce the same context ID and identical bytes.
+- **ANL-05:** News, external claims, conversations, and external-tool output are not MarketSieve
+  artifacts.
 
 ## Product constraints
 
-- Japanese and U.S. instruments remain exchange-qualified. Symbols alone are not identities.
-- Acquisition is explicit. Read-only analysis never silently performs network access.
-- Missing, stale, incompatible, or unavailable data remains visible and cannot be converted to a
-  neutral value.
-- Thresholds and periods are named policy settings and are recorded in report evidence.
-- Provider credentials, account identifiers, source portfolio files, local state, and generated
-  reports are never tracked or distributed.
-- SDK code remains independent from the CLI, configuration, logging, network clients, persistence,
-  delivery, broker adapters, and LLM providers.
-- New public capability contracts require a working implementation and executable conformance
-  tests in the same change.
-
-## Current exclusions
-
-- Order placement and brokerage automation
-- Browser automation and session handling
-- Background scheduling and always-on services
-- LINE, email, and other delivery channels
-- Implicit provider fallback or provider merging
-- Opaque investment scores
-- Arbitrary Python expressions or `eval` in screening rules
-- Redistribution of provider market data or live personal portfolio data
+- Symbols are always exchange-qualified by MIC.
+- Read-only operations never acquire data implicitly.
+- Missing, stale, incompatible, and unavailable evidence remains visible.
+- Provider credentials enter through provider-specific environment variables only.
+- The SDK remains independent from CLI, configuration, logging, network, persistence, broker, and
+  external-tool infrastructure.
+- Current exclusions include orders, brokerage automation, background services, messaging,
+  browser automation, opaque scores, arbitrary expression evaluation, and redistribution of live
+  provider or personal data.
