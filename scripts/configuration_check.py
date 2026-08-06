@@ -22,7 +22,7 @@ def validate_daily_configuration(path: Path) -> None:
         diagnostic = sources.load_fetcher(binding.plugin).doctor(
             DailyBarSourceConfiguration(profile.currency, profile.timezone, binding.settings)
         )
-        if diagnostic.code == "invalid_configuration":
+        if diagnostic.code in {"invalid_configuration", "invalid_credential"}:
             raise ValueError(diagnostic.message)
     configuration.weekly_max_age_days()
 

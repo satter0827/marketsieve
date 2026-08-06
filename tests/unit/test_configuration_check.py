@@ -48,3 +48,12 @@ def test_daily_configuration_rejects_provider_settings_before_network_use(
 
     with pytest.raises(ValueError, match="plan must be free or premium"):
         validate_daily_configuration(config)
+
+
+def test_daily_configuration_rejects_malformed_credentials(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("ALPHAVANTAGE_API_KEY", "invalid\nvalue")
+
+    with pytest.raises(ValueError, match="invalid URL characters"):
+        validate_daily_configuration(ROOT / "marketsieve.example.toml")

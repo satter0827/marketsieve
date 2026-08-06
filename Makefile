@@ -54,9 +54,8 @@ daily-status: doctor ## Check configuration, portfolio, reports, and installatio
 		echo "[missing] configuration. Next VS Code operation: 01 First Run: Create Configuration" >&2; \
 		exit 2; \
 	fi
-	@uv run python -m scripts.configuration_check "$(CONFIG)" || { echo "Next: correct $(CONFIG) using marketsieve.example.toml as the reference" >&2; exit 2; }
-	@uv run marketsieve portfolio show >/dev/null 2>&1 || { echo "[missing] portfolio. Next VS Code operation: 02 First Run: Import Portfolio CSV" >&2; exit 2; }
-	@echo "[ready] portfolio"
+	@uv run python -m scripts.configuration_check "$(CONFIG)" || { echo "Next: correct $(CONFIG) or the credential environment variables" >&2; exit 2; }
+	@uv run python -m scripts.portfolio_check || { echo "Next VS Code operation: 02 First Run: Import Portfolio CSV" >&2; exit 2; }
 	@if test -n "$$JQUANTS_API_KEY"; then \
 		echo "[ready] JQUANTS_API_KEY for task 10"; \
 	else \
