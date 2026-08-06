@@ -35,27 +35,38 @@ weekend briefing includes fresh stored candidates in a section separate from por
 
 ## Daily use
 
-The primary AI workflow uses a new ChatGPT Temporary Chat through files; it does not require an API
-key or automate a browser. Create the request, upload the printed absolute path, save ChatGPT's JSON
-response to the recommended path, then import and show it. Use no Project, web search, or external
-tools, and disable Custom Instructions.
+Open **Run and Debug** in VS Code. The numbered launch configurations at the top define the complete
+operating order. Run `01` through `03` once, `10` or `20` after the corresponding market closes,
+`30` only at the weekend after both daily reports, and `40` after saving ChatGPT's JSON response.
+Tasks with the same labels remain available as an alternative entry point.
 
-| Operation | Terminal | VS Code Task | Network | Output |
+The primary AI workflow uses a new ChatGPT Temporary Chat through files; it does not require an API
+key or automate a browser. Upload the printed absolute request path, save the JSON response, then
+use task `40` to import and show it. Use no Project, web search, or external tools, and disable
+Custom Instructions.
+
+The ChatGPT exchange needs no API key, but market acquisition needs `JQUANTS_API_KEY` or
+`ALPHAVANTAGE_API_KEY`. Tasks inherit the VS Code process environment. If task `03` reports a
+missing variable, restart VS Code from an environment that defines it. Never put credential values
+in `tasks.json` or `marketsieve.toml`.
+
+| Operation | Terminal | VS Code launch configuration | Network | Output |
 | --- | --- | --- | --- | --- |
-| JP close and request | `make daily-jp-ai` | `Daily Use: JP Close + ChatGPT Request (Network)` | Market data only | report and `request.json` |
-| US close and request | `make daily-us-ai` | `Daily Use: US Close + ChatGPT Request (Network)` | Market data only | report and `request.json` |
-| Weekly brief and request | `make weekly-ai` | `Daily Use: Weekly Brief + ChatGPT Request` | No | report and `request.json` |
-| Prepare latest report | `make ai-prepare` | `Daily Use: Prepare ChatGPT Request from Latest Report` | No | `request.json` |
-| Import saved response | `make ai-import RESPONSE=/absolute/path/response.json` | `Daily Use: Import ChatGPT Response` | No | response, validation, explanation |
-| Show latest explanation | `make ai-show` | `Daily Use: Show Latest AI Explanation` | No | deterministic explanation |
-| Check setup | `make doctor` | `Daily Use: Status` | No | diagnostics |
+| 1. Create configuration | `make setup-config` | `01 First Run: Create Configuration` | No | `marketsieve.toml` |
+| 2. Import portfolio | `make portfolio-import PORTFOLIO=/absolute/path/holdings.csv` | `02 First Run: Import Portfolio CSV` | No | normalized portfolio |
+| 3. Check readiness | `make daily-status` | `03 First Run: Check Readiness` | No | diagnostics and next task |
+| 10. JP close analysis | `make daily-jp-ai` | `10 Daily: Analyze JP Close and Prepare ChatGPT Request (Network)` | Market data only | report and `request.json` |
+| 20. US close analysis | `make daily-us-ai` | `20 Daily: Analyze US Close and Prepare ChatGPT Request (Network)` | Market data only | report and `request.json` |
+| 30. Weekly brief | `make weekly-ai` | `30 Weekly: Build Brief and Prepare ChatGPT Request (After JP and US)` | No | report and `request.json` |
+| 40. Import and show response | `make ai-import-show RESPONSE=/absolute/path/response.json` | `40 ChatGPT: Import Saved Response and Show Explanation` | No | response, validation, explanation |
 
 ChatGPT selects supplied fact IDs, their order, and non-numeric relationships. MarketSieve validates
 that selection and renders values from the immutable report. Existing direct API and local-model
 Agent commands remain available as optional advanced workflows.
-Use `CONTROLLED=1` with `make ai-import` only after confirming the new Temporary Chat, disabled
-Custom Instructions, and disabled Project, web search, and external tools. The default records no
-such attestation.
+Use `CONTROLLED=1` only after confirming the new Temporary Chat, disabled Custom Instructions, and
+disabled Project, web search, and external tools. The default records no such attestation. Existing
+API providers, individual AI operations, and debug launchers remain available after the numbered
+workflow as advanced operations.
 
 ## Installation
 
@@ -175,9 +186,9 @@ make check
 make evidence
 ```
 
-VS Code uses the workspace `.venv`. Its Test Explorer supports ordinary runs, debugging, and
-interactive coverage after `make sync`. Tasks own daily operation and quality gates; Run and Debug
-owns generic CLI and manual AI-exchange debugging; Test Explorer owns tests and coverage.
+VS Code uses the workspace `.venv`. After `make sync`, Run and Debug is the primary daily-analysis
+entry point. Tasks mirror the same daily operations and own quality gates; the detailed launch
+configurations after the numbered workflow debug CLI code. Test Explorer owns tests and coverage.
 Interactive coverage is local feedback, while `make check` is the authoritative coverage gate.
 Local caches and generated artifacts are kept under `.marketsieve`; `.venv` is the only generated
 environment at the repository root.

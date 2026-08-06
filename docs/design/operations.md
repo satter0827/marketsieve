@@ -237,6 +237,15 @@ Temporary Chat without Project, web search, or external tools, saves the JSON re
 The import records controlled conditions only when the operator explicitly adds `CONTROLLED=1`;
 the default does not attest chat settings.
 
+The repository VS Code Run and Debug view presents the operational prerequisites and routine in
+executable order. Launch configurations `01` through `03` create a non-secret configuration without
+overwrite, import a selected portfolio CSV, and verify readiness. Configurations `10` and `20` run
+the independent market-close routines, configuration `30` creates the optional weekend brief after
+both daily reports, and configuration `40` imports and shows one saved response. Tasks mirror the
+same Makefile operations as an alternative entry point. Missing prerequisites identify the exact
+next numbered operation. Individual commands and code-debug launchers remain available after this
+primary path and do not replace it.
+
 The request, original response, validation, and explanation live in separate content-addressed
 directories below `.marketsieve/ai`. They are local generated evidence and are not committed.
 Temporary Chat reduces retained product history but does not remove the need to exclude private

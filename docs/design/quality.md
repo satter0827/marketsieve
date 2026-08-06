@@ -53,9 +53,9 @@ Documentation structure tests verify the formal-design index, local links, requi
 temporary-note naming, and the absence of duplicate legacy authorities.
 
 Repository tests also verify rename-normalized evidence paths, VS Code interpreter and development
-dependency contracts, executable editor tasks, the complete prompt-based CLI launch path, curated
-launch workflows, Ruleset drift detection, and timezone availability when the operating system has
-no timezone database.
+dependency contracts, the ordered first-use and daily-analysis launch configurations and Tasks,
+exact Makefile delegation, the complete prompt-based CLI debug path, Ruleset drift detection, and
+timezone availability when the operating system has no timezone database.
 
 ## Evidence gates
 

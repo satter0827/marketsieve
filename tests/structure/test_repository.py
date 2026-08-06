@@ -91,6 +91,10 @@ def test_vscode_configuration_uses_installed_workspace_contracts() -> None:
         "settings.json",
         "tasks.json",
     }
+    assert all(
+        all(ord(character) < 128 for character in path.read_text(encoding="utf-8"))
+        for path in vscode.glob("*.json")
+    )
 
     workspace = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     dependency_names = {
@@ -108,13 +112,17 @@ def test_vscode_configuration_uses_installed_workspace_contracts() -> None:
     tasks_document = json.loads((vscode / "tasks.json").read_text(encoding="utf-8"))
     tasks = tasks_document["tasks"]
     assert [task["label"] for task in tasks] == [
-        "Daily Use: JP Close + ChatGPT Request (Network)",
-        "Daily Use: US Close + ChatGPT Request (Network)",
-        "Daily Use: Weekly Brief + ChatGPT Request",
-        "Daily Use: Prepare ChatGPT Request from Latest Report",
-        "Daily Use: Import ChatGPT Response",
-        "Daily Use: Show Latest AI Explanation",
-        "Daily Use: Status",
+        "01 First Run: Create Configuration",
+        "02 First Run: Import Portfolio CSV",
+        "03 First Run: Check Readiness",
+        "10 Daily: Analyze JP Close and Prepare ChatGPT Request (Network)",
+        "20 Daily: Analyze US Close and Prepare ChatGPT Request (Network)",
+        "30 Weekly: Build Brief and Prepare ChatGPT Request (After JP and US)",
+        "40 ChatGPT: Import Saved Response and Show Explanation",
+        "Advanced: Prepare ChatGPT Request from Latest Report",
+        "Advanced: Show Portfolio",
+        "Advanced: Import ChatGPT Response Only",
+        "Advanced: Show Latest AI Explanation Only",
         "Developer: Sync",
         "Developer: Format",
         "Developer: Test Current File",
@@ -123,23 +131,44 @@ def test_vscode_configuration_uses_installed_workspace_contracts() -> None:
     ]
     commands = [" ".join([task["command"], *task.get("args", [])]) for task in tasks]
     assert commands == [
+        "make setup-config",
+        "make portfolio-import PORTFOLIO=${input:portfolioPath} BROKER=${input:portfolioBroker}",
+        "make daily-status",
         "make daily-jp-ai",
         "make daily-us-ai",
         "make weekly-ai",
+        "make ai-import-show RESPONSE=${input:aiResponsePath} CONTROLLED=${input:aiControlled}",
         "make ai-prepare",
-        "make ai-import RESPONSE=${input:aiResponsePath}",
+        "make portfolio-show",
+        "make ai-import RESPONSE=${input:aiResponsePath} CONTROLLED=${input:aiControlled}",
         "make ai-show",
-        "make doctor",
         "make sync",
         "make format",
         "make test TEST=${relativeFile}",
         "make check",
         "make evidence",
     ]
-    import_task = tasks[4]
+    import_task = tasks[6]
     assert import_task["type"] == "process"
     assert import_task["command"] == "make"
-    assert import_task["args"] == ["ai-import", "RESPONSE=${input:aiResponsePath}"]
+    assert import_task["args"] == [
+        "ai-import-show",
+        "RESPONSE=${input:aiResponsePath}",
+        "CONTROLLED=${input:aiControlled}",
+    ]
+    assert all(task["type"] == "process" for task in tasks[:11])
+    assert all("detail" in task for task in tasks[:7])
+    task_input_ids = {entry["id"] for entry in tasks_document["inputs"]}
+    assert task_input_ids == {
+        "portfolioPath",
+        "portfolioBroker",
+        "aiResponsePath",
+        "aiControlled",
+    }
+    task_input_pattern = re.compile(r"\$\{input:([^}]+)\}")
+    assert all(
+        set(task_input_pattern.findall(json.dumps(task))) <= task_input_ids for task in tasks
+    )
     make_targets = set(
         re.findall(r"^([a-zA-Z0-9_-]+):", (ROOT / "Makefile").read_text(encoding="utf-8"), re.M)
     )
@@ -152,24 +181,56 @@ def test_vscode_configuration_uses_installed_workspace_contracts() -> None:
     launches = launch_document["configurations"]
     launches_by_name = {launch["name"]: launch for launch in launches}
     assert len(launches_by_name) == len(launches)
-    assert launches_by_name["Debug: CLI Command (Prompt for Arguments)"]["args"] == (
-        "${command:pickArgs}"
-    )
-    assert set(launches_by_name) == {
-        "Debug: CLI Command (Prompt for Arguments)",
-        "Debug: Prepare ChatGPT Request",
-        "Debug: Import ChatGPT Response",
+    operational_launches = launches[:7]
+    assert [launch["name"] for launch in operational_launches] == [
+        task["label"] for task in tasks[:7]
+    ]
+    assert [launch["command"] for launch in operational_launches] == [
+        "make setup-config",
+        "make portfolio-import",
+        "make daily-status",
+        "make daily-jp-ai",
+        "make daily-us-ai",
+        "make weekly-ai",
+        "make ai-import-show",
+    ]
+    assert all(launch["type"] == "node-terminal" for launch in operational_launches)
+    assert all(launch["request"] == "launch" for launch in operational_launches)
+    assert all(launch["cwd"] == "${workspaceFolder}" for launch in operational_launches)
+    assert operational_launches[1]["env"] == {
+        "PORTFOLIO": "${input:portfolioPath}",
+        "BROKER": "${input:portfolioBroker}",
     }
+    assert operational_launches[6]["env"] == {
+        "RESPONSE": "${input:aiResponsePath}",
+        "CONTROLLED": "${input:aiControlled}",
+    }
+
+    debug_launches = launches[7:]
+    debug_by_name = {launch["name"]: launch for launch in debug_launches}
+    assert set(debug_by_name) == {
+        "Advanced: Debug CLI Command",
+        "Advanced: Debug ChatGPT Request Preparation (Existing Report Required)",
+        "Advanced: Debug ChatGPT Response Import",
+    }
+    assert debug_by_name["Advanced: Debug CLI Command"]["args"] == ("${command:pickArgs}")
+    assert all(not launch["name"].startswith(("Developer", "Debug")) for launch in launches)
 
     input_ids = {entry["id"] for entry in launch_document["inputs"]}
     assert len(input_ids) == len(launch_document["inputs"])
-    assert input_ids == {"aiResponsePath"}
+    assert input_ids == {
+        "portfolioPath",
+        "portfolioBroker",
+        "aiResponsePath",
+        "aiControlled",
+    }
     assert all(
         "${workspaceFolder}" not in str(entry.get("default", ""))
         for entry in launch_document["inputs"]
     )
     input_pattern = re.compile(r"\$\{input:([^}]+)\}")
-    for launch in launches:
+    assert all(set(input_pattern.findall(json.dumps(launch))) <= input_ids for launch in launches)
+    for launch in debug_launches:
         assert launch["type"] == "debugpy"
         assert launch["request"] == "launch"
         assert launch["module"] == "marketsieve_cli"
@@ -180,16 +241,18 @@ def test_vscode_configuration_uses_installed_workspace_contracts() -> None:
             == "${workspaceFolder}/.marketsieve/cache/python"
         )
 
-        serialized = json.dumps(launch)
-        assert set(input_pattern.findall(serialized)) <= input_ids
-
-    assert launches_by_name["Debug: Prepare ChatGPT Request"]["args"] == [
+    assert debug_by_name["Advanced: Debug ChatGPT Request Preparation (Existing Report Required)"][
+        "args"
+    ] == [
         "ai",
         "prepare",
         "report",
         "latest",
     ]
-    assert launches_by_name["Debug: Import ChatGPT Response"]["args"][:2] == ["ai", "import"]
+    assert debug_by_name["Advanced: Debug ChatGPT Response Import"]["args"][:2] == [
+        "ai",
+        "import",
+    ]
 
 
 def test_synthetic_timezones_work_without_an_os_timezone_database() -> None:
@@ -209,11 +272,16 @@ def test_makefile_exposes_stable_entry_points() -> None:
     makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
     targets = (
         "help",
+        "setup-config",
+        "portfolio-import",
+        "portfolio-show",
+        "daily-status",
         "daily-jp-ai",
         "daily-us-ai",
         "weekly-ai",
         "ai-prepare",
         "ai-import",
+        "ai-import-show",
         "ai-show",
         "sync",
         "format",
@@ -248,8 +316,36 @@ def test_makefile_exposes_stable_entry_points() -> None:
         recipe = makefile.split(f"{target}:", maxsplit=1)[1].split("\n\n", maxsplit=1)[0]
         assert recipe.index(report_command) < recipe.index("ai prepare report latest")
     assert makefile.index("daily-jp-ai:") < makefile.index("sync:")
+    assert makefile.index("setup-config:") < makefile.index("daily-jp-ai:")
     assert "daily-jp-ai: ## Daily JP close report (Network)" in makefile
     assert "daily-us-ai: ## Daily US close report (Network)" in makefile
+
+
+def test_setup_config_is_idempotent_and_does_not_overwrite(tmp_path: Path) -> None:
+    config_directory = tmp_path / "directory with spaces"
+    config_directory.mkdir()
+    config = config_directory / "marketsieve.toml"
+    first = subprocess.run(
+        ["make", "setup-config", f"CONFIG={config}"],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert config.read_bytes() == (ROOT / "marketsieve.example.toml").read_bytes()
+    assert "Created configuration" in first.stdout
+    assert str(config) in first.stdout
+
+    config.write_text("sentinel = true\n", encoding="utf-8")
+    second = subprocess.run(
+        ["make", "setup-config", f"CONFIG={config}"],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert config.read_text(encoding="utf-8") == "sentinel = true\n"
+    assert "already exists" in second.stdout
 
 
 def test_ci_and_rulesets_use_stable_gate_names() -> None:

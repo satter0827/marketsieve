@@ -7,6 +7,9 @@ RESPONSE ?=
 REPORT ?= latest
 CONFIG ?= marketsieve.toml
 CONTROLLED ?= 0
+PORTFOLIO ?=
+BROKER ?= canonical
+AS_OF ?= $(shell date +"%Y-%m-%dT%H:%M:%S%z")
 BASE_SHA ?= origin/develop
 HEAD_SHA ?= HEAD
 REVIEWED_SHA ?=
@@ -21,23 +24,65 @@ RELEASE_DIR ?= $(STATE_DIR)/artifacts/release/$(COMMIT)
 export UV_CACHE_DIR := $(abspath $(STATE_DIR))/cache/uv
 export PYTHONPYCACHEPREFIX := $(abspath $(STATE_DIR))/cache/python
 
-.PHONY: help daily-jp-ai daily-us-ai weekly-ai ai-prepare ai-import ai-show doctor sync format format-check lint typecheck test secret-check check capabilities-json build evidence evidence-bundle evidence-validate review-attest governance-check release-build release-verify release-check clean-generated
+.PHONY: help setup-config portfolio-import portfolio-show daily-status daily-jp-ai daily-us-ai weekly-ai ai-prepare ai-import ai-import-show ai-show doctor sync format format-check lint typecheck test secret-check check capabilities-json build evidence evidence-bundle evidence-validate review-attest governance-check release-build release-verify release-check clean-generated
 
 help: ## Show daily-use commands first, followed by developer commands.
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z0-9_-]+:.*## / {printf "%-22s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
+setup-config: ## First use: create the non-secret configuration without overwriting an existing file.
+	@if test -f "$(CONFIG)"; then \
+		echo "Configuration already exists: $(CONFIG)"; \
+	else \
+		cp marketsieve.example.toml "$(CONFIG)"; \
+		echo "Created configuration: $(CONFIG)"; \
+	fi
+	@echo "Credentials stay in environment variables and are never written to this file."
+	@echo "Next VS Code operation: 02 First Run: Import Portfolio CSV"
+
+portfolio-import: ## First use: import PORTFOLIO=... with BROKER=canonical|rakuten (Offline).
+	@test -n "$(PORTFOLIO)" || { echo "PORTFOLIO is required. Next: make portfolio-import PORTFOLIO=/absolute/path/holdings.csv" >&2; exit 2; }
+	@test -f "$(PORTFOLIO)" || { echo "Portfolio file not found: $(PORTFOLIO)" >&2; exit 2; }
+	uv run marketsieve portfolio import "$(PORTFOLIO)" --broker "$(BROKER)" --as-of "$(AS_OF)"
+	@echo "Imported with as-of: $(AS_OF)"
+	@echo "Next VS Code operation: 03 First Run: Check Readiness"
+
+portfolio-show: ## Show the latest normalized portfolio (Offline).
+	uv run marketsieve portfolio show
+
+daily-status: doctor ## Check configuration, portfolio, reports, and installation (Offline).
+	@if test -f "$(CONFIG)"; then \
+		echo "[ready] configuration: $(CONFIG)"; \
+	else \
+		echo "[missing] configuration. Next VS Code operation: 01 First Run: Create Configuration" >&2; \
+		exit 2; \
+	fi
+	@uv run marketsieve portfolio show >/dev/null 2>&1 || { echo "[missing] portfolio. Next VS Code operation: 02 First Run: Import Portfolio CSV" >&2; exit 2; }
+	@echo "[ready] portfolio"
+	@if test -n "$$JQUANTS_API_KEY"; then \
+		echo "[ready] JQUANTS_API_KEY for task 10"; \
+	else \
+		echo "[missing] JQUANTS_API_KEY; task 10 cannot acquire JP data"; \
+	fi
+	@if test -n "$$ALPHAVANTAGE_API_KEY"; then \
+		echo "[ready] ALPHAVANTAGE_API_KEY for task 20"; \
+	else \
+		echo "[missing] ALPHAVANTAGE_API_KEY; task 20 cannot acquire US data"; \
+	fi
+	@uv run marketsieve report list --output json
+	@echo "Next daily operation: 10 Daily: Analyze JP Close and Prepare ChatGPT Request (Network), or 20 Daily: Analyze US Close and Prepare ChatGPT Request (Network)"
+
 daily-jp-ai: ## Daily JP close report (Network), then prepare a ChatGPT request.
-	@test -f "$(CONFIG)" || { echo "Missing $(CONFIG). Next: cp marketsieve.example.toml $(CONFIG), edit it, then run make doctor" >&2; exit 2; }
+	@test -f "$(CONFIG)" || { echo "Missing $(CONFIG). Next VS Code operation: 01 First Run: Create Configuration" >&2; exit 2; }
 	uv run marketsieve --config "$(CONFIG)" daily jp
 	uv run marketsieve ai prepare report latest
 
 daily-us-ai: ## Daily US close report (Network), then prepare a ChatGPT request.
-	@test -f "$(CONFIG)" || { echo "Missing $(CONFIG). Next: cp marketsieve.example.toml $(CONFIG), edit it, then run make doctor" >&2; exit 2; }
+	@test -f "$(CONFIG)" || { echo "Missing $(CONFIG). Next VS Code operation: 01 First Run: Create Configuration" >&2; exit 2; }
 	uv run marketsieve --config "$(CONFIG)" daily us
 	uv run marketsieve ai prepare report latest
 
 weekly-ai: ## Weekly brief (Offline), then prepare a ChatGPT request.
-	@test -f "$(CONFIG)" || { echo "Missing $(CONFIG). Next: cp marketsieve.example.toml $(CONFIG), edit it, then run make doctor" >&2; exit 2; }
+	@test -f "$(CONFIG)" || { echo "Missing $(CONFIG). Next VS Code operation: 01 First Run: Create Configuration" >&2; exit 2; }
 	uv run marketsieve --config "$(CONFIG)" weekly
 	uv run marketsieve ai prepare report latest
 
@@ -48,6 +93,9 @@ ai-import: ## Import RESPONSE=... (Offline); add CONTROLLED=1 only after checkin
 	@test -n "$(RESPONSE)" || { echo "RESPONSE is required. Next: make ai-import RESPONSE=/absolute/path/response.json" >&2; exit 2; }
 	@test -f "$(RESPONSE)" || { echo "Response file not found: $(RESPONSE)" >&2; exit 2; }
 	uv run marketsieve ai import "$(RESPONSE)" $(if $(filter 1,$(CONTROLLED)),--controlled,)
+
+ai-import-show: ai-import ## Import RESPONSE=..., then show the validated explanation (Offline).
+	uv run marketsieve ai show latest
 
 ai-show: ## Show the latest validated AI explanation (Offline).
 	uv run marketsieve ai show latest
