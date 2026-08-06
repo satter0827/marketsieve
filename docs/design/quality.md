@@ -52,16 +52,18 @@ reports remain excluded.
 Documentation structure tests verify the formal-design index, local links, required design files,
 temporary-note naming, and the absence of duplicate legacy authorities.
 
-Repository tests also verify rename-normalized evidence paths, VS Code bytecode-cache placement,
-Ruleset drift detection, and timezone availability when the operating system has no timezone
-database.
+Repository tests also verify rename-normalized evidence paths, VS Code interpreter and development
+dependency contracts, executable editor tasks and launch configurations, Ruleset drift detection,
+and timezone availability when the operating system has no timezone database.
 
 ## Evidence gates
 
 The Develop Gate runs formatting, lint, strict typing, import contracts, structure and behavior
-tests, branch coverage, schema validation, CLI smoke tests, package checks, public-artifact
-inspection, isolated installation, and whitespace validation once. Its machine-readable evidence
-is retained under `.marketsieve/artifacts/checks/<commit>/`.
+tests, branch-enabled coverage, schema validation, CLI smoke tests, package checks, public-artifact
+inspection, isolated installation, and whitespace validation once. Branch-enabled coverage must be
+at least 90 percent. Its machine-readable evidence is retained under
+`.marketsieve/artifacts/checks/<commit>/`. VS Code coverage is interactive local feedback and does
+not apply the repository-wide threshold or replace Develop Gate evidence.
 
 The Evidence Gate reuses that evidence. It creates `review.json` as the authoritative report,
 `summary.md` as its deterministic human projection, a text-only patch, supporting evidence, JSON

@@ -26,6 +26,7 @@ EXTERNAL_PLUGIN_EXAMPLES = (
     ROOT / "examples" / "instrument-universe-plugin",
     ROOT / "examples" / "portfolio-importer-plugin",
 )
+MINIMUM_COVERAGE_PERCENT = 90
 
 
 def run(command: Sequence[str], *, cwd: Path = ROOT) -> None:
@@ -95,7 +96,15 @@ def check_tests(path: Path) -> None:
             f"--junitxml={junit}",
         )
     )
-    run(("uv", "run", "coverage", "report"))
+    run(
+        (
+            "uv",
+            "run",
+            "coverage",
+            "report",
+            f"--fail-under={MINIMUM_COVERAGE_PERCENT}",
+        )
+    )
     run(("uv", "run", "coverage", "json", "-o", str(coverage_json)))
 
 
