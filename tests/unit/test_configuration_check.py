@@ -37,3 +37,14 @@ def test_daily_configuration_requires_an_installed_daily_bar_fetcher(tmp_path: P
 
     with pytest.raises(ValueError, match="not-installed"):
         validate_daily_configuration(config)
+
+
+def test_daily_configuration_rejects_provider_settings_before_network_use(
+    tmp_path: Path,
+) -> None:
+    config = tmp_path / "invalid-provider-settings.toml"
+    document = (ROOT / "marketsieve.example.toml").read_text(encoding="utf-8")
+    config.write_text(document.replace('plan = "free"', 'plan = "bogus"'), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="plan must be free or premium"):
+        validate_daily_configuration(config)

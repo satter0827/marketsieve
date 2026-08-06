@@ -7,6 +7,7 @@ from pathlib import Path
 
 from marketsieve_cli.adapters.config import Configuration
 from marketsieve_cli.adapters.plugins import SourcePluginRegistry
+from marketsieve_extension_api import DailyBarSourceConfiguration
 
 
 def validate_daily_configuration(path: Path) -> None:
@@ -16,8 +17,13 @@ def validate_daily_configuration(path: Path) -> None:
     sources = SourcePluginRegistry()
     for market in ("jp", "us"):
         source_name, _, _ = configuration.daily_profile(market)
-        binding = configuration.source_profile(source_name).binding("daily_bars")
-        sources.load_fetcher(binding.plugin)
+        profile = configuration.source_profile(source_name)
+        binding = profile.binding("daily_bars")
+        diagnostic = sources.load_fetcher(binding.plugin).doctor(
+            DailyBarSourceConfiguration(profile.currency, profile.timezone, binding.settings)
+        )
+        if diagnostic.code == "invalid_configuration":
+            raise ValueError(diagnostic.message)
     configuration.weekly_max_age_days()
 
 
