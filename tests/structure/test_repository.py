@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 import tomllib
@@ -82,7 +83,7 @@ def test_ignore_files_exclude_private_key_suffixes() -> None:
         assert required <= patterns
 
 
-def test_shared_vscode_tasks_use_make_targets() -> None:
+def test_vscode_configuration_uses_installed_workspace_contracts() -> None:
     vscode = ROOT / ".vscode"
     assert {path.name for path in vscode.glob("*.json")} == {
         "extensions.json",
@@ -90,6 +91,19 @@ def test_shared_vscode_tasks_use_make_targets() -> None:
         "settings.json",
         "tasks.json",
     }
+
+    workspace = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    dependency_names = {
+        re.split(r"[<>=!~\[]", dependency, maxsplit=1)[0]
+        for dependency in workspace["dependency-groups"]["dev"]
+    }
+    assert {"coverage", "pytest", "pytest-cov"} <= dependency_names
+
+    settings = json.loads((vscode / "settings.json").read_text(encoding="utf-8"))
+    assert settings["python.defaultInterpreterPath"] == "${workspaceFolder}/.venv/bin/python"
+    assert settings["python.testing.pytestArgs"] == ["tests"]
+    assert settings["python.testing.pytestEnabled"] is True
+    assert settings["python.testing.unittestEnabled"] is False
 
     tasks = json.loads((vscode / "tasks.json").read_text(encoding="utf-8"))["tasks"]
     commands = {task["command"] for task in tasks}
@@ -101,17 +115,35 @@ def test_shared_vscode_tasks_use_make_targets() -> None:
         "make test TEST=${relativeFile}",
         "make evidence",
         "make evidence-validate",
-        "make report",
-        "make report-json",
         "make capabilities-json",
     }
-    launches = json.loads((vscode / "launch.json").read_text(encoding="utf-8"))["configurations"]
-    assert launches
-    assert all(
-        launch.get("env", {}).get("PYTHONPYCACHEPREFIX")
-        == "${workspaceFolder}/.marketsieve/cache/python"
-        for launch in launches
+    make_targets = set(
+        re.findall(r"^([a-zA-Z0-9_-]+):", (ROOT / "Makefile").read_text(encoding="utf-8"), re.M)
     )
+    referenced_targets = {
+        command.removeprefix("make ").split(maxsplit=1)[0] for command in commands
+    }
+    assert referenced_targets <= make_targets
+
+    launches = json.loads((vscode / "launch.json").read_text(encoding="utf-8"))["configurations"]
+    assert [(launch["name"], launch["module"], launch["args"]) for launch in launches] == [
+        ("App: Doctor", "marketsieve_cli", ["doctor"])
+    ]
+    for launch in launches:
+        assert (
+            launch.get("env", {}).get("PYTHONPYCACHEPREFIX")
+            == "${workspaceFolder}/.marketsieve/cache/python"
+        )
+        environment = os.environ.copy()
+        environment["PYTHONPYCACHEPREFIX"] = str(ROOT / ".marketsieve/cache/python")
+        subprocess.run(
+            [sys.executable, "-m", launch["module"], *launch["args"]],
+            cwd=ROOT,
+            env=environment,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
 
 
 def test_synthetic_timezones_work_without_an_os_timezone_database() -> None:

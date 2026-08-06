@@ -5,45 +5,9 @@
       "name": "App: Doctor",
       "type": "debugpy",
       "request": "launch",
-      "module": "marketsieve_app",
+      "module": "marketsieve_cli",
       "args": [
         "doctor"
-      ],
-      "env": {
-        "PYTHONPYCACHEPREFIX": "${workspaceFolder}/.marketsieve/cache/python"
-      },
-      "console": "integratedTerminal",
-      "justMyCode": true
-    },
-    {
-      "name": "App: Report",
-      "type": "debugpy",
-      "request": "launch",
-      "module": "marketsieve_app",
-      "args": [
-        "report",
-        "--market",
-        "all",
-        "--output",
-        "rich"
-      ],
-      "env": {
-        "PYTHONPYCACHEPREFIX": "${workspaceFolder}/.marketsieve/cache/python"
-      },
-      "console": "integratedTerminal",
-      "justMyCode": true
-    },
-    {
-      "name": "App: Report JSON",
-      "type": "debugpy",
-      "request": "launch",
-      "module": "marketsieve_app",
-      "args": [
-        "report",
-        "--market",
-        "all",
-        "--output",
-        "json"
       ],
       "env": {
         "PYTHONPYCACHEPREFIX": "${workspaceFolder}/.marketsieve/cache/python"

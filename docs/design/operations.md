@@ -15,13 +15,11 @@ persist an immutable Close Brief.
 make sync
 uv run marketsieve --version
 make doctor
-make report
-make report-json
 make capabilities-json
 make build
 ```
 
-The listed development and synthetic-report operations require no secrets or provider accounts.
+The listed development operations require no secrets or provider accounts.
 J-Quants fetch is a separate explicit operation that requires its environment credential and writes
 an immutable snapshot below `.marketsieve/data`.
 
@@ -49,20 +47,19 @@ Develop evidence, review bundles, and release candidates are stored below
 from it for human reading. Logs and schemas exclude credentials, recipients, portfolio data, and
 unbounded exception dumps.
 
-## Historical report operation
+## Decision report operation
 
-The deterministic report is backed only by repository-owned synthetic fixtures. It remains runnable
-after dependency installation without external accounts or live services:
+Stored decision reports are read and exported without contacting a provider:
 
 ```shell
-make report
-make report-json
-make capabilities-json
+uv run marketsieve report list --output json
+uv run marketsieve report show latest --output json
+uv run marketsieve report export latest --format markdown
 ```
 
-Generated command output is ephemeral and is not committed as a report or fixture. Interactive
-terminals receive Rich output, while redirection receives ANSI-free text. JSON output is selected
-explicitly for machine consumers.
+The list command succeeds with an empty result when no report exists. Show and export require an
+existing verified report. Interactive terminals receive Rich output, while redirection receives
+ANSI-free text. JSON output is selected explicitly for machine consumers.
 
 The decision-report adapter stores canonical JSON below `.marketsieve/reports/objects`, generated
 Markdown below `.marketsieve/reports/rendered`, and atomic per-session latest references below

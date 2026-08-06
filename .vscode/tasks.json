@@ -46,18 +46,6 @@
       "problemMatcher": []
     },
     {
-      "label": "App: Report",
-      "type": "shell",
-      "command": "make report",
-      "problemMatcher": []
-    },
-    {
-      "label": "App: Report JSON",
-      "type": "shell",
-      "command": "make report-json",
-      "problemMatcher": []
-    },
-    {
       "label": "App: Capabilities JSON",
       "type": "shell",
       "command": "make capabilities-json",

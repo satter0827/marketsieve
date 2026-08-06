@@ -71,3 +71,43 @@ def test_complete_gate_scans_before_and_after_execution(
         "package",
         "secrets",
     ]
+
+
+def test_test_gate_runs_once_and_enforces_coverage_threshold(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    commands: list[tuple[str, ...]] = []
+    state_root = tmp_path / "state"
+    evidence = tmp_path / "evidence"
+    evidence.mkdir()
+    monkeypatch.setattr(develop_gate, "STATE_ROOT", state_root)
+    monkeypatch.setattr(develop_gate, "run", commands.append)
+
+    develop_gate.check_tests(evidence)
+
+    assert commands == [
+        (
+            "uv",
+            "run",
+            "coverage",
+            "run",
+            "-m",
+            "pytest",
+            f"--junitxml={evidence / 'junit.xml'}",
+        ),
+        (
+            "uv",
+            "run",
+            "coverage",
+            "report",
+            f"--fail-under={develop_gate.MINIMUM_COVERAGE_PERCENT}",
+        ),
+        (
+            "uv",
+            "run",
+            "coverage",
+            "json",
+            "-o",
+            str(evidence / "coverage.json"),
+        ),
+    ]
