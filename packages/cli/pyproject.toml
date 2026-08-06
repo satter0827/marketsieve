@@ -12,15 +12,11 @@ authors = [
 dependencies = [
     "click>=8.1,<9",
     "marketsieve>=0.8,<0.9",
-    "marketsieve-ai>=0.8,<0.9",
     "marketsieve-extension-api>=0.8,<0.9",
     "rich>=14,<15",
 ]
 
 [project.optional-dependencies]
-agent = [
-    "marketsieve-agent>=0.8,<0.9",
-]
 all-sources = [
     "marketsieve-import-rakuten>=0.8,<0.9",
     "marketsieve-source-csv>=0.8,<0.9",
@@ -31,8 +27,6 @@ all-sources = [
     "marketsieve-source-edinet>=0.8,<0.9",
 ]
 all = [
-    "marketsieve-agent>=0.8,<0.9",
-    "marketsieve-ai>=0.8,<0.9",
     "marketsieve-import-rakuten>=0.8,<0.9",
     "marketsieve-source-csv>=0.8,<0.9",
     "marketsieve-source-jquants>=0.8,<0.9",
@@ -61,8 +55,6 @@ only-include = [
 ]
 
 [tool.uv.sources]
-marketsieve-agent = { workspace = true }
-marketsieve-ai = { workspace = true }
 marketsieve = { workspace = true }
 marketsieve-extension-api = { workspace = true }
 marketsieve-import-rakuten = { workspace = true }

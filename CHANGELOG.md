@@ -11,18 +11,32 @@ will follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- A human-mediated ChatGPT Temporary Chat workflow prepares privacy-bounded report requests,
-  validates saved responses, and renders only MarketSieve-owned facts without requiring an API key.
-- The independent `marketsieve-ai` wheel owns request generation, response validation, and
-  deterministic rendering without HTTP, browser, CLI, configuration, or persistence dependencies.
-- Daily-use Make targets and ordered VS Code Tasks expose JP, US, weekly, prepare, import, show, and
-  status operations before developer workflows.
+- Independent content-addressed watchlist revisions with supported MIC metadata and optional
+  screening-report provenance.
+- Bounded `screen refresh` workflows for Japanese and U.S. candidate discovery.
+- A deterministic `analysis-context/v1` workspace with privacy-bounded JSON, matching Markdown,
+  exact previous-report deltas, evidence IDs, missing inputs, and diagnostics.
+- Ordered VS Code Run and Debug operations for first use, discovery, watchlists, daily analysis,
+  weekly reporting, workspace generation, and representative debugging.
 
 ### Changed
 
 - Public workspace packages now share version 0.8.0 and compatible 0.8 dependency ranges.
-- Run and Debug is limited to a generic CLI command and manual AI exchange debugging. Existing
-  direct-provider Agent commands and the `marketsieve-agent` wheel remain available.
+- Portfolio objects use holdings-only `portfolio-result/v3`; watchlists are composed only at daily
+  analysis time and holdings take precedence over duplicate watchlist entries.
+- Rakuten import accepts the verified anonymous twelve-column empty `assetbalance(all)` form while
+  rejecting non-empty, contradictory, malformed, unknown, or incorrectly encoded input.
+- Empty holdings and an empty watchlist are valid readiness states that direct users to discovery
+  or explicit watchlist entry.
+
+### Removed
+
+- Removed the `marketsieve-agent` and `marketsieve-ai` distributions, all model-provider adapters,
+  configuration, credentials, prompts, fallback behavior, and explanation storage.
+- Removed manual AI file exchange and the `ai prepare/import/show`, `agent doctor`, `report explain`,
+  and `experiment explain` commands and schemas.
+- Removed internal model comparison, improvement-review, and messaging plans. Existing local legacy
+  artifacts are not deleted but are no longer read.
 
 ## [0.7.0] - 2026-08-06
 

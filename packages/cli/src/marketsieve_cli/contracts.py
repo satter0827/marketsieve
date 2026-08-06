@@ -12,5 +12,8 @@ class ScreeningConfiguration:
     operation: str
     settings: dict[str, str]
     acquisition_limit: int
+    eligible_mics: tuple[str, ...]
+    fetch_limit: int
+    lookback_days: int
     processing_limit: int
     display_limit: int

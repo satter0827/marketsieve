@@ -15,14 +15,13 @@ SCHEMAS = ROOT / "schemas"
 def test_schemas_are_draft_2020_12_and_semantically_versioned() -> None:
     paths = sorted(SCHEMAS.glob("*/v*/schema.json"))
     assert {path.parent.parent.name for path in paths} == {
-        "agent-result",
+        "analysis-context",
         "capabilities-result",
         "cli-error",
         "comparison-result",
         "doctor-result",
         "decision-report",
         "experiment-comparison",
-        "experiment-explanation",
         "experiment-run",
         "inspect-result",
         "indicator-result",
@@ -30,14 +29,11 @@ def test_schemas_are_draft_2020_12_and_semantically_versioned() -> None:
         "portfolio-result",
         "log-record",
         "report-list",
-        "report-ai-explanation",
-        "report-ai-request",
-        "report-ai-response",
-        "report-ai-validation",
         "review-report",
         "screening-report",
         "snapshot-result",
         "source-result",
+        "watchlist-result",
     }
 
     for path in paths:

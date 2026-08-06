@@ -28,6 +28,8 @@ def verify_portfolio_snapshot_importer(
         raise TypeError("plugin returned a non-conforming portfolio snapshot")
     if result.snapshot.as_of.isoformat() != as_of.isoformat():
         raise ValueError("plugin result does not preserve the exact portfolio as_of")
+    if result.snapshot.watch_items:
+        raise ValueError("plugin result must not contain watchlist instruments")
     return result
 
 

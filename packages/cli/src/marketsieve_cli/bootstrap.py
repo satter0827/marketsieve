@@ -2,17 +2,15 @@
 
 from __future__ import annotations
 
-import os
 from datetime import datetime
 from pathlib import Path
 from typing import Any, TextIO
 
 from marketsieve import __version__
-from marketsieve_cli.adapters.ai_exchange import AiExchangeStore
+from marketsieve_cli.adapters.analysis import AnalysisWorkspace
 from marketsieve_cli.adapters.config import Configuration
 from marketsieve_cli.adapters.console import ConsoleOutput, OutputMode
 from marketsieve_cli.adapters.experiments import ExperimentStore
-from marketsieve_cli.adapters.explanations import ExplanationStore
 from marketsieve_cli.adapters.plugins import SourcePluginRegistry
 from marketsieve_cli.adapters.portfolio_plugins import PortfolioPluginRegistry
 from marketsieve_cli.adapters.portfolios import (
@@ -31,7 +29,12 @@ from marketsieve_cli.adapters.screening import (
     universe_document,
 )
 from marketsieve_cli.adapters.snapshots import SnapshotStore
-from marketsieve_cli.application.ai import ManualAiService
+from marketsieve_cli.adapters.watchlists import (
+    PortfolioWatchlistReader,
+    WatchlistStore,
+    instrument_key,
+    parse_instrument_key,
+)
 from marketsieve_cli.application.diagnostics import DiagnosticsService
 from marketsieve_cli.application.experiments import ExperimentService
 from marketsieve_cli.application.routines import DailyBriefService, WeeklyBriefService
@@ -84,12 +87,18 @@ def build_portfolio_store() -> PortfolioStore:
     return PortfolioStore(Path(".marketsieve/portfolio"))
 
 
+def build_watchlist_store() -> WatchlistStore:
+    """Build the independent watchlist history repository."""
+
+    return WatchlistStore(Path(".marketsieve/watchlists"))
+
+
 def build_daily_brief_service(config_path: Path | None = None) -> DailyBriefService:
     """Build the one-command close-analysis workflow."""
 
     configuration = Configuration.resolve(config_path)
     return DailyBriefService(
-        build_portfolio_store(),
+        PortfolioWatchlistReader(build_portfolio_store(), build_watchlist_store()),
         build_snapshot_service(config_path),
         build_report_store(),
         configuration,
@@ -127,7 +136,32 @@ def build_screening_service(config_path: Path | None = None) -> ScreeningService
         build_portfolio_store(),
         ScreeningStore(Path(".marketsieve/screening")),
         Configuration.resolve(config_path),
+        build_snapshot_service(config_path),
     )
+
+
+def build_analysis_workspace() -> AnalysisWorkspace:
+    """Build the deterministic external-analysis workspace projection."""
+
+    return AnalysisWorkspace(
+        Path(".marketsieve/analysis"),
+        build_portfolio_store(),
+        build_watchlist_store(),
+        build_report_store(),
+        ScreeningStore(Path(".marketsieve/screening")),
+    )
+
+
+def create_analysis_workspace() -> dict[str, Any]:
+    """Create or replace deterministic workspace projection files."""
+
+    return build_analysis_workspace().build()
+
+
+def read_analysis_workspace() -> tuple[dict[str, Any], str]:
+    """Read and verify the current workspace projection."""
+
+    return build_analysis_workspace().show()
 
 
 def update_screening(config_path: Path | None, market: str) -> dict[str, object]:
@@ -142,28 +176,18 @@ def run_screening(config_path: Path | None, market: str, *, as_of: datetime) -> 
     return screening_document(build_screening_service(config_path).run(market, as_of=as_of))
 
 
+def refresh_screening(config_path: Path | None, market: str) -> dict[str, object]:
+    """Acquire a bounded universe and price set before deterministic screening."""
+
+    return screening_document(build_screening_service(config_path).refresh(market))
+
+
 def read_screening(
     config_path: Path | None, report_id: str, *, market: str | None
 ) -> dict[str, object]:
     """Read and project one verified screening report."""
 
     return screening_document(build_screening_service(config_path).show(report_id, market=market))
-
-
-def build_experiment_agent_service(config_path: Path | None = None) -> object:
-    """Build the optional grounded experiment explanation workflow."""
-
-    from marketsieve_cli.application.experiment_agent import ExperimentAgentService
-
-    return ExperimentAgentService(
-        ExperimentStore(Path(".marketsieve/experiments")),
-        ExplanationStore(
-            Path(".marketsieve/experiments/explanations"),
-            schema="experiment-explanation/v1",
-        ),
-        Configuration.resolve(config_path),
-        os.environ,
-    )
 
 
 def import_portfolio(path: Path, *, broker: str, as_of: str) -> dict[str, object]:
@@ -185,6 +209,44 @@ def read_portfolio() -> dict[str, object]:
 
     object_id, imported = build_portfolio_store().latest()
     return portfolio_document(imported, object_id=object_id)
+
+
+def add_watchlist_instrument(
+    value: str, *, as_of: datetime, screen_report_id: str | None = None
+) -> dict[str, Any]:
+    """Add one explicitly selected instrument with optional screening provenance."""
+
+    instrument = parse_instrument_key(value)
+    if screen_report_id is not None:
+        report = ScreeningStore(Path(".marketsieve/screening")).show_report(screen_report_id)
+        candidates = {instrument_key(item.decision.instrument) for item in report.candidates}
+        if value not in candidates:
+            raise ValueError("instrument is not a candidate in the selected screening report")
+    return build_watchlist_store().add(instrument, as_of=as_of, screen_report_id=screen_report_id)
+
+
+def remove_watchlist_instrument(value: str, *, as_of: datetime) -> dict[str, Any]:
+    """Remove one explicitly selected instrument from the latest watchlist."""
+
+    return build_watchlist_store().remove(parse_instrument_key(value), as_of=as_of)
+
+
+def read_watchlist() -> dict[str, Any]:
+    """Read the latest watchlist and expose its immutable history IDs."""
+
+    store = build_watchlist_store()
+    if not store.exists():
+        return {
+            "watchlist_id": None,
+            "schema": "watchlist-result/v1",
+            "as_of": None,
+            "previous_watchlist_id": None,
+            "change": None,
+            "items": [],
+            "history_ids": [],
+        }
+    document = store.latest()
+    return {**document, "history_ids": [item["watchlist_id"] for item in store.history()]}
 
 
 def list_decision_reports() -> dict[str, Any]:
@@ -221,29 +283,6 @@ def project_decision_report(report_id: str) -> str:
     """Read the verified canonical Markdown projection."""
 
     return render_decision_report(report_id)
-
-
-def build_agent_service(config_path: Path | None = None) -> object:
-    """Build the optional explanation service only when its command is invoked."""
-
-    from marketsieve_cli.application.agent import AgentService
-
-    configuration = Configuration.resolve(config_path)
-    return AgentService(
-        ReportStore(Path(".marketsieve/reports")),
-        ExplanationStore(Path(".marketsieve/explanations")),
-        configuration,
-        os.environ,
-    )
-
-
-def build_ai_service() -> ManualAiService:
-    """Build the offline, human-mediated AI exchange workflow."""
-
-    return ManualAiService(
-        ReportStore(Path(".marketsieve/reports")),
-        AiExchangeStore(Path(".marketsieve/ai")),
-    )
 
 
 def sdk_version() -> str:

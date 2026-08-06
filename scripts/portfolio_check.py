@@ -7,20 +7,18 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-from marketsieve_cli.bootstrap import read_portfolio
+from marketsieve_cli.bootstrap import read_portfolio, read_watchlist
 from marketsieve_extension_api import SourceDiagnostic
 from scripts.configuration_check import daily_source_diagnostics
 
 
-def supported_markets(document: Mapping[str, Any]) -> frozenset[str]:
-    """Return supported markets represented by holdings or watch items."""
+def supported_markets(portfolio: Mapping[str, Any], watchlist: Mapping[str, Any]) -> frozenset[str]:
+    """Return supported markets represented by holdings or independent watchlist items."""
 
-    holdings = document.get("holdings")
-    watch_items = document.get("watch_items")
+    holdings = portfolio.get("holdings")
+    watch_items = watchlist.get("items")
     if not isinstance(holdings, list) or not isinstance(watch_items, list):
-        raise ValueError("portfolio structure is invalid")
-    if not holdings and not watch_items:
-        raise ValueError("portfolio has no holdings or watch items")
+        raise ValueError("portfolio or watchlist structure is invalid")
     markets: set[str] = set()
     for item in [*holdings, *watch_items]:
         if not isinstance(item, Mapping) or not isinstance(item.get("instrument"), Mapping):
@@ -30,8 +28,8 @@ def supported_markets(document: Mapping[str, Any]) -> frozenset[str]:
             markets.add("jp")
         elif currency == "USD":
             markets.add("us")
-    if not markets:
-        raise ValueError("portfolio has no JPY or USD instruments")
+        else:
+            raise ValueError("portfolio instruments must use JPY or USD")
     return frozenset(markets)
 
 
@@ -50,13 +48,18 @@ def main() -> int:
     parser.add_argument("config", type=Path)
     arguments = parser.parse_args()
     try:
-        markets = supported_markets(read_portfolio())
+        markets = supported_markets(read_portfolio(), read_watchlist())
         diagnostics = daily_source_diagnostics(arguments.config)
     except (LookupError, OSError, TypeError, ValueError) as error:
         print(f"[invalid] portfolio: {error}")
         print("Next VS Code operation: 02 First Run: Import Portfolio CSV")
         return 2
-    print(f"[ready] portfolio markets: {', '.join(sorted(markets))}")
+    if not markets:
+        print("[ready] portfolio and watchlist are empty")
+        print("Next: run 10 Discovery: Refresh JP Candidates (Network),")
+        print("20 Discovery: Refresh US Candidates (Network), or 30 Watchlist: Add Instrument")
+        return 0
+    print(f"[ready] analysis markets: {', '.join(sorted(markets))}")
     runnable = runnable_markets(markets, diagnostics)
     for market in sorted(markets):
         diagnostic = diagnostics[market]
@@ -68,9 +71,9 @@ def main() -> int:
         print("[blocked] fix the configured daily source, then rerun 03 First Run: Check Readiness")
         return 2
     operations = [
-        "10 Daily: Analyze JP Close and Prepare ChatGPT Request (Network)"
+        "40 Daily Use: Analyze JP Watchlist (Network)"
         if market == "jp"
-        else "20 Daily: Analyze US Close and Prepare ChatGPT Request (Network)"
+        else "50 Daily Use: Analyze US Watchlist (Network)"
         for market in sorted(runnable)
     ]
     print(f"Next daily operation: {', or '.join(operations)}")

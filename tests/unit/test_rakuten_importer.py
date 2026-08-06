@@ -9,6 +9,7 @@ from marketsieve_import_rakuten import RakutenPortfolioImporter
 
 ROOT = Path(__file__).parents[2]
 FIXTURE = ROOT / "tests/fixtures/rakuten/assetbalance-empty.csv"
+REAL_FORM_TEMPLATE = ROOT / "tests/fixtures/rakuten/assetbalance-empty-v2.txt"
 OBSERVED_AT = datetime(2026, 8, 6, 3, 48, 40, tzinfo=UTC)
 
 
@@ -25,6 +26,17 @@ def test_rakuten_empty_export_imports_without_retaining_personal_data(tmp_path: 
     fixture_text = FIXTURE.read_bytes().decode("cp932")
     assert "お客様コード" not in fixture_text
     assert "氏名" not in fixture_text
+
+
+def test_rakuten_real_twelve_column_empty_export_is_supported(tmp_path: Path) -> None:
+    source = tmp_path / "assetbalance-all.csv"
+    source.write_bytes(REAL_FORM_TEMPLATE.read_text(encoding="utf-8").encode("cp932"))
+
+    result = RakutenPortfolioImporter().import_portfolio(source, as_of=OBSERVED_AT)
+
+    assert result.snapshot.holdings == ()
+    assert result.snapshot.watch_items == ()
+    assert result.diagnostics == ("empty_portfolio",)
 
 
 def test_rakuten_import_requires_aware_observation_time() -> None:

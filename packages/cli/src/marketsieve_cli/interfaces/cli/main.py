@@ -12,21 +12,24 @@ from typing import Any
 import click
 
 from marketsieve_cli.bootstrap import (
-    build_agent_service,
-    build_ai_service,
+    add_watchlist_instrument,
     build_console_output,
     build_daily_brief_service,
     build_diagnostics_service,
-    build_experiment_agent_service,
     build_experiment_service,
     build_snapshot_service,
     build_weekly_brief_service,
+    create_analysis_workspace,
     import_portfolio,
     list_decision_reports,
     project_decision_report,
+    read_analysis_workspace,
     read_decision_report,
     read_portfolio,
     read_screening,
+    read_watchlist,
+    refresh_screening,
+    remove_watchlist_instrument,
     render_decision_report,
     run_screening,
     sdk_version,
@@ -36,25 +39,41 @@ from marketsieve_cli.bootstrap import (
 OUTPUT_CHOICES = ("auto", "rich", "text", "json")
 CAPABILITIES_SCHEMA_VERSION = "2.0.0"
 COMMAND_METADATA: dict[str, dict[str, Any]] = {
-    "ai prepare report": {
-        "output_schema": None,
-        "effects": {"network": False, "secrets": False, "optional_writes": ["ai_request"]},
-    },
-    "ai import": {
-        "output_schema": "urn:marketsieve:schema:report-ai-explanation:1.0.0",
+    "analysis build": {
+        "output_schema": "urn:marketsieve:schema:analysis-context:1.0.0",
         "effects": {
             "network": False,
             "secrets": False,
-            "optional_writes": ["ai_response", "ai_validation", "ai_explanation"],
+            "optional_writes": ["analysis_workspace"],
         },
     },
-    "ai show": {
-        "output_schema": "urn:marketsieve:schema:report-ai-explanation:1.0.0",
+    "analysis show": {
+        "output_schema": "urn:marketsieve:schema:analysis-context:1.0.0",
+        "effects": {"network": False, "secrets": False, "optional_writes": []},
+    },
+    "watchlist add": {
+        "output_schema": "urn:marketsieve:schema:watchlist-result:1.0.0",
+        "effects": {"network": False, "secrets": False, "optional_writes": ["watchlist"]},
+    },
+    "watchlist remove": {
+        "output_schema": "urn:marketsieve:schema:watchlist-result:1.0.0",
+        "effects": {"network": False, "secrets": False, "optional_writes": ["watchlist"]},
+    },
+    "watchlist show": {
+        "output_schema": "urn:marketsieve:schema:watchlist-result:1.0.0",
         "effects": {"network": False, "secrets": False, "optional_writes": []},
     },
     "screen update": {
         "output_schema": "urn:marketsieve:schema:instrument-universe:1.0.0",
         "effects": {"network": True, "secrets": True, "optional_writes": ["universe"]},
+    },
+    "screen refresh": {
+        "output_schema": "urn:marketsieve:schema:screening-report:1.0.0",
+        "effects": {
+            "network": True,
+            "secrets": True,
+            "optional_writes": ["universe", "snapshot", "screening_report"],
+        },
     },
     "screen run": {
         "output_schema": "urn:marketsieve:schema:screening-report:1.0.0",
@@ -75,18 +94,6 @@ COMMAND_METADATA: dict[str, dict[str, Any]] = {
     "experiment compare": {
         "output_schema": "urn:marketsieve:schema:experiment-comparison:1.0.0",
         "effects": {"network": False, "secrets": False, "optional_writes": []},
-    },
-    "experiment explain": {
-        "output_schema": "urn:marketsieve:schema:experiment-explanation:1.0.0",
-        "effects": {"network": True, "secrets": True, "optional_writes": ["explanation"]},
-    },
-    "agent doctor": {
-        "output_schema": "urn:marketsieve:schema:agent-result:1.0.0",
-        "effects": {"network": False, "secrets": False, "optional_writes": []},
-    },
-    "report explain": {
-        "output_schema": "urn:marketsieve:schema:agent-result:1.0.0",
-        "effects": {"network": True, "secrets": True, "optional_writes": ["explanation"]},
     },
     "capabilities": {
         "output_schema": "urn:marketsieve:schema:capabilities-result:2.0.0",
@@ -113,11 +120,11 @@ COMMAND_METADATA: dict[str, dict[str, Any]] = {
         "effects": {"network": False, "secrets": False, "optional_writes": []},
     },
     "portfolio import": {
-        "output_schema": "urn:marketsieve:schema:portfolio-result:2.0.0",
+        "output_schema": "urn:marketsieve:schema:portfolio-result:3.0.0",
         "effects": {"network": False, "secrets": False, "optional_writes": ["portfolio"]},
     },
     "portfolio show": {
-        "output_schema": "urn:marketsieve:schema:portfolio-result:2.0.0",
+        "output_schema": "urn:marketsieve:schema:portfolio-result:3.0.0",
         "effects": {"network": False, "secrets": False, "optional_writes": []},
     },
     "compare": {
@@ -305,6 +312,67 @@ def portfolio_show(context: click.Context, output_mode: str) -> None:
     console.emit_document(document, title="Portfolio")
 
 
+@main.group()
+def watchlist() -> None:
+    """Maintain instruments selected for routine observation."""
+
+
+@watchlist.command("add")
+@click.argument("instrument")
+@click.option("--from-screen", "screen_report_id", default=None)
+@output_option
+@click.pass_context
+def watchlist_add(
+    context: click.Context,
+    instrument: str,
+    screen_report_id: str | None,
+    output_mode: str,
+) -> None:
+    """Add one supported MIC:SYMBOL, optionally from a screening report."""
+
+    console = _console(context, output_mode)
+    try:
+        document = add_watchlist_instrument(
+            instrument,
+            as_of=datetime.now().astimezone(),
+            screen_report_id=screen_report_id,
+        )
+    except (LookupError, OSError, TypeError, ValueError) as error:
+        console.emit_error("watchlist_add_failed", str(error))
+        raise click.exceptions.Exit(1) from None
+    console.emit_document(document, title="Watchlist")
+
+
+@watchlist.command("remove")
+@click.argument("instrument")
+@output_option
+@click.pass_context
+def watchlist_remove(context: click.Context, instrument: str, output_mode: str) -> None:
+    """Remove one supported MIC:SYMBOL from the latest watchlist."""
+
+    console = _console(context, output_mode)
+    try:
+        document = remove_watchlist_instrument(instrument, as_of=datetime.now().astimezone())
+    except (LookupError, OSError, TypeError, ValueError) as error:
+        console.emit_error("watchlist_remove_failed", str(error))
+        raise click.exceptions.Exit(1) from None
+    console.emit_document(document, title="Watchlist")
+
+
+@watchlist.command("show")
+@output_option
+@click.pass_context
+def watchlist_show(context: click.Context, output_mode: str) -> None:
+    """Show the latest watchlist and its content-addressed history."""
+
+    try:
+        document = read_watchlist()
+    except (LookupError, OSError, TypeError, ValueError) as error:
+        _console(context, output_mode).emit_error("watchlist_show_failed", str(error))
+        raise click.exceptions.Exit(1) from None
+    _console(context, output_mode).emit_document(document, title="Watchlist")
+
+
 @main.command()
 @click.argument("market", type=click.Choice(("jp", "us")))
 @click.option(
@@ -355,6 +423,48 @@ def weekly(context: click.Context, as_of: str | None, output_mode: str) -> None:
 
 
 @main.group()
+def analysis() -> None:
+    """Build and inspect the static workspace for external research."""
+
+
+@analysis.command("build")
+@output_option
+@click.pass_context
+def analysis_build(context: click.Context, output_mode: str) -> None:
+    """Build deterministic context.json and analysis.md files."""
+
+    console = _console(context, output_mode)
+    try:
+        document = create_analysis_workspace()
+        _, markdown = read_analysis_workspace()
+    except (LookupError, OSError, TypeError, ValueError) as error:
+        console.emit_error("analysis_build_failed", str(error))
+        raise click.exceptions.Exit(1) from None
+    if output_mode == "json":
+        console.emit_document(document, title="Analysis context")
+    else:
+        click.echo(markdown, nl=False)
+
+
+@analysis.command("show")
+@output_option
+@click.pass_context
+def analysis_show(context: click.Context, output_mode: str) -> None:
+    """Verify and show the current analysis workspace."""
+
+    console = _console(context, output_mode)
+    try:
+        document, markdown = read_analysis_workspace()
+    except (LookupError, OSError, TypeError, ValueError) as error:
+        console.emit_error("analysis_show_failed", str(error))
+        raise click.exceptions.Exit(1) from None
+    if output_mode == "json":
+        console.emit_document(document, title="Analysis context")
+    else:
+        click.echo(markdown, nl=False)
+
+
+@main.group()
 def screen() -> None:
     """Update bounded universes and screen verified local data."""
 
@@ -393,6 +503,22 @@ def screen_run(context: click.Context, market: str, as_of: str | None, output_mo
         document = run_screening(context.obj["config_path"], market, as_of=instant)
     except (LookupError, OSError, RuntimeError, TypeError, ValueError) as error:
         console.emit_error("screen_run_failed", str(error))
+        raise click.exceptions.Exit(1) from None
+    console.emit_document(document, title="Screening report")
+
+
+@screen.command("refresh")
+@click.argument("market", type=click.Choice(("jp", "us")))
+@output_option
+@click.pass_context
+def screen_refresh(context: click.Context, market: str, output_mode: str) -> None:
+    """Refresh one bounded candidate set and create a static screening report."""
+
+    console = _console(context, output_mode)
+    try:
+        document = refresh_screening(context.obj["config_path"], market)
+    except (LookupError, OSError, RuntimeError, TypeError, ValueError) as error:
+        console.emit_error("screen_refresh_failed", str(error))
         raise click.exceptions.Exit(1) from None
     console.emit_document(document, title="Screening report")
 
@@ -472,54 +598,9 @@ def experiment_compare(
     console.emit_document(document, title="Experiment comparison")
 
 
-@experiment.command("explain")
-@click.argument("run_id")
-@click.option(
-    "--provider",
-    type=click.Choice(("lmstudio", "openai", "anthropic", "google")),
-    required=True,
-)
-@click.option("--allow-cloud", is_flag=True, help="Allow this invocation to contact a cloud model.")
-@click.option("--allow-remote", is_flag=True, help="Allow a non-loopback LM Studio endpoint.")
-@output_option
-@click.pass_context
-def experiment_explain(
-    context: click.Context,
-    run_id: str,
-    provider: str,
-    allow_cloud: bool,
-    allow_remote: bool,
-    output_mode: str,
-) -> None:
-    """Explain stored experiment facts through one explicitly selected model."""
-
-    console = _console(context, output_mode)
-    try:
-        service = build_experiment_agent_service(context.obj["config_path"])
-        document = service.explain(  # type: ignore[attr-defined]
-            run_id,
-            provider,
-            context.obj["locale"],
-            allow_cloud=allow_cloud,
-            allow_remote=allow_remote,
-        )
-    except ImportError:
-        console.emit_error("agent_not_installed", "install the marketsieve-cli agent extra")
-        raise click.exceptions.Exit(1) from None
-    except (LookupError, RuntimeError, TypeError, ValueError, OSError) as error:
-        console.emit_error("experiment_agent_failed", str(error))
-        raise click.exceptions.Exit(1) from None
-    if document.get("status") == "template":
-        console.emit_warning(
-            "agent_template_fallback",
-            f"model output was not used ({document['validation']['reason']})",
-        )
-    console.emit_document(document, title="Experiment explanation")
-
-
 @main.group()
 def report() -> None:
-    """Read and explain immutable decision reports."""
+    """Read immutable decision reports."""
 
 
 @report.command("list")
@@ -574,168 +655,6 @@ def report_export(report_id: str, export_format: str) -> None:
     except (LookupError, TypeError, ValueError, OSError) as error:
         raise click.ClickException(str(error)) from None
     click.echo(markdown, nl=False)
-
-
-@main.group()
-def ai() -> None:
-    """Exchange grounded report explanations with a manual AI service."""
-
-
-@ai.group()
-def prepare() -> None:
-    """Prepare one upload file without contacting an AI service."""
-
-
-@prepare.command("report")
-@click.argument("report_id")
-@click.pass_context
-def ai_prepare_report(context: click.Context, report_id: str) -> None:
-    """Prepare an exact report for a new ChatGPT Temporary Chat."""
-
-    try:
-        prepared = build_ai_service().prepare_report(report_id, context.obj["locale"])
-    except (LookupError, TypeError, ValueError, OSError) as error:
-        message = f"{error}; next: run marketsieve daily jp, daily us, or weekly"
-        _console(context, "auto").emit_error("ai_prepare_failed", message)
-        raise click.exceptions.Exit(1) from None
-    if context.obj["locale"] == "ja":
-        click.echo(f"ChatGPTへアップロード: {prepared.request_path}")
-        click.echo(f"回答の保存先: {prepared.response_path}")
-        click.echo(f"保存後に実行: {prepared.import_command}")
-    else:
-        click.echo(f"Upload to ChatGPT: {prepared.request_path}")
-        click.echo(f"Save the response to: {prepared.response_path}")
-        click.echo(f"Then run: {prepared.import_command}")
-
-
-@ai.command("import")
-@click.argument("response", type=click.Path(path_type=Path, dir_okay=False, exists=True))
-@click.option("--model-label", default=None, help="Record the model label shown by ChatGPT.")
-@click.option(
-    "--controlled",
-    is_flag=True,
-    help="Confirm a new Temporary Chat with Custom Instructions, Project, web, and tools disabled.",
-)
-@output_option
-@click.pass_context
-def ai_import(
-    context: click.Context,
-    response: Path,
-    model_label: str | None,
-    controlled: bool,
-    output_mode: str,
-) -> None:
-    """Validate and store one downloaded ChatGPT response."""
-
-    console = _console(context, output_mode)
-    try:
-        document = build_ai_service().import_response(
-            response, model_label=model_label, controlled=controlled
-        )
-    except (LookupError, TypeError, ValueError, OSError) as error:
-        message = f"{error}; next: uv run marketsieve ai prepare report latest"
-        console.emit_error("ai_import_failed", message)
-        raise click.exceptions.Exit(1) from None
-    _emit_ai_explanation(console, document, output_mode)
-
-
-@ai.command("show")
-@click.argument("explanation_id")
-@output_option
-@click.pass_context
-def ai_show(context: click.Context, explanation_id: str, output_mode: str) -> None:
-    """Show an exact or latest validated AI explanation."""
-
-    console = _console(context, output_mode)
-    try:
-        document = build_ai_service().show(explanation_id)
-    except (LookupError, TypeError, ValueError, OSError) as error:
-        message = f"{error}; next: uv run marketsieve ai import /path/to/response.json"
-        console.emit_error("ai_show_failed", message)
-        raise click.exceptions.Exit(1) from None
-    _emit_ai_explanation(console, document, output_mode)
-
-
-def _emit_ai_explanation(console: Any, document: dict[str, Any], output_mode: str) -> None:
-    if output_mode == "json":
-        console.emit_document(document, title="AI explanation")
-    else:
-        click.echo(document["text"])
-
-
-@main.group()
-def agent() -> None:
-    """Check explicitly configured explanation providers."""
-
-
-@agent.command("doctor")
-@click.argument("provider", type=click.Choice(("lmstudio", "openai", "anthropic", "google")))
-@click.option("--allow-remote", is_flag=True, help="Allow a non-loopback LM Studio endpoint.")
-@output_option
-@click.pass_context
-def agent_doctor(
-    context: click.Context, provider: str, allow_remote: bool, output_mode: str
-) -> None:
-    """Validate one model configuration without contacting a model."""
-
-    console = _console(context, output_mode)
-    try:
-        service = build_agent_service(context.obj["config_path"])
-        document = service.doctor(provider, allow_remote=allow_remote)  # type: ignore[attr-defined]
-    except ImportError:
-        console.emit_error("agent_not_installed", "install the marketsieve-cli agent extra")
-        raise click.exceptions.Exit(1) from None
-    console.emit_document(document, title="Agent diagnostics")
-    if document["status"] != "ready":
-        raise click.exceptions.Exit(1)
-
-
-@report.command("explain")
-@click.argument("report_id")
-@click.option(
-    "--provider",
-    type=click.Choice(("lmstudio", "openai", "anthropic", "google")),
-    required=True,
-)
-@click.option("--allow-cloud", is_flag=True, help="Allow this invocation to contact a cloud model.")
-@click.option("--allow-remote", is_flag=True, help="Allow a non-loopback LM Studio endpoint.")
-@click.option("--dry-run", is_flag=True, help="Show the credential-free payload without a request.")
-@output_option
-@click.pass_context
-def report_explain(
-    context: click.Context,
-    report_id: str,
-    provider: str,
-    allow_cloud: bool,
-    allow_remote: bool,
-    dry_run: bool,
-    output_mode: str,
-) -> None:
-    """Explain one immutable report through exactly one selected provider."""
-
-    console = _console(context, output_mode)
-    try:
-        service = build_agent_service(context.obj["config_path"])
-        document = service.explain(  # type: ignore[attr-defined]
-            report_id,
-            provider,
-            context.obj["locale"],
-            allow_cloud=allow_cloud,
-            allow_remote=allow_remote,
-            dry_run=dry_run,
-        )
-    except ImportError:
-        console.emit_error("agent_not_installed", "install the marketsieve-cli agent extra")
-        raise click.exceptions.Exit(1) from None
-    except (LookupError, RuntimeError, TypeError, ValueError, OSError) as error:
-        console.emit_error("agent_failed", str(error))
-        raise click.exceptions.Exit(1) from None
-    if document.get("status") == "template":
-        console.emit_warning(
-            "agent_template_fallback",
-            f"model output was not used ({document.get('fallback_reason')})",
-        )
-    console.emit_document(document, title="Agent explanation")
 
 
 @main.command()
