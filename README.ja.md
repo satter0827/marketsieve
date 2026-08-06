@@ -116,7 +116,7 @@ make check
 make evidence
 ```
 
-VS Codeはworkspaceの`.venv`を使用します。`make sync`の実行後、Test Explorerから通常実行、デバッグ、対話的なカバレッジ確認を行えます。repository taskは依存同期、format、現在のテストファイル、診断、完全Gateを提供します。対話的なカバレッジはローカル確認用とし、`make check`を正式なカバレッジGateとします。ローカルcacheと生成物は`.marketsieve`に集約し、repository rootに置く生成環境は`.venv`だけとします。
+VS Codeはworkspaceの`.venv`を使用します。`make sync`の実行後、Test Explorerから通常実行、デバッグ、対話的なカバレッジ確認を行えます。repository taskは依存同期、format、現在のテストファイル、診断、完全Gateを提供します。Run and Debugには、診断、データ、分析、ポートフォリオ、スクリーニング、定期処理、レポート、実験、エージェントの起動設定があります。専用設定がないコマンドは`App: Command (Prompt for Arguments)`へCLI引数を入力して実行できます。名前に`Network`を含む設定は、明示的に選択したproviderへ接続する場合があります。対話的なカバレッジはローカル確認用とし、`make check`を正式なカバレッジGateとします。ローカルcacheと生成物は`.marketsieve`に集約し、repository rootに置く生成環境は`.venv`だけとします。
 
 `make check`はDevelop Gateを実行します。`make evidence`はこれに加えて、checksum付きreview bundleを`.marketsieve/artifacts/review/<commit>/`へ生成します。bundleはcode reviewの入力であり、review完了の証拠ではありません。アプリケーション結果はstdout、構造化JSON Lines logはstderrへ出力します。情報logを取得する場合は`--log-level INFO`、`.marketsieve/logs/`にも保存する場合は`--log-file`を指定します。
 
