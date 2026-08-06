@@ -226,7 +226,6 @@ endpoint are read from `[agent.providers.NAME]`; credentials are never valid TOM
 Routine operation uses the following commands:
 
 ```shell
-marketsieve init
 marketsieve portfolio import --broker rakuten --as-of TIMESTAMP PATH
 marketsieve portfolio show
 marketsieve daily {jp,us}
@@ -236,6 +235,11 @@ marketsieve report show {ID,latest}
 marketsieve report export {ID,latest} --format markdown
 marketsieve report explain {ID,latest} --provider PROVIDER
 ```
+
+The CLI does not generate or overwrite configuration. In the source workspace, `make setup-config`
+copies the non-secret example to `marketsieve.toml` only when the destination does not exist. VS
+Code exposes that Make target as the first one-time Run and Debug configuration and as a matching
+Task.
 
 The broker-neutral path is:
 

@@ -1,13 +1,17 @@
 {
   "version": "2.0.0",
   "tasks": [
-    {"label": "Daily Use: JP Close + ChatGPT Request (Network)", "type": "shell", "command": "make daily-jp-ai", "problemMatcher": []},
-    {"label": "Daily Use: US Close + ChatGPT Request (Network)", "type": "shell", "command": "make daily-us-ai", "problemMatcher": []},
-    {"label": "Daily Use: Weekly Brief + ChatGPT Request", "type": "shell", "command": "make weekly-ai", "problemMatcher": []},
-    {"label": "Daily Use: Prepare ChatGPT Request from Latest Report", "type": "shell", "command": "make ai-prepare", "problemMatcher": []},
-    {"label": "Daily Use: Import ChatGPT Response", "type": "process", "command": "make", "args": ["ai-import", "RESPONSE=${input:aiResponsePath}"], "problemMatcher": []},
-    {"label": "Daily Use: Show Latest AI Explanation", "type": "shell", "command": "make ai-show", "problemMatcher": []},
-    {"label": "Daily Use: Status", "type": "shell", "command": "make doctor", "problemMatcher": []},
+    {"label": "01 First Run: Create Configuration", "detail": "Run once. An existing marketsieve.toml is never overwritten.", "type": "process", "command": "make", "args": ["setup-config"], "problemMatcher": []},
+    {"label": "02 First Run: Import Portfolio CSV", "detail": "Import the canonical holdings CSV. Import time is used as as-of; the source file is not retained.", "type": "process", "command": "make", "args": ["portfolio-import", "PORTFOLIO=${input:portfolioPath}"], "problemMatcher": []},
+    {"label": "03 First Run: Check Readiness", "detail": "Check configuration, portfolio, credentials, and the next operation.", "type": "process", "command": "make", "args": ["daily-status"], "problemMatcher": []},
+    {"label": "10 Daily: Analyze JP Close and Prepare ChatGPT Request (Network)", "detail": "Run after the Japanese market closes. The terminal prints the upload file and next action.", "type": "process", "command": "make", "args": ["daily-jp-ai"], "problemMatcher": []},
+    {"label": "20 Daily: Analyze US Close and Prepare ChatGPT Request (Network)", "detail": "Run after the U.S. market closes. The terminal prints the upload file and next action.", "type": "process", "command": "make", "args": ["daily-us-ai"], "problemMatcher": []},
+    {"label": "30 Weekly: Build Brief and Prepare ChatGPT Request (After JP and US)", "detail": "Run on the weekend after both daily reports. This operation is offline.", "type": "process", "command": "make", "args": ["weekly-ai"], "problemMatcher": []},
+    {"label": "40 ChatGPT: Import Saved Response and Display Explanation", "detail": "Run after saving the ChatGPT JSON response. Import displays only the validated explanation.", "type": "process", "command": "make", "args": ["ai-import", "RESPONSE=${input:aiResponsePath}", "CONTROLLED=${input:aiControlled}"], "problemMatcher": []},
+    {"label": "Advanced: Prepare ChatGPT Request from Latest Report", "type": "process", "command": "make", "args": ["ai-prepare"], "problemMatcher": []},
+    {"label": "Advanced: Show Portfolio", "type": "process", "command": "make", "args": ["portfolio-show"], "problemMatcher": []},
+    {"label": "Advanced: Import ChatGPT Response Only", "type": "process", "command": "make", "args": ["ai-import", "RESPONSE=${input:aiResponsePath}", "CONTROLLED=${input:aiControlled}"], "problemMatcher": []},
+    {"label": "Advanced: Show Latest AI Explanation Only", "type": "process", "command": "make", "args": ["ai-show"], "problemMatcher": []},
     {"label": "Developer: Sync", "type": "shell", "command": "make sync", "problemMatcher": []},
     {"label": "Developer: Format", "type": "shell", "command": "make format", "problemMatcher": []},
     {"label": "Developer: Test Current File", "type": "shell", "command": "make test TEST=${relativeFile}", "problemMatcher": []},
@@ -16,9 +20,21 @@
   ],
   "inputs": [
     {
+      "id": "portfolioPath",
+      "type": "promptString",
+      "description": "Absolute path to the portfolio CSV"
+    },
+    {
       "id": "aiResponsePath",
       "type": "promptString",
       "description": "Absolute path to the saved ChatGPT response JSON"
+    },
+    {
+      "id": "aiControlled",
+      "type": "pickString",
+      "description": "Were all required Temporary Chat conditions verified?",
+      "options": ["0", "1"],
+      "default": "0"
     }
   ]
 }
