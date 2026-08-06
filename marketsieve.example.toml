@@ -47,6 +47,19 @@ event_types = "earnings,dividend,split"
 plugin = "sec"
 operation = "fetch"
 
+[routines.jp]
+source_profile = "japan"
+lookback_days = 400
+financial_lookback_days = 1500
+
+[routines.us]
+source_profile = "us"
+lookback_days = 400
+financial_lookback_days = 1500
+
+[routines.weekly]
+max_age_days = 7
+
 [screening.jp]
 source_profile = "japan"
 acquisition_limit = 100

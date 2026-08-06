@@ -50,12 +50,11 @@ portfolio-show: ## Show the latest normalized portfolio (Offline).
 	uv run marketsieve portfolio show
 
 daily-status: doctor ## Check configuration, portfolio, reports, and installation (Offline).
-	@if test -f "$(CONFIG)"; then \
-		echo "[ready] configuration: $(CONFIG)"; \
-	else \
+	@if ! test -f "$(CONFIG)"; then \
 		echo "[missing] configuration. Next VS Code operation: 01 First Run: Create Configuration" >&2; \
 		exit 2; \
 	fi
+	@uv run python -m scripts.configuration_check "$(CONFIG)" || { echo "Next: correct $(CONFIG) using marketsieve.example.toml as the reference" >&2; exit 2; }
 	@uv run marketsieve portfolio show >/dev/null 2>&1 || { echo "[missing] portfolio. Next VS Code operation: 02 First Run: Import Portfolio CSV" >&2; exit 2; }
 	@echo "[ready] portfolio"
 	@if test -n "$$JQUANTS_API_KEY"; then \

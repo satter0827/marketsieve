@@ -353,6 +353,26 @@ def test_setup_config_is_idempotent_and_does_not_overwrite(tmp_path: Path) -> No
     assert "already exists" in second.stdout
 
 
+def test_daily_status_rejects_an_invalid_configuration_before_portfolio_check(
+    tmp_path: Path,
+) -> None:
+    config = tmp_path / "invalid.toml"
+    config.write_text("not = [valid\n", encoding="utf-8")
+
+    result = subprocess.run(
+        ["make", "daily-status", f"CONFIG={config}", f"STATE_DIR={tmp_path / 'state'}"],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 2
+    assert "[invalid] configuration" in result.stdout
+    assert "correct" in result.stderr
+    assert "[missing] portfolio" not in result.stderr
+
+
 def test_ci_and_rulesets_use_stable_gate_names() -> None:
     workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
     assert "name: Develop Gate" in workflow
