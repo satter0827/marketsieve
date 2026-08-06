@@ -153,9 +153,13 @@ make evidence
 
 VS Code uses the workspace `.venv`. Its Test Explorer supports ordinary runs, debugging, and
 interactive coverage after `make sync`; repository tasks provide dependency sync, formatting, the
-current test file, diagnostics, and the complete gate. Interactive coverage is local feedback, while
-`make check` is the authoritative coverage gate. Local caches and generated artifacts are kept under
-`.marketsieve`; `.venv` is the only generated environment at the repository root.
+current test file, diagnostics, and the complete gate. Run and Debug provides named workflows for
+diagnostics, data, analysis, portfolios, screening, briefs, reports, experiments, and agents. `App:
+Command (Prompt for Arguments)` accepts any CLI arguments for commands without a dedicated preset.
+Configurations whose names include `Network` may contact the explicitly configured provider.
+Interactive coverage is local feedback, while `make check` is the authoritative coverage gate.
+Local caches and generated artifacts are kept under `.marketsieve`; `.venv` is the only generated
+environment at the repository root.
 
 `make check` runs the Develop Gate. `make evidence` additionally creates a checksummed review bundle
 under `.marketsieve/artifacts/review/<commit>/`. Application results use stdout and structured JSON
