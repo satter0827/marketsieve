@@ -319,6 +319,11 @@ def test_makefile_exposes_stable_entry_points() -> None:
     assert makefile.index("setup-config:") < makefile.index("daily-jp-ai:")
     assert "daily-jp-ai: ## Daily JP close report (Network)" in makefile
     assert "daily-us-ai: ## Daily US close report (Network)" in makefile
+    ai_import_show_recipe = makefile.split("ai-import-show:", maxsplit=1)[1].split(
+        "\n\n", maxsplit=1
+    )[0]
+    assert "ai-import-show: ai-import" in makefile
+    assert "ai show latest" not in ai_import_show_recipe
 
 
 def test_setup_config_is_idempotent_and_does_not_overwrite(tmp_path: Path) -> None:

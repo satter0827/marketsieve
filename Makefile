@@ -94,8 +94,7 @@ ai-import: ## Import RESPONSE=... (Offline); add CONTROLLED=1 only after checkin
 	@test -f "$(RESPONSE)" || { echo "Response file not found: $(RESPONSE)" >&2; exit 2; }
 	uv run marketsieve ai import "$(RESPONSE)" $(if $(filter 1,$(CONTROLLED)),--controlled,)
 
-ai-import-show: ai-import ## Import RESPONSE=..., then show the validated explanation (Offline).
-	uv run marketsieve ai show latest
+ai-import-show: ai-import ## Import RESPONSE=... and display the validated explanation (Offline).
 
 ai-show: ## Show the latest validated AI explanation (Offline).
 	uv run marketsieve ai show latest
