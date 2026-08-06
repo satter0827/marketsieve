@@ -21,6 +21,7 @@ agent = [
     "marketsieve-agent>=0.7,<0.8",
 ]
 all-sources = [
+    "marketsieve-import-rakuten>=0.7,<0.8",
     "marketsieve-source-csv>=0.7,<0.8",
     "marketsieve-source-jquants>=0.7,<0.8",
     "marketsieve-source-alphavantage>=0.7,<0.8",
@@ -30,6 +31,7 @@ all-sources = [
 ]
 all = [
     "marketsieve-agent>=0.7,<0.8",
+    "marketsieve-import-rakuten>=0.7,<0.8",
     "marketsieve-source-csv>=0.7,<0.8",
     "marketsieve-source-jquants>=0.7,<0.8",
     "marketsieve-source-alphavantage>=0.7,<0.8",
@@ -60,6 +62,7 @@ only-include = [
 marketsieve-agent = { workspace = true }
 marketsieve = { workspace = true }
 marketsieve-extension-api = { workspace = true }
+marketsieve-import-rakuten = { workspace = true }
 marketsieve-source-csv = { workspace = true }
 marketsieve-source-jquants = { workspace = true }
 marketsieve-source-alphavantage = { workspace = true }

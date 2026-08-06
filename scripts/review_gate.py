@@ -24,7 +24,7 @@ SCHEMA_PATH = ROOT / "schemas/review-report/v2/schema.json"
 
 def capture(*command: str) -> str:
     return subprocess.run(
-        command, cwd=ROOT, check=True, capture_output=True, text=True
+        command, cwd=ROOT, check=True, capture_output=True, text=True, errors="replace"
     ).stdout.strip()
 
 

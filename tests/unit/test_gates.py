@@ -182,6 +182,18 @@ def test_review_changes_normalize_renames_as_delete_and_add(
     ]
 
 
+def test_review_capture_replaces_non_utf8_diff_bytes(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_run(command: tuple[str, ...], **options: Any) -> subprocess.CompletedProcess[str]:
+        assert command == ("git", "diff")
+        assert options["text"] is True
+        assert options["errors"] == "replace"
+        return subprocess.CompletedProcess(command, 0, stdout="safe�\n", stderr="")
+
+    monkeypatch.setattr("scripts.review_gate.subprocess.run", fake_run)
+
+    assert review_gate.capture("git", "diff") == "safe�"
+
+
 def test_review_patch_redacts_removed_credentials(tmp_path: Path) -> None:
     value = "sk-" + "A" * 24
     patch = tmp_path / "changes.patch"

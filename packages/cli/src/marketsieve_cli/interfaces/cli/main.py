@@ -96,11 +96,11 @@ COMMAND_METADATA: dict[str, dict[str, Any]] = {
         "effects": {"network": False, "secrets": False, "optional_writes": []},
     },
     "portfolio import": {
-        "output_schema": "urn:marketsieve:schema:portfolio-result:1.0.0",
+        "output_schema": "urn:marketsieve:schema:portfolio-result:2.0.0",
         "effects": {"network": False, "secrets": False, "optional_writes": ["portfolio"]},
     },
     "portfolio show": {
-        "output_schema": "urn:marketsieve:schema:portfolio-result:1.0.0",
+        "output_schema": "urn:marketsieve:schema:portfolio-result:2.0.0",
         "effects": {"network": False, "secrets": False, "optional_writes": []},
     },
     "compare": {
@@ -251,19 +251,23 @@ def portfolio() -> None:
 
 @portfolio.command("import")
 @click.argument("path", type=click.Path(path_type=Path, dir_okay=False, exists=True))
-@click.option("--broker", type=click.Choice(("canonical",)), required=True)
+@click.option(
+    "--broker",
+    required=True,
+    help="Use 'canonical' or the name of one installed portfolio importer.",
+)
 @click.option("--as-of", required=True, help="Use an ISO 8601 timestamp with a UTC offset.")
 @output_option
 @click.pass_context
 def portfolio_import(
     context: click.Context, path: Path, broker: str, as_of: str, output_mode: str
 ) -> None:
-    """Import a strict UTF-8 canonical CSV without retaining the source file."""
+    """Import a portfolio CSV without retaining the source file."""
 
     console = _console(context, output_mode)
     try:
         document = import_portfolio(path, broker=broker, as_of=as_of)
-    except (OSError, TypeError, ValueError) as error:
+    except (ImportError, LookupError, OSError, RuntimeError, TypeError, ValueError) as error:
         console.emit_error("portfolio_import_failed", str(error))
         raise click.exceptions.Exit(1) from None
     console.emit_document(document, title="Portfolio")

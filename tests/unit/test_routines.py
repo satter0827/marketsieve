@@ -36,8 +36,8 @@ def _bars(instrument: Instrument = JP_INSTRUMENT, *, count: int = 252) -> tuple[
 class PortfolioReader:
     snapshot: PortfolioSnapshot
 
-    def latest(self) -> tuple[str, PortfolioSnapshot, str]:
-        return "portfolio-id", self.snapshot, "source-hash"
+    def latest_snapshot(self) -> PortfolioSnapshot:
+        return self.snapshot
 
 
 @dataclass

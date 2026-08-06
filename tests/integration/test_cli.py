@@ -45,6 +45,8 @@ from marketsieve_extension_api import (
 from marketsieve_source_csv import CsvDailyBarImporter
 from marketsieve_source_jquants import JQuantsSource
 
+ROOT = Path(__file__).parents[2]
+RAKUTEN_EMPTY_FIXTURE = ROOT / "tests/fixtures/rakuten/assetbalance-empty.csv"
 SCHEMAS = Path("schemas")
 
 
@@ -461,8 +463,81 @@ def test_canonical_portfolio_import_and_show_are_offline_and_deterministic() -> 
             for path in Path(".marketsieve/portfolio").rglob("*")
             if path.is_file()
         )
-    validate("portfolio-result", imported_document)
-    validate("portfolio-result", shown_document)
+    validate("portfolio-result", imported_document, major=2)
+    validate("portfolio-result", shown_document, major=2)
+
+
+def test_rakuten_empty_portfolio_import_is_offline_and_private() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        imported = runner.invoke(
+            main,
+            [
+                "portfolio",
+                "import",
+                str(RAKUTEN_EMPTY_FIXTURE),
+                "--broker",
+                "rakuten",
+                "--as-of",
+                "2026-08-06T12:48:40+09:00",
+                "--output",
+                "json",
+            ],
+        )
+
+        assert imported.exit_code == 0, imported.output
+        document = json.loads(imported.stdout)
+        assert document["holdings"] == []
+        assert document["watch_items"] == []
+        assert document["source"] == "rakuten_assetbalance_empty"
+        assert document["source_name"] == "rakuten"
+        assert document["source_version"] == "0.7.0"
+        assert document["dataset"] == "assetbalance-all-empty/v1"
+        assert document["diagnostics"] == ["empty_portfolio"]
+        assert not any(
+            path.read_bytes() == RAKUTEN_EMPTY_FIXTURE.read_bytes()
+            for path in Path(".marketsieve/portfolio").rglob("*")
+            if path.is_file()
+        )
+    validate("portfolio-result", document, major=2)
+
+
+@pytest.mark.parametrize(
+    "failure",
+    (ImportError("load failed"), LookupError("missing input"), RuntimeError("adapter failed")),
+)
+def test_portfolio_import_normalizes_plugin_operational_failures(
+    monkeypatch: pytest.MonkeyPatch, failure: Exception
+) -> None:
+    cli_module = importlib.import_module("marketsieve_cli.interfaces.cli.main")
+
+    def fail_import(*_args: object, **_kwargs: object) -> None:
+        raise failure
+
+    monkeypatch.setattr(cli_module, "import_portfolio", fail_import)
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        [
+            "portfolio",
+            "import",
+            str(RAKUTEN_EMPTY_FIXTURE),
+            "--broker",
+            "fixture",
+            "--as-of",
+            "2026-08-06T12:48:40+09:00",
+            "--output",
+            "json",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert result.stdout == ""
+    assert json.loads(result.stderr) == {
+        "error": "portfolio_import_failed",
+        "message": str(failure),
+        "schema_version": "1.0.0",
+    }
 
 
 def test_configuration_errors_do_not_block_commands_that_do_not_read_configuration() -> None:

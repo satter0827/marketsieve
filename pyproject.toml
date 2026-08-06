@@ -5,6 +5,7 @@ requires-python = ">=3.12,<3.15"
 dependencies = [
     "marketsieve-agent",
     "marketsieve-cli",
+    "marketsieve-import-rakuten",
     "marketsieve-source-csv",
     "marketsieve-source-jquants",
     "marketsieve-source-alphavantage",
@@ -37,6 +38,7 @@ members = [
     "packages/cli",
     "packages/core",
     "packages/extension-api",
+    "packages/import-rakuten",
     "packages/source-csv",
     "packages/source-jquants",
     "packages/source-alphavantage",
@@ -48,6 +50,7 @@ members = [
 [tool.uv.sources]
 marketsieve-agent = { workspace = true }
 marketsieve-cli = { workspace = true }
+marketsieve-import-rakuten = { workspace = true }
 marketsieve-source-csv = { workspace = true }
 marketsieve-source-jquants = { workspace = true }
 marketsieve-source-alphavantage = { workspace = true }
@@ -78,6 +81,12 @@ distribution = "marketsieve-cli"
 path = "packages/cli"
 module = "marketsieve_cli"
 role = "cli"
+
+[[tool.marketsieve.public-packages]]
+distribution = "marketsieve-import-rakuten"
+path = "packages/import-rakuten"
+module = "marketsieve_import_rakuten"
+role = "adapter"
 
 [[tool.marketsieve.public-packages]]
 distribution = "marketsieve-source-csv"
@@ -126,10 +135,12 @@ cache-dir = ".marketsieve/cache/ruff"
 line-length = 100
 src = [
     "examples/instrument-universe-plugin/src",
+    "examples/portfolio-importer-plugin/src",
     "packages/agent/src",
     "packages/cli/src",
     "packages/core/src",
     "packages/extension-api/src",
+    "packages/import-rakuten/src",
     "packages/source-csv/src",
     "packages/source-jquants/src",
     "packages/source-alphavantage/src",
@@ -151,10 +162,12 @@ quote-style = "double"
 cache_dir = ".marketsieve/cache/mypy"
 files = [
     "examples/instrument-universe-plugin/src",
+    "examples/portfolio-importer-plugin/src",
     "packages/agent/src",
     "packages/cli/src",
     "packages/core/src",
     "packages/extension-api/src",
+    "packages/import-rakuten/src",
     "packages/source-csv/src",
     "packages/source-jquants/src",
     "packages/source-alphavantage/src",
@@ -171,7 +184,7 @@ warn_unused_ignores = true
 [tool.coverage.run]
 branch = true
 data_file = ".marketsieve/coverage/data"
-source = ["marketsieve", "marketsieve_agent", "marketsieve_cli", "marketsieve_extension_api", "marketsieve_source_csv", "marketsieve_source_jquants", "marketsieve_source_alphavantage", "marketsieve_source_fred", "marketsieve_source_sec", "marketsieve_source_edinet"]
+source = ["marketsieve", "marketsieve_agent", "marketsieve_cli", "marketsieve_extension_api", "marketsieve_import_rakuten", "marketsieve_source_csv", "marketsieve_source_jquants", "marketsieve_source_alphavantage", "marketsieve_source_fred", "marketsieve_source_sec", "marketsieve_source_edinet"]
 omit = ["*/marketsieve_cli/__main__.py"]
 
 [tool.coverage.report]
@@ -183,7 +196,7 @@ skip_covered = true
 output = ".marketsieve/coverage/coverage.json"
 
 [tool.importlinter]
-root_packages = ["marketsieve", "marketsieve_agent", "marketsieve_cli", "marketsieve_extension_api", "marketsieve_source_csv", "marketsieve_source_jquants", "marketsieve_source_alphavantage", "marketsieve_source_fred", "marketsieve_source_sec", "marketsieve_source_edinet"]
+root_packages = ["marketsieve", "marketsieve_agent", "marketsieve_cli", "marketsieve_extension_api", "marketsieve_import_rakuten", "marketsieve_source_csv", "marketsieve_source_jquants", "marketsieve_source_alphavantage", "marketsieve_source_fred", "marketsieve_source_sec", "marketsieve_source_edinet"]
 
 [[tool.importlinter.contracts]]
 name = "Application dependencies point inward"
@@ -194,6 +207,7 @@ layers = [
     "marketsieve_cli.adapters",
     "marketsieve_cli.application",
     "marketsieve_agent",
+    "marketsieve_import_rakuten",
     "marketsieve_source_csv",
     "marketsieve_source_jquants",
     "marketsieve_source_alphavantage",
@@ -221,7 +235,13 @@ forbidden_modules = ["marketsieve_cli"]
 name = "Extension API is independent from implementations"
 type = "forbidden"
 source_modules = ["marketsieve_extension_api"]
-forbidden_modules = ["marketsieve_cli", "marketsieve_source_csv", "marketsieve_source_jquants", "marketsieve_source_alphavantage", "marketsieve_source_fred", "marketsieve_source_sec", "marketsieve_source_edinet"]
+forbidden_modules = ["marketsieve_cli", "marketsieve_import_rakuten", "marketsieve_source_csv", "marketsieve_source_jquants", "marketsieve_source_alphavantage", "marketsieve_source_fred", "marketsieve_source_sec", "marketsieve_source_edinet"]
+
+[[tool.importlinter.contracts]]
+name = "Rakuten importer does not depend on the CLI"
+type = "forbidden"
+source_modules = ["marketsieve_import_rakuten"]
+forbidden_modules = ["marketsieve_cli"]
 
 [[tool.importlinter.contracts]]
 name = "CSV source does not depend on the CLI"

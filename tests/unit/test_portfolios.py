@@ -7,7 +7,11 @@ from pathlib import Path
 
 import pytest
 
-from marketsieve_cli.adapters.portfolios import PortfolioStore, import_canonical_csv
+from marketsieve_cli.adapters.portfolios import (
+    PortfolioStore,
+    import_canonical_csv,
+    portfolio_document,
+)
 
 HEADER = "kind,mic,symbol,currency,timezone,quantity,average_acquisition_price,account_type\n"
 
@@ -22,24 +26,25 @@ def payload() -> bytes:
 
 def test_canonical_import_is_sorted_typed_and_source_bytes_are_not_stored(tmp_path: Path) -> None:
     original = payload()
-    snapshot, source_hash = import_canonical_csv(
-        original, as_of=datetime(2026, 8, 6, 20, tzinfo=UTC)
-    )
+    imported = import_canonical_csv(original, as_of=datetime(2026, 8, 6, 20, tzinfo=UTC))
     store = PortfolioStore(tmp_path / "portfolio")
 
-    first = store.put(snapshot, source_hash=source_hash)
-    second = store.put(snapshot, source_hash=source_hash)
-    object_id, restored, restored_hash = store.latest()
+    first = store.put(imported)
+    second = store.put(imported)
+    object_id, restored = store.latest()
 
     assert first == second == object_id
-    assert restored == snapshot
-    assert restored_hash == source_hash == hashlib.sha256(original).hexdigest()
-    assert [(item.instrument.mic, item.instrument.symbol) for item in restored.holdings] == [
-        ("XTKS", "7203")
-    ]
-    assert [(item.instrument.mic, item.instrument.symbol) for item in restored.watch_items] == [
-        ("XNAS", "MSFT")
-    ]
+    assert restored == imported
+    assert restored.source_hash == hashlib.sha256(original).hexdigest()
+    assert restored.source_name == "canonical"
+    assert restored.dataset == "canonical-portfolio/v1"
+    assert store.latest_snapshot() == imported.snapshot
+    assert [
+        (item.instrument.mic, item.instrument.symbol) for item in restored.snapshot.holdings
+    ] == [("XTKS", "7203")]
+    assert [
+        (item.instrument.mic, item.instrument.symbol) for item in restored.snapshot.watch_items
+    ] == [("XNAS", "MSFT")]
     assert original not in (tmp_path / "portfolio" / "objects" / f"{object_id}.json").read_bytes()
 
 
@@ -76,8 +81,8 @@ def test_store_rejects_missing_tampered_and_noncanonical_objects(tmp_path: Path)
     with pytest.raises(ValueError, match="SHA-256"):
         store.show("bad")
 
-    snapshot, source_hash = import_canonical_csv(payload(), as_of=datetime(2026, 8, 6, tzinfo=UTC))
-    object_id = store.put(snapshot, source_hash=source_hash)
+    imported = import_canonical_csv(payload(), as_of=datetime(2026, 8, 6, tzinfo=UTC))
+    object_id = store.put(imported)
     path = tmp_path / "portfolio" / "objects" / f"{object_id}.json"
     value = json.loads(path.read_bytes())
     value["source"] = "changed"
@@ -87,56 +92,26 @@ def test_store_rejects_missing_tampered_and_noncanonical_objects(tmp_path: Path)
         store.show(object_id)
 
 
-def test_store_rejects_invalid_source_hash_and_symlink_destination(tmp_path: Path) -> None:
-    snapshot, source_hash = import_canonical_csv(payload(), as_of=datetime(2026, 8, 6, tzinfo=UTC))
+def test_store_rejects_symlink_destination(tmp_path: Path) -> None:
+    imported = import_canonical_csv(payload(), as_of=datetime(2026, 8, 6, tzinfo=UTC))
     store = PortfolioStore(tmp_path / "portfolio")
-    with pytest.raises(ValueError, match="source hash"):
-        store.put(snapshot, source_hash="bad")
 
     objects = tmp_path / "portfolio" / "objects"
     objects.mkdir(parents=True)
     target = tmp_path / "target"
     target.write_text("unchanged", encoding="utf-8")
     expected = hashlib.sha256(
-        json.dumps(
-            {
-                "schema": "portfolio-result/v1",
-                "as_of": snapshot.as_of.isoformat(),
-                "source": snapshot.source,
-                "source_hash": source_hash,
-                "holdings": [
-                    {
-                        "instrument": {
-                            "mic": "XTKS",
-                            "symbol": "7203",
-                            "currency": "JPY",
-                            "timezone": "Asia/Tokyo",
-                            "type": "equity",
-                        },
-                        "quantity": "10.5",
-                        "average_acquisition_price": "2500",
-                        "account_type": "NISA",
-                    }
-                ],
-                "watch_items": [
-                    {
-                        "instrument": {
-                            "mic": "XNAS",
-                            "symbol": "MSFT",
-                            "currency": "USD",
-                            "timezone": "America/New_York",
-                            "type": "equity",
-                        }
-                    }
-                ],
-            },
-            ensure_ascii=False,
-            sort_keys=True,
-            separators=(",", ":"),
+        (
+            json.dumps(
+                portfolio_document(imported),
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            + "\n"
         ).encode()
-        + b"\n"
     ).hexdigest()
     (objects / f"{expected}.json").symlink_to(target)
     with pytest.raises(ValueError, match="conflicts"):
-        store.put(snapshot, source_hash=source_hash)
+        store.put(imported)
     assert target.read_text(encoding="utf-8") == "unchanged"

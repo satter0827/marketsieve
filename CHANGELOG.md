@@ -11,6 +11,10 @@ will follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- An independently installable Rakuten adapter imports the verified CP932 no-holdings
+  `assetbalance(all)` form as an empty normalized portfolio without retaining personal source data.
+- A versioned portfolio-import extension contract and explicit installed-plugin selection allow
+  broker adapters to be developed outside the workspace.
 - Strict broker-neutral portfolio CSV import, content-addressed normalized storage, and offline
   `portfolio show` with no source-file retention.
 - Knowledge-time-correct annual financial trends and compatible derived metrics in the public SDK,
@@ -40,6 +44,8 @@ will follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Portfolio objects now use `portfolio-result/v2`; 0.7.0 intentionally does not read the
+  pre-release v1 local format.
 - Equity symbols now preserve uppercase dots and hyphens needed by U.S. class-share identifiers.
 - Public packages share version 0.7.0 and accept dependencies from the compatible 0.7 minor series
   so adapters can be developed and installed outside this workspace.

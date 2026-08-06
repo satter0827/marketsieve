@@ -156,9 +156,21 @@ def _decode_text(payload: bytes) -> str | None:
         return None
 
 
+def _decode_labeled_text(payload: bytes, label: str) -> str | None:
+    text = _decode_text(payload)
+    if text is not None or not label.lower().endswith(".csv"):
+        return text
+    if len(payload) > MAX_TEXT_BYTES or b"\0" in payload:
+        return None
+    try:
+        return payload.decode("cp932")
+    except UnicodeDecodeError:
+        return None
+
+
 def _read_text(path: Path) -> str | None:
     try:
-        return _decode_text(path.read_bytes())
+        return _decode_labeled_text(path.read_bytes(), str(path))
     except OSError:
         return None
 
@@ -423,7 +435,7 @@ def _scan_archive_payload(payload: bytes, label: str, *, depth: int = 0) -> list
                         findings.append(Finding(member_label, 0, "unscannable_content"))
                         continue
                     member_payload = archive.read(zip_member)
-                    text = _decode_text(member_payload)
+                    text = _decode_labeled_text(member_payload, member_label)
                     if text is not None:
                         findings.extend(_scan_text(member_label, text))
                     nested_archive = _is_archive(zip_member.filename)
@@ -456,7 +468,7 @@ def _scan_archive_payload(payload: bytes, label: str, *, depth: int = 0) -> list
                         continue
                     handle = archive.extractfile(tar_member)
                     member_payload = handle.read() if handle is not None else b""
-                    text = _decode_text(member_payload)
+                    text = _decode_labeled_text(member_payload, member_label)
                     if text is not None:
                         findings.extend(_scan_text(member_label, text))
                     nested_archive = _is_archive(tar_member.name)
@@ -584,7 +596,7 @@ def scan_history(base: str) -> list[Finding]:
             if _is_archive(changed_path):
                 findings.extend(_scan_archive_payload(payload, label))
             else:
-                text = _decode_text(payload)
+                text = _decode_labeled_text(payload, changed_path)
                 if text is None:
                     if not _is_sensitive_path(changed_path, name):
                         findings.append(Finding(label, 0, "unscannable_content"))

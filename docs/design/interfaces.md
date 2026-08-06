@@ -204,7 +204,7 @@ Routine operation uses the following commands:
 
 ```shell
 marketsieve init
-marketsieve portfolio import --broker rakuten PATH
+marketsieve portfolio import --broker rakuten --as-of TIMESTAMP PATH
 marketsieve portfolio show
 marketsieve daily {jp,us}
 marketsieve weekly
@@ -214,7 +214,7 @@ marketsieve report export {ID,latest} --format markdown
 marketsieve report explain {ID,latest} --provider PROVIDER
 ```
 
-The implemented broker-neutral path is:
+The broker-neutral path is:
 
 ```shell
 marketsieve portfolio import --broker canonical --as-of TIMESTAMP PATH
@@ -226,6 +226,19 @@ Canonical CSV uses the exact header
 `holding` rows require positive quantity, acquisition price, and a non-empty account type. `watch`
 rows require those three fields to be empty. Instruments are equities identified by MIC, symbol,
 currency, and IANA timezone. Normalized holdings and watch items use a stable instrument order.
+
+The Rakuten path accepts only the observed CP932 `assetbalance(all)` shape whose portfolio-detail
+section explicitly states that no holdings exist:
+
+```shell
+marketsieve portfolio import --broker rakuten --as-of TIMESTAMP PATH
+```
+
+It creates a valid empty portfolio, retains the input digest, and does not retain the source path,
+bytes, customer identity, or account identity. JSON and stored objects retain the selected adapter
+name and version, dataset identity, and diagnostics. A non-empty Rakuten detail section is rejected
+until an anonymized real export defines its columns and semantics. The canonical CSV remains the
+input for holdings and watch items.
 
 `daily` explicitly acquires price, financial, and event data through the configured profile,
 validates each snapshot, and evaluates every held or watched instrument in the selected market.

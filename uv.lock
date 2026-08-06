@@ -8,6 +8,7 @@ members = [
     "marketsieve-agent",
     "marketsieve-cli",
     "marketsieve-extension-api",
+    "marketsieve-import-rakuten",
     "marketsieve-source-alphavantage",
     "marketsieve-source-csv",
     "marketsieve-source-edinet",
@@ -599,6 +600,7 @@ agent = [
 ]
 all = [
     { name = "marketsieve-agent" },
+    { name = "marketsieve-import-rakuten" },
     { name = "marketsieve-source-alphavantage" },
     { name = "marketsieve-source-csv" },
     { name = "marketsieve-source-edinet" },
@@ -607,6 +609,7 @@ all = [
     { name = "marketsieve-source-sec" },
 ]
 all-sources = [
+    { name = "marketsieve-import-rakuten" },
     { name = "marketsieve-source-alphavantage" },
     { name = "marketsieve-source-csv" },
     { name = "marketsieve-source-edinet" },
@@ -622,6 +625,8 @@ requires-dist = [
     { name = "marketsieve-agent", marker = "extra == 'agent'", editable = "packages/agent" },
     { name = "marketsieve-agent", marker = "extra == 'all'", editable = "packages/agent" },
     { name = "marketsieve-extension-api", editable = "packages/extension-api" },
+    { name = "marketsieve-import-rakuten", marker = "extra == 'all'", editable = "packages/import-rakuten" },
+    { name = "marketsieve-import-rakuten", marker = "extra == 'all-sources'", editable = "packages/import-rakuten" },
     { name = "marketsieve-source-alphavantage", marker = "extra == 'all'", editable = "packages/source-alphavantage" },
     { name = "marketsieve-source-alphavantage", marker = "extra == 'all-sources'", editable = "packages/source-alphavantage" },
     { name = "marketsieve-source-csv", marker = "extra == 'all'", editable = "packages/source-csv" },
@@ -648,6 +653,21 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [{ name = "marketsieve", editable = "packages/core" }]
+
+[[package]]
+name = "marketsieve-import-rakuten"
+version = "0.7.0"
+source = { editable = "packages/import-rakuten" }
+dependencies = [
+    { name = "marketsieve" },
+    { name = "marketsieve-extension-api" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "marketsieve", editable = "packages/core" },
+    { name = "marketsieve-extension-api", editable = "packages/extension-api" },
+]
 
 [[package]]
 name = "marketsieve-source-alphavantage"
@@ -746,6 +766,7 @@ source = { virtual = "." }
 dependencies = [
     { name = "marketsieve-agent" },
     { name = "marketsieve-cli" },
+    { name = "marketsieve-import-rakuten" },
     { name = "marketsieve-source-alphavantage" },
     { name = "marketsieve-source-csv" },
     { name = "marketsieve-source-edinet" },
@@ -772,6 +793,7 @@ dev = [
 requires-dist = [
     { name = "marketsieve-agent", editable = "packages/agent" },
     { name = "marketsieve-cli", editable = "packages/cli" },
+    { name = "marketsieve-import-rakuten", editable = "packages/import-rakuten" },
     { name = "marketsieve-source-alphavantage", editable = "packages/source-alphavantage" },
     { name = "marketsieve-source-csv", editable = "packages/source-csv" },
     { name = "marketsieve-source-edinet", editable = "packages/source-edinet" },

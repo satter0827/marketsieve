@@ -1,15 +1,23 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:marketsieve:schema:portfolio-result:1.0.0",
+  "$id": "urn:marketsieve:schema:portfolio-result:2.0.0",
   "title": "MarketSieve Portfolio Result",
   "type": "object",
-  "required": ["object_id", "schema", "as_of", "source", "source_hash", "holdings", "watch_items"],
+  "required": ["object_id", "schema", "as_of", "source", "source_name", "source_version", "dataset", "source_hash", "diagnostics", "holdings", "watch_items"],
   "properties": {
     "object_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-    "schema": {"const": "portfolio-result/v1"},
+    "schema": {"const": "portfolio-result/v2"},
     "as_of": {"type": "string", "format": "date-time"},
-    "source": {"const": "canonical_csv"},
+    "source": {"type": "string", "minLength": 1},
+    "source_name": {"type": "string", "minLength": 1},
+    "source_version": {"type": "string", "minLength": 1},
+    "dataset": {"type": "string", "minLength": 1},
     "source_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "diagnostics": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1},
+      "uniqueItems": true
+    },
     "holdings": {
       "type": "array",
       "items": {"$ref": "#/$defs/holding"}
