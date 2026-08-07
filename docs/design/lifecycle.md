@@ -2,43 +2,40 @@
 
 ## Activity classes
 
-- **Automated:** repository code, tests, or CI can complete and verify the activity.
-- **Human decision:** product meaning, external terms, or release approval requires a person.
-- **Manual procedure:** a person supplies local input or performs an external operation whose state
-  is not owned by MarketSieve.
+| Activity | Owner | Completion evidence |
+| --- | --- | --- |
+| Maintain built-in constituent assets | Maintainer | source URL, as-of date, count, and asset hash review |
+| Fetch yfinance observations | Automated | request fingerprint, source version, input snapshot, failures |
+| Calculate and store matrix | Automated | immutable object verifies and coverage is explicit |
+| Read rows or compare fields | Human or external agent | selected matrix ID and stored JSONL reference |
+| Interpret aggregate analysis | Human or external agent | claims trace to matrix summary and definitions |
+| Adopt a security-specific conclusion | Human decision | outside MarketSieve canonical state |
+| Place an order or send a message | Unsupported | no product path exists |
 
 ## Development and release
 
-| Activity | Class | Completion evidence |
-| --- | --- | --- |
-| Implement a focused change | Automated | Focused tests and the complete local gate pass |
-| Review the frozen commit | Human decision | Semantic review has no unresolved finding |
-| Attest the reviewed commit | Automated | Commit-bound review status matches clean HEAD |
-| Merge a develop pull request | Automated | Develop Gate and Evidence Gate succeed |
-| Promote develop to main | Human decision | Release Gate succeeds and a person approves the boundary |
-| Publish a tag or package | Human decision | Separate release procedure is explicitly authorized |
-
-A code change after review returns to local checks, evidence, semantic review, and attestation. CI
-does not become an iterative code-review loop.
+Work starts from `develop` on a `codex/` branch. The complete local gate and review evidence freeze a
+specific SHA before CI. A reviewed change is squash-merged to `develop`. Promotion from `develop` to
+`main` uses the Release Gate and a merge commit. Tags and public releases are separate explicit
+decisions.
 
 ## Data and analysis lifecycle
 
-| Activity | Class | Completion evidence |
-| --- | --- | --- |
-| Import a portfolio export | Manual procedure | Immutable normalized holdings object verifies |
-| Add or remove a watchlist instrument | Human decision | New content-addressed revision names the change |
-| Fetch a bounded market universe | Manual procedure | Universe identity, truncation, and diagnostics persist |
-| Run deterministic screening | Automated | Static screening report verifies |
-| Promote a candidate to watchlist | Human decision | Explicit command records screening provenance |
-| Build an analysis workspace | Automated | Context ID and Markdown verify from the same artifacts |
-| Research news and discuss a decision | Human decision | Work remains external to canonical MarketSieve state |
+1. A versioned built-in asset defines the requested index memberships.
+2. One yfinance batch request acquires prices, profiles, financials, and exact failure evidence.
+3. Pure calculations create the common row field set and index-relative measures.
+4. Canonical JSONL, definitions, manifest, summary, and failures determine the matrix identity.
+5. CSV, HTML, and Markdown are generated from that authority and verified on read.
+6. AI context references one immutable matrix; it does not duplicate all rows.
+7. A later refresh creates another object. It never rewrites an earlier object.
 
-Provider code never weakens a request, switches destination, merges values, or retains raw
-responses beyond its approved contract. A provider change uses the same focused checks and review
-sequence as core changes.
+Interrupted runs live separately from completed objects. Existing pre-0.9 local artifacts remain
+recoverable on disk but no current schema or command reads them. Current decision reports and
+watchlists use the isolated `.marketsieve/reports/v2` and `.marketsieve/watchlists/v2` roots, and
+the current analysis workspace uses `.marketsieve/analysis/v2`.
 
 ## Documentation lifecycle
 
-Tested behavior and public types are executable authority. Formal design describes implemented
-system behavior. The roadmap orders later outcomes. Temporary notes never become prerequisites for
-understanding the current contract.
+Implemented system contracts live in `docs/design`. Planned outcomes live in `docs/roadmap.md`.
+Dated notes are temporary investigation and never become prerequisites for understanding current
+behavior. Root README files remain concise audience guides.

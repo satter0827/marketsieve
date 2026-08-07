@@ -205,7 +205,7 @@ def test_decision_report_accepts_one_canonical_semantic_model() -> None:
     snapshot = PortfolioSnapshot(analysis.as_of, (holding(),), (), "rakuten_csv")
     report = DecisionReport(
         "a" * 64,
-        "decision-report/v1",
+        "decision-report/v2",
         MarketSession.JP_CLOSE,
         analysis.as_of,
         snapshot,
@@ -227,7 +227,7 @@ def test_decision_report_rejects_time_portfolio_and_policy_mismatches() -> None:
     snapshot = PortfolioSnapshot(analysis.as_of, (holding(),), (), "csv")
     report = DecisionReport(
         "a" * 64,
-        "decision-report/v1",
+        "decision-report/v2",
         MarketSession.JP_CLOSE,
         analysis.as_of,
         snapshot,
@@ -252,7 +252,7 @@ def test_decision_report_rejects_time_portfolio_and_policy_mismatches() -> None:
     ("changes", "error"),
     [
         ({"report_id": "bad"}, "report ID"),
-        ({"schema_version": "decision-report/v2"}, "schema"),
+        ({"schema_version": "decision-report/v3"}, "schema"),
         ({"session": "jp_close"}, "session"),
         ({"as_of": datetime(2026, 1, 1)}, "UTC offset"),
         ({"portfolio": object()}, "portfolio"),
@@ -271,7 +271,7 @@ def test_decision_report_rejects_noncanonical_values(
     decision = BalancedMediumTermPolicy().evaluate(analysis)
     report = DecisionReport(
         "a" * 64,
-        "decision-report/v1",
+        "decision-report/v2",
         MarketSession.JP_CLOSE,
         analysis.as_of,
         PortfolioSnapshot(analysis.as_of, (holding(),), (), "csv"),
@@ -290,7 +290,7 @@ def test_weekly_report_requires_two_canonical_input_ids() -> None:
     decision = BalancedMediumTermPolicy().evaluate(analysis)
     report = DecisionReport(
         "a" * 64,
-        "decision-report/v1",
+        "decision-report/v2",
         MarketSession.JP_CLOSE,
         analysis.as_of,
         PortfolioSnapshot(analysis.as_of, (holding(),), (), "csv"),

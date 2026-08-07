@@ -13,12 +13,9 @@ from marketsieve import (
     BalancedMediumTermPolicy,
     DecisionPolicy,
     DecisionReport,
-    InstrumentDecision,
     MarketSession,
     PersonalInvestmentContext,
     PortfolioSnapshot,
-    ScreeningReport,
-    candidate_order_key,
 )
 from marketsieve.data.daily import DailyBar
 from marketsieve.domain import Instrument
@@ -67,10 +64,6 @@ class RoutineConfiguration(Protocol):
     def daily_profile(self, market: str) -> tuple[str, int, int]: ...
 
     def weekly_max_age_days(self) -> int: ...
-
-
-class ScreeningReportReader(Protocol):
-    def latest_report(self, market: str) -> ScreeningReport: ...
 
 
 MARKET_CURRENCY = {"jp": "JPY", "us": "USD"}
@@ -306,12 +299,10 @@ class WeeklyBriefService:
         reports: DecisionReportRepository,
         configuration: RoutineConfiguration,
         report_factory: Callable[..., DecisionReport],
-        screening: ScreeningReportReader | None = None,
     ) -> None:
         self._reports = reports
         self._configuration = configuration
         self._report_factory = report_factory
-        self._screening = screening
 
     def run(self, *, as_of: datetime) -> DecisionReport:
         if as_of.tzinfo is None or as_of.utcoffset() is None:
@@ -351,9 +342,6 @@ class WeeklyBriefService:
                 key=lambda item: (item.instrument.mic, item.instrument.symbol),
             )
         )
-        candidate_decisions, screening_report_ids, screening_diagnostics = self._screening_inputs(
-            as_of, maximum_age, portfolio
-        )
         try:
             previous_report_id = self._reports.latest(MarketSession.WEEKLY).report_id
         except LookupError:
@@ -364,63 +352,12 @@ class WeeklyBriefService:
             portfolio,
             decisions,
             diagnostics=tuple(
-                sorted(
-                    {diagnostic for item in daily_reports for diagnostic in item.diagnostics}
-                    | set(screening_diagnostics)
-                )
+                sorted({diagnostic for item in daily_reports for diagnostic in item.diagnostics})
             ),
             previous_report_id=previous_report_id,
             input_report_ids=tuple(sorted(item.report_id for item in daily_reports)),
-            candidate_decisions=candidate_decisions,
-            screening_report_ids=screening_report_ids,
         )
         return self._reports.put(report)
-
-    def _screening_inputs(
-        self,
-        as_of: datetime,
-        maximum_age: timedelta,
-        portfolio: PortfolioSnapshot,
-    ) -> tuple[
-        tuple[InstrumentDecision, ...],
-        tuple[str, ...],
-        tuple[str, ...],
-    ]:
-        if self._screening is None:
-            return (), (), ()
-        reports: list[ScreeningReport] = []
-        diagnostics: list[str] = []
-        for market in ("jp", "us"):
-            try:
-                report = self._screening.latest_report(market)
-            except (LookupError, OSError, TypeError, ValueError) as error:
-                diagnostics.append(f"{market}:screening_report_unavailable:{type(error).__name__}")
-                continue
-            age = as_of.astimezone(UTC) - report.as_of.astimezone(UTC)
-            if age < timedelta(0):
-                diagnostics.append(f"{market}:screening_report_newer_than_weekly")
-                continue
-            if age > maximum_age:
-                diagnostics.append(f"{market}:screening_report_stale")
-                continue
-            reports.append(report)
-            diagnostics.extend(
-                f"{market}:screening:{diagnostic}" for diagnostic in report.diagnostics
-            )
-        held = {(item.instrument.mic, item.instrument.symbol) for item in portfolio.holdings}
-        values = [
-            candidate.decision
-            for report in reports
-            for candidate in report.candidates
-            if (candidate.decision.instrument.mic, candidate.decision.instrument.symbol) not in held
-        ]
-        identities = tuple(
-            (decision.instrument.mic, decision.instrument.symbol) for decision in values
-        )
-        if len(identities) != len(set(identities)):
-            raise ValueError("screening reports contain duplicate candidate instruments")
-        candidates = tuple(sorted(values, key=candidate_order_key))
-        return candidates, tuple(sorted(item.report_id for item in reports)), tuple(diagnostics)
 
     def _eligible(
         self,

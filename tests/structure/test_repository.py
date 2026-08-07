@@ -25,7 +25,7 @@ def test_readmes_expose_the_static_analysis_path() -> None:
     readmes = tuple(
         (ROOT / name).read_text(encoding="utf-8") for name in ("README.md", "README.ja.md")
     )
-    for command in ("make daily-status", "make screen-refresh-jp", "make analysis-build"):
+    for command in ("make daily-status", "make market-matrix", "make analysis-build"):
         assert all(command in document for document in readmes)
 
 
@@ -89,8 +89,7 @@ def test_vscode_is_an_ascii_operational_entry_point() -> None:
         "01 First Run: Create Configuration",
         "02 First Run: Import Rakuten Portfolio",
         "03 Daily Use: Check Readiness",
-        "10 Discovery: Refresh JP Candidates (Network)",
-        "20 Discovery: Refresh US Candidates (Network)",
+        "10 Market Matrix: Refresh All Indices (Network)",
         "30 Watchlist: Add Instrument",
         "40 Daily Use: Analyze JP Watchlist (Network)",
         "50 Daily Use: Analyze US Watchlist (Network)",
@@ -101,12 +100,11 @@ def test_vscode_is_an_ascii_operational_entry_point() -> None:
         "91 Debug: JP Daily Analysis",
         "92 Debug: Analysis Workspace Build",
     ]
-    assert [item["command"] for item in launches[:11]] == [
+    assert [item["command"] for item in launches[:10]] == [
         "make setup-config",
         "make portfolio-import BROKER=rakuten",
         "make daily-status",
-        "make screen-refresh-jp",
-        "make screen-refresh-us",
+        "make market-matrix",
         "make watchlist-add",
         "make daily-jp",
         "make daily-us",
@@ -114,18 +112,18 @@ def test_vscode_is_an_ascii_operational_entry_point() -> None:
         "make analysis-build",
         "make analysis-show",
     ]
-    assert all(item["type"] == "node-terminal" for item in launches[:11])
-    assert all(item["type"] == "debugpy" for item in launches[11:])
-    assert all(item["module"] == "marketsieve_cli" for item in launches[11:])
-    assert launches[12]["args"] == ["--config", "marketsieve.toml", "daily", "jp"]
-    assert launches[13]["args"] == ["analysis", "build"]
+    assert all(item["type"] == "node-terminal" for item in launches[:10])
+    assert all(item["type"] == "debugpy" for item in launches[10:])
+    assert all(item["module"] == "marketsieve_cli" for item in launches[10:])
+    assert launches[11]["args"] == ["--config", "marketsieve.toml", "daily", "jp"]
+    assert launches[12]["args"] == ["analysis", "build"]
 
     task_document = json.loads((vscode / "tasks.json").read_text(encoding="utf-8"))
     tasks = task_document["tasks"]
     assert all(task["type"] == "process" and task["command"] == "make" for task in tasks)
     assert {task["label"].partition(":")[0] for task in tasks} == {
         "First Run",
-        "Discovery",
+        "Market Matrix",
         "Daily",
         "Analysis",
         "Developer",
@@ -161,12 +159,7 @@ def test_makefile_exposes_stable_operational_and_developer_targets() -> None:
         "portfolio-import",
         "portfolio-show",
         "daily-status",
-        "screen-refresh-jp",
-        "screen-refresh-us",
-        "screen-update-jp",
-        "screen-update-us",
-        "screen-run-jp",
-        "screen-run-us",
+        "market-matrix",
         "watchlist-add",
         "watchlist-remove",
         "watchlist-show",
@@ -187,7 +180,9 @@ def test_makefile_exposes_stable_operational_and_developer_targets() -> None:
         "build",
     }
     assert all(f"{target}:" in makefile for target in targets)
-    assert makefile.index("screen-refresh-jp:") < makefile.index("sync:")
+    assert makefile.index("market-matrix:") < makefile.index("sync:")
+    assert 'uv run marketsieve --config "$(CONFIG)" matrix refresh' in makefile
+    assert '"$(origin CONFIG)" != "file"' in makefile
     assert "scripts.portfolio_check" in makefile
     assert "ai prepare" not in makefile and "ai import" not in makefile
 
@@ -216,6 +211,23 @@ def test_setup_config_is_idempotent_and_does_not_overwrite(tmp_path: Path) -> No
     )
     assert config.read_text(encoding="utf-8") == "sentinel = true\n"
     assert "already exists" in second.stdout
+
+
+def test_market_matrix_rejects_a_missing_environment_configuration(tmp_path: Path) -> None:
+    config = tmp_path / "missing.toml"
+    environment = {**os.environ, "CONFIG": str(config)}
+
+    result = subprocess.run(
+        ["make", "market-matrix"],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+        env=environment,
+    )
+
+    assert result.returncode == 2
+    assert f"Configuration file not found: {config}" in result.stderr
 
 
 def test_daily_status_rejects_invalid_configuration_before_portfolio_check(

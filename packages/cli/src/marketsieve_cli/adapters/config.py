@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import tomllib
 from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
-from marketsieve_cli.contracts import ScreeningConfiguration
+from marketsieve_cli.contracts import MatrixConfiguration
 
 
 @dataclass(frozen=True, slots=True)
@@ -39,26 +40,18 @@ class SourceBinding:
     operation: str | None = None
 
 
-@dataclass(frozen=True, slots=True)
-class ScreeningProfile:
-    source_profile: str
-    acquisition_limit: int
-    eligible_mics: tuple[str, ...]
-    fetch_limit: int
-    lookback_days: int
-    processing_limit: int
-    display_limit: int
-
-
 DEFAULT_DAILY_LOOKBACK_DAYS = 400
 DEFAULT_FINANCIAL_LOOKBACK_DAYS = 1500
 DEFAULT_WEEKLY_MAX_AGE_DAYS = 7
-DEFAULT_SCREEN_ACQUISITION_LIMIT = 100
-DEFAULT_SCREEN_ELIGIBLE_MICS = {"jp": ("XTKS",), "us": ("XNAS", "XNYS")}
-DEFAULT_SCREEN_FETCH_LIMIT = 20
-DEFAULT_SCREEN_LOOKBACK_DAYS = 100
-DEFAULT_SCREEN_PROCESSING_LIMIT = 100
-DEFAULT_SCREEN_DISPLAY_LIMIT = 20
+DEFAULT_MATRIX_INDICES = ("dow30", "nasdaq100", "nikkei225", "sp500", "topix500")
+DEFAULT_MATRIX_HISTORY_DAYS = 1095
+DEFAULT_MATRIX_BATCH_SIZE = 50
+DEFAULT_MATRIX_PROFILE_WORKERS = 2
+DEFAULT_MATRIX_TIMEOUT_SECONDS = 30
+DEFAULT_MATRIX_MAX_RETRIES = 3
+DEFAULT_MATRIX_RETRY_BASE_SECONDS = 2.0
+DEFAULT_MATRIX_MINIMUM_OVERALL_PRICE_COVERAGE = Decimal("0.95")
+DEFAULT_MATRIX_MINIMUM_INDEX_PRICE_COVERAGE = Decimal("0.90")
 
 
 class Configuration:
@@ -201,123 +194,84 @@ class Configuration:
             raise ValueError("weekly max_age_days must be an integer from 1 through 14")
         return maximum
 
-    def screening_profile(self, market: str) -> ScreeningProfile:
-        """Return one explicit universe profile and bounded screening budgets."""
+    def matrix_configuration(self) -> MatrixConfiguration:
+        """Return zero-configuration defaults or one validated matrix table."""
 
-        if market not in {"jp", "us"}:
-            raise ValueError("market must be jp or us")
-        screening = self._document().get("screening")
-        if not isinstance(screening, dict):
-            raise LookupError("screening is not configured; add [screening.jp] and [screening.us]")
-        value = screening.get(market)
-        if not isinstance(value, dict) or not isinstance(value.get("source_profile"), str):
-            raise LookupError(f"screening profile {market!r} must declare source_profile")
-        unknown = set(value) - {
-            "source_profile",
-            "acquisition_limit",
-            "eligible_mics",
-            "fetch_limit",
-            "lookback_days",
-            "processing_limit",
-            "display_limit",
+        value = self._document().get("matrix", {})
+        if not isinstance(value, dict):
+            raise ValueError("matrix configuration must be a TOML table")
+        allowed = {
+            "indices",
+            "history_days",
+            "batch_size",
+            "profile_workers",
+            "timeout_seconds",
+            "max_retries",
+            "retry_base_seconds",
+            "minimum_overall_price_coverage",
+            "minimum_index_price_coverage",
         }
-        if unknown:
-            raise ValueError(f"screening profile {market!r} contains unsupported settings")
-        acquisition = self._bounded_screen_limit(
-            value.get("acquisition_limit", DEFAULT_SCREEN_ACQUISITION_LIMIT),
-            "acquisition_limit",
-            1000,
-        )
-        raw_mics = value.get("eligible_mics", list(DEFAULT_SCREEN_ELIGIBLE_MICS[market]))
-        if (
-            not isinstance(raw_mics, list)
-            or not raw_mics
-            or any(
-                not isinstance(item, str)
-                or len(item) != 4
-                or not item.isascii()
-                or not item.isalnum()
-                or item != item.upper()
-                for item in raw_mics
-            )
-            or len(raw_mics) != len(set(raw_mics))
-        ):
-            raise ValueError("screening eligible_mics must be unique uppercase four-character MICs")
-        eligible_mics = tuple(sorted(raw_mics))
-        processing = self._bounded_screen_limit(
-            value.get("processing_limit", DEFAULT_SCREEN_PROCESSING_LIMIT),
-            "processing_limit",
-            1000,
-        )
-        display = self._bounded_screen_limit(
-            value.get("display_limit", DEFAULT_SCREEN_DISPLAY_LIMIT),
-            "display_limit",
-            100,
-        )
-        fetch_limit = self._bounded_screen_limit(
-            value.get("fetch_limit", DEFAULT_SCREEN_FETCH_LIMIT), "fetch_limit", 100
-        )
-        lookback_days = self._bounded_screen_limit(
-            value.get("lookback_days", DEFAULT_SCREEN_LOOKBACK_DAYS), "lookback_days", 2000
-        )
-        if fetch_limit > processing:
-            raise ValueError("screening fetch_limit must not exceed processing_limit")
-        return ScreeningProfile(
-            value["source_profile"],
-            acquisition,
-            eligible_mics,
-            fetch_limit,
-            lookback_days,
-            processing,
-            display,
-        )
-
-    def screening_configuration(self, market: str) -> ScreeningConfiguration:
-        """Resolve one complete screening operation without leaking configuration structure."""
-
-        screening = self.screening_profile(market)
-        profile = self.source_profile(screening.source_profile)
-        binding = profile.binding("instrument_universe")
-        assert binding.operation is not None
-        return ScreeningConfiguration(
-            source_profile=profile.name,
-            plugin=binding.plugin,
-            operation=binding.operation,
-            settings=dict(binding.settings),
-            acquisition_limit=screening.acquisition_limit,
-            eligible_mics=screening.eligible_mics,
-            fetch_limit=screening.fetch_limit,
-            lookback_days=screening.lookback_days,
-            processing_limit=screening.processing_limit,
-            display_limit=screening.display_limit,
-        )
-
-    def screening_refresh_configuration(self, market: str) -> ScreeningConfiguration:
-        """Validate daily acquisition compatibility before refresh performs I/O."""
-
-        result = self.screening_configuration(market)
-        profile = self.source_profile(result.source_profile)
-        daily = profile.binding("daily_bars")
-        screening = self.screening_profile(market)
-        if (
-            daily.plugin == "alphavantage"
-            and daily.settings.get("outputsize", "compact") == "compact"
-            and screening.lookback_days > 100
-        ):
+        if unknown := set(value) - allowed:
             raise ValueError(
-                "screening lookback_days above 100 requires Alpha Vantage "
-                "outputsize=full and plan=premium"
+                f"matrix configuration contains unsupported settings: {sorted(unknown)}"
             )
+        raw_indices = value.get("indices", list(DEFAULT_MATRIX_INDICES))
         if (
-            daily.plugin == "alphavantage"
-            and daily.settings.get("outputsize") == "full"
-            and daily.settings.get("plan", "free") != "premium"
+            not isinstance(raw_indices, list)
+            or not raw_indices
+            or any(
+                not isinstance(item, str) or item not in DEFAULT_MATRIX_INDICES
+                for item in raw_indices
+            )
+            or len(raw_indices) != len(set(raw_indices))
         ):
-            raise ValueError("Alpha Vantage outputsize=full requires plan=premium")
-        return result
+            raise ValueError("matrix indices must be a unique non-empty list of built-in index IDs")
 
-    @staticmethod
-    def _bounded_screen_limit(value: object, name: str, maximum: int) -> int:
-        if not isinstance(value, int) or isinstance(value, bool) or not 1 <= value <= maximum:
-            raise ValueError(f"screening {name} must be an integer from 1 through {maximum}")
-        return value
+        def integer(name: str, default: int, minimum: int, maximum: int) -> int:
+            result = value.get(name, default)
+            if (
+                not isinstance(result, int)
+                or isinstance(result, bool)
+                or not minimum <= result <= maximum
+            ):
+                raise ValueError(
+                    f"matrix {name} must be an integer from {minimum} through {maximum}"
+                )
+            return result
+
+        retry_base = value.get("retry_base_seconds", DEFAULT_MATRIX_RETRY_BASE_SECONDS)
+        if (
+            not isinstance(retry_base, (int, float))
+            or isinstance(retry_base, bool)
+            or not 0 <= retry_base <= 60
+        ):
+            raise ValueError("matrix retry_base_seconds must be a number from 0 through 60")
+
+        def coverage(name: str, default: Decimal) -> Decimal:
+            try:
+                result = Decimal(str(value.get(name, default)))
+            except (InvalidOperation, ValueError):
+                raise ValueError(f"matrix {name} must be a decimal ratio") from None
+            if not result.is_finite():
+                raise ValueError(f"matrix {name} must be a finite decimal ratio")
+            if not Decimal("0") <= result <= Decimal("1"):
+                raise ValueError(f"matrix {name} must be from 0 through 1")
+            return result
+
+        return MatrixConfiguration(
+            indices=tuple(sorted(raw_indices)),
+            history_days=integer("history_days", DEFAULT_MATRIX_HISTORY_DAYS, 400, 4000),
+            batch_size=integer("batch_size", DEFAULT_MATRIX_BATCH_SIZE, 1, 250),
+            profile_workers=integer("profile_workers", DEFAULT_MATRIX_PROFILE_WORKERS, 1, 8),
+            timeout_seconds=integer("timeout_seconds", DEFAULT_MATRIX_TIMEOUT_SECONDS, 1, 120),
+            max_retries=integer("max_retries", DEFAULT_MATRIX_MAX_RETRIES, 1, 10),
+            retry_base_seconds=float(retry_base),
+            minimum_overall_price_coverage=coverage(
+                "minimum_overall_price_coverage",
+                DEFAULT_MATRIX_MINIMUM_OVERALL_PRICE_COVERAGE,
+            ),
+            minimum_index_price_coverage=coverage(
+                "minimum_index_price_coverage",
+                DEFAULT_MATRIX_MINIMUM_INDEX_PRICE_COVERAGE,
+            ),
+        )

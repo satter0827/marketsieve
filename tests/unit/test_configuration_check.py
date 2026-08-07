@@ -49,10 +49,10 @@ def test_daily_configuration_rejects_a_profile_assigned_to_the_wrong_market(
         validate_daily_configuration(config)
 
 
-def test_daily_configuration_does_not_require_optional_screening(tmp_path: Path) -> None:
-    config = tmp_path / "without-screening.toml"
+def test_daily_configuration_does_not_require_optional_matrix_settings(tmp_path: Path) -> None:
+    config = tmp_path / "without-matrix.toml"
     document = (ROOT / "marketsieve.example.toml").read_text(encoding="utf-8")
-    config.write_text(document.split("\n[screening.jp]", maxsplit=1)[0] + "\n", encoding="utf-8")
+    config.write_text(document.split("\n[matrix]", maxsplit=1)[0] + "\n", encoding="utf-8")
 
     validate_daily_configuration(config)
 

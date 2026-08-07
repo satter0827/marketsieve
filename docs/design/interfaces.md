@@ -2,108 +2,69 @@
 
 ## Root command
 
-`marketsieve` analyzes exchange-qualified Japanese and U.S. equities. Global options select
-non-secret configuration, locale, output mode, and optional local logging. Machine output uses
-versioned English-keyed JSON.
+`marketsieve` uses exchange-qualified `MIC:SYMBOL` identifiers. JSON output uses versioned schemas;
+human output is a projection. Global configuration is optional for the matrix because defaults are
+complete and yfinance needs no credentials.
 
-## Portfolio and watchlist
+## Market matrix
 
-```shell
-marketsieve portfolio import PATH --broker canonical --as-of TIMESTAMP
-marketsieve portfolio import PATH --broker rakuten --as-of TIMESTAMP
-marketsieve portfolio show
-
-marketsieve watchlist add XTKS:7203
-marketsieve watchlist add XNAS:MSFT
-marketsieve watchlist add XTKS:7203 --from-screen REPORT_ID
-marketsieve watchlist remove XTKS:7203
-marketsieve watchlist show
+```text
+marketsieve matrix refresh [--resume RUN_ID]
+marketsieve matrix show [MATRIX_ID|latest]
+marketsieve matrix row MIC:SYMBOL [--matrix MATRIX_ID|latest]
+marketsieve matrix compare MIC:SYMBOL... [--matrix MATRIX_ID|latest] [--fields FIELD]...
 ```
 
-Canonical portfolio CSV uses
-`mic,symbol,currency,timezone,quantity,average_acquisition_price,account_type` and contains holdings
-only. `portfolio-result/v3` contains immutable source identity, diagnostics, and holdings. Watchlist
-revisions use `watchlist-result/v1` and infer currency and timezone only from supported MICs XTKS,
-XNAS, and XNYS.
+`refresh` is the only matrix command with network effects. It creates an immutable
+`market-matrix/v1` object and returns nonzero when configured coverage thresholds are not met.
+`show` verifies the stored `market-matrix-manifest/v1` object and returns its
+`market-matrix/v1` projection with summary and artifact paths. `row` returns one
+`market-matrix-row/v1` with the resolved immutable matrix ID; `compare` returns one
+`market-matrix-comparison/v1`. The latter two read `market-matrix-security/v1` records from
+`securities.jsonl` only and never fetch or recalculate.
 
-Rakuten import accepts CP932 twelve-column `assetbalance(all)` exports only when every security
-category is zero and the detail section explicitly contains no holding. Cash values may be nonzero
-because they do not assert a security position.
+The supported Make entry point is:
 
-## Screening
-
-```shell
-marketsieve --config marketsieve.toml screen update {jp,us}
-marketsieve --config marketsieve.toml screen run {jp,us} [--as-of TIMESTAMP]
-marketsieve --config marketsieve.toml screen refresh {jp,us}
-marketsieve screen show {ID,latest} [--market {jp,us}]
+```text
+make market-matrix
 ```
-
-`update` performs only configured universe import or fetch. `run` consumes verified local daily-bar
-snapshots and performs no network access. `refresh` validates source compatibility, updates the
-universe, fetches at most `fetch_limit` instruments for `lookback_days`, and runs the same offline
-screen. The refresh knowledge time is fixed after universe and price acquisition. Refresh exposes
-no historical-time option; an explicit historical evaluation uses `screen update` followed by
-`screen run --as-of`. `eligible_mics` is part of the universe request,
-so excluded instruments consume neither `acquisition_limit` nor `fetch_limit`. Partial failures and
-excluded MICs remain diagnostics in `screening-report/v1`.
-
-## Routine reports
-
-```shell
-marketsieve --config marketsieve.toml daily {jp,us} [--as-of TIMESTAMP]
-marketsieve --config marketsieve.toml weekly [--as-of TIMESTAMP]
-marketsieve report list
-marketsieve report show {ID,latest}
-marketsieve report export {ID,latest} --format markdown
-```
-
-Daily analysis composes the latest holdings and watchlist. It acquires configured evidence for the
-selected market and writes immutable `decision-report/v1` JSON plus deterministic Markdown. Weekly
-analysis reads eligible JP and US reports and screening reports without acquisition or recalculation.
 
 ## Analysis workspace
 
-```shell
-marketsieve analysis build
+```text
+marketsieve analysis build [--matrix MATRIX_ID|latest]
 marketsieve analysis show
 ```
 
-`build` writes `.marketsieve/analysis/README.md`, `context.json`, and `analysis.md`. `show` verifies
-the context ID, canonical JSON, README, and Markdown before displaying the current view. JSON output
-uses `analysis-context/v1`.
+`analysis build` verifies the chosen matrix and writes canonical `analysis-context/v2` plus matching
+Markdown below `.marketsieve/analysis/v2`. The context records relative paths to the matrix manifest,
+field catalog, index summary, security JSONL, and failure JSONL. `analysis show` revalidates both the
+context identity and referenced matrix.
 
-## Data workbench
+## Portfolio, watchlist, and routine reports
 
-```shell
-marketsieve source list
-marketsieve source import PATH --plugin csv
-marketsieve source doctor PROFILE --kind daily_bars
-marketsieve source fetch PROFILE MIC:SYMBOL --start DATE --end DATE --kind daily_bars
-marketsieve snapshot list
-marketsieve snapshot show OBJECT_ID
-marketsieve snapshot verify OBJECT_ID
-marketsieve inspect MIC:SYMBOL --source-profile PROFILE
-marketsieve compare MIC:SYMBOL MIC:SYMBOL --source-profile PROFILE
-marketsieve analyze sma MIC:SYMBOL --source-profile PROFILE
+```text
+marketsieve portfolio import PATH --broker NAME --as-of TIMESTAMP
+marketsieve portfolio show
+marketsieve watchlist add MIC:SYMBOL
+marketsieve watchlist remove MIC:SYMBOL
+marketsieve watchlist show
+marketsieve --config FILE daily {jp,us}
+marketsieve --config FILE weekly
+marketsieve report {list,show,export}
 ```
 
-Acquisition commands are explicit. Inspection, comparison, indicator calculation, snapshot reads,
-report reads, and workspace reads are offline.
+Portfolio results use `portfolio-result/v3`, watchlists use `watchlist-result/v2`, and daily or
+weekly canonical reports use `decision-report/v2`. Watchlist revisions record explicit instruments
+only and contain no candidate-discovery provenance.
 
-## Strategy Lab
+## Generic data workbench and experiments
 
-```shell
-marketsieve experiment run SPEC.toml
-marketsieve experiment show RUN_ID
-marketsieve experiment compare LEFT_RUN_ID RIGHT_RUN_ID
-```
-
-Strategy Lab consumes explicit verified snapshot IDs. It stores immutable deterministic runs and
-compares metrics without declaring automatic profit, a winner, or statistical superiority.
+`source`, `snapshot`, and `experiment` commands remain available for explicit non-matrix data and
+policy workflows. Their source selection is never used as a fallback for matrix acquisition.
 
 ## Capability and failure contract
 
-`marketsieve capabilities --output json` enumerates every command, option, schema, network effect,
-secret use, and optional write. Unknown fields and unsupported schema major versions are rejected.
-User errors contain a stable code and recovery text without a traceback or secret value.
+`marketsieve capabilities --output json` returns `capabilities-result/v3`. Operational failures use
+stable JSON error envelopes when JSON output is selected. Matrix cell failures additionally use the
+fixed provider-normalized codes documented by `fields.json` and `failures.jsonl`.

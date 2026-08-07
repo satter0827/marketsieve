@@ -7,6 +7,34 @@ will follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-08-07
+
+### Added
+
+- A zero-configuration yfinance source and batch extension contract for adjusted daily prices,
+  company profiles, financial statements, and normalized partial failures.
+- One deduplicated full-security matrix across the Nikkei 225, TOPIX 500, S&P 500, Dow 30, and
+  Nasdaq-100, with a common field catalog and cell-level missing reasons.
+- Immutable JSONL authority, typed CSV and self-contained HTML views, aggregate index summaries,
+  macro analysis Markdown, and matrix-backed `analysis-context/v2`.
+- Offline `matrix show`, `matrix row`, and `matrix compare` views over already calculated rows.
+- Per-date exchange-session close validation, including scheduled U.S. shortened sessions.
+
+### Changed
+
+- Public workspace packages now share version 0.9.0 and compatible 0.9 dependency ranges.
+- Watchlists, decision reports, analysis context, and capabilities use their v2, v2, v2, and v3
+  schemas respectively, without legacy schema loading or automatic migration.
+- Broad-market analysis is now matrix-first and records missing provider values without
+  substitution, imputation, scoring, ranking, or recommendations.
+- BATS identities emitted by the matrix remain valid in watchlists and maintained U.S. providers.
+
+### Removed
+
+- Candidate screening services, stores, policy types, report provenance, CLI commands, and schemas.
+- Public single-security inspection, indicator analysis, and legacy equity comparison entry points.
+- Excel output; matrix artifacts use JSONL, JSON, CSV, self-contained HTML, and Markdown only.
+
 ## [0.8.0] - 2026-08-06
 
 ### Added

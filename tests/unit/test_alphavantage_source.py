@@ -179,6 +179,37 @@ def test_fetches_raw_daily_bars_and_profile_without_exposing_query_credential() 
     assert "example" not in repr(imported)
 
 
+def test_fetches_the_bats_constituent_emitted_by_the_matrix() -> None:
+    cboe = Instrument.create(
+        symbol="CBOE",
+        mic="BATS",
+        currency="USD",
+        exchange_timezone="America/New_York",
+    )
+    cboe_request = DailyBarFetchRequest(
+        "us",
+        cboe,
+        date(2026, 7, 30),
+        date(2026, 7, 31),
+        Adjustment.RAW,
+        {},
+    )
+    cboe_overview = overview() | {
+        "Symbol": "CBOE",
+        "Name": "Cboe Global Markets",
+        "Exchange": "CBOE",
+    }
+    cboe_prices = raw_prices()
+    metadata = cboe_prices["Meta Data"]
+    assert isinstance(metadata, dict)
+    metadata["2. Symbol"] = "CBOE"
+
+    imported = source([response(cboe_overview), response(cboe_prices)]).fetch(cboe_request)
+
+    assert imported.instrument == cboe
+    assert len(imported.bars) == 2
+
+
 def test_every_data_kind_rejects_a_provider_exchange_that_does_not_match_the_mic() -> None:
     wrong_mic = Instrument.create(
         symbol="MSFT", mic="XNYS", currency="USD", exchange_timezone="America/New_York"
@@ -458,7 +489,7 @@ def test_market_and_unknown_settings_are_rejected_before_network() -> None:
         {},
     )
 
-    with pytest.raises(ValueError, match="XNAS and XNYS"):
+    with pytest.raises(ValueError, match="BATS, XNAS, and XNYS"):
         provider.fetch(unsupported)
     assert (
         provider.doctor(configuration({"base_url": "https://attacker.invalid"})).code

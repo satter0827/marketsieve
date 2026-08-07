@@ -19,28 +19,48 @@ from marketsieve_cli.bootstrap import (
     build_experiment_service,
     build_snapshot_service,
     build_weekly_brief_service,
+    compare_market_matrix_rows,
     create_analysis_workspace,
     import_portfolio,
     list_decision_reports,
     project_decision_report,
     read_analysis_workspace,
     read_decision_report,
+    read_market_matrix_row,
     read_portfolio,
-    read_screening,
     read_watchlist,
-    refresh_screening,
+    refresh_market_matrix,
     remove_watchlist_instrument,
     render_decision_report,
-    run_screening,
     sdk_version,
-    update_screening,
+    show_market_matrix,
 )
 
 OUTPUT_CHOICES = ("auto", "rich", "text", "json")
-CAPABILITIES_SCHEMA_VERSION = "2.0.0"
+CAPABILITIES_SCHEMA_VERSION = "3.0.0"
 COMMAND_METADATA: dict[str, dict[str, Any]] = {
+    "matrix refresh": {
+        "output_schema": "urn:marketsieve:schema:market-matrix:1.0.0",
+        "effects": {
+            "network": True,
+            "secrets": False,
+            "optional_writes": ["matrix_run", "market_matrix"],
+        },
+    },
+    "matrix show": {
+        "output_schema": "urn:marketsieve:schema:market-matrix:1.0.0",
+        "effects": {"network": False, "secrets": False, "optional_writes": []},
+    },
+    "matrix row": {
+        "output_schema": "urn:marketsieve:schema:market-matrix-row:1.0.0",
+        "effects": {"network": False, "secrets": False, "optional_writes": []},
+    },
+    "matrix compare": {
+        "output_schema": "urn:marketsieve:schema:market-matrix-comparison:1.0.0",
+        "effects": {"network": False, "secrets": False, "optional_writes": []},
+    },
     "analysis build": {
-        "output_schema": "urn:marketsieve:schema:analysis-context:1.0.0",
+        "output_schema": "urn:marketsieve:schema:analysis-context:2.0.0",
         "effects": {
             "network": False,
             "secrets": False,
@@ -48,39 +68,19 @@ COMMAND_METADATA: dict[str, dict[str, Any]] = {
         },
     },
     "analysis show": {
-        "output_schema": "urn:marketsieve:schema:analysis-context:1.0.0",
+        "output_schema": "urn:marketsieve:schema:analysis-context:2.0.0",
         "effects": {"network": False, "secrets": False, "optional_writes": []},
     },
     "watchlist add": {
-        "output_schema": "urn:marketsieve:schema:watchlist-result:1.0.0",
+        "output_schema": "urn:marketsieve:schema:watchlist-result:2.0.0",
         "effects": {"network": False, "secrets": False, "optional_writes": ["watchlist"]},
     },
     "watchlist remove": {
-        "output_schema": "urn:marketsieve:schema:watchlist-result:1.0.0",
+        "output_schema": "urn:marketsieve:schema:watchlist-result:2.0.0",
         "effects": {"network": False, "secrets": False, "optional_writes": ["watchlist"]},
     },
     "watchlist show": {
-        "output_schema": "urn:marketsieve:schema:watchlist-result:1.0.0",
-        "effects": {"network": False, "secrets": False, "optional_writes": []},
-    },
-    "screen update": {
-        "output_schema": "urn:marketsieve:schema:instrument-universe:1.0.0",
-        "effects": {"network": True, "secrets": True, "optional_writes": ["universe"]},
-    },
-    "screen refresh": {
-        "output_schema": "urn:marketsieve:schema:screening-report:1.0.0",
-        "effects": {
-            "network": True,
-            "secrets": True,
-            "optional_writes": ["universe", "snapshot", "screening_report"],
-        },
-    },
-    "screen run": {
-        "output_schema": "urn:marketsieve:schema:screening-report:1.0.0",
-        "effects": {"network": False, "secrets": False, "optional_writes": ["screening_report"]},
-    },
-    "screen show": {
-        "output_schema": "urn:marketsieve:schema:screening-report:1.0.0",
+        "output_schema": "urn:marketsieve:schema:watchlist-result:2.0.0",
         "effects": {"network": False, "secrets": False, "optional_writes": []},
     },
     "experiment run": {
@@ -96,7 +96,7 @@ COMMAND_METADATA: dict[str, dict[str, Any]] = {
         "effects": {"network": False, "secrets": False, "optional_writes": []},
     },
     "capabilities": {
-        "output_schema": "urn:marketsieve:schema:capabilities-result:2.0.0",
+        "output_schema": "urn:marketsieve:schema:capabilities-result:3.0.0",
         "effects": {"network": False, "secrets": False, "optional_writes": []},
     },
     "doctor": {
@@ -104,7 +104,7 @@ COMMAND_METADATA: dict[str, dict[str, Any]] = {
         "effects": {"network": False, "secrets": False, "optional_writes": ["log_file"]},
     },
     "daily": {
-        "output_schema": "urn:marketsieve:schema:decision-report:1.0.0",
+        "output_schema": "urn:marketsieve:schema:decision-report:2.0.0",
         "effects": {"network": True, "secrets": True, "optional_writes": ["snapshot", "report"]},
     },
     "report list": {
@@ -112,7 +112,7 @@ COMMAND_METADATA: dict[str, dict[str, Any]] = {
         "effects": {"network": False, "secrets": False, "optional_writes": []},
     },
     "report show": {
-        "output_schema": "urn:marketsieve:schema:decision-report:1.0.0",
+        "output_schema": "urn:marketsieve:schema:decision-report:2.0.0",
         "effects": {"network": False, "secrets": False, "optional_writes": []},
     },
     "report export": {
@@ -127,16 +127,12 @@ COMMAND_METADATA: dict[str, dict[str, Any]] = {
         "output_schema": "urn:marketsieve:schema:portfolio-result:3.0.0",
         "effects": {"network": False, "secrets": False, "optional_writes": []},
     },
-    "compare": {
-        "output_schema": "urn:marketsieve:schema:comparison-result:1.0.0",
-        "effects": {"network": False, "secrets": False, "optional_writes": []},
-    },
     "source list": {
         "output_schema": "urn:marketsieve:schema:source-result:1.0.0",
         "effects": {"network": False, "secrets": False, "optional_writes": []},
     },
     "weekly": {
-        "output_schema": "urn:marketsieve:schema:decision-report:1.0.0",
+        "output_schema": "urn:marketsieve:schema:decision-report:2.0.0",
         "effects": {"network": False, "secrets": False, "optional_writes": ["report"]},
     },
     "source import": {
@@ -162,25 +158,6 @@ COMMAND_METADATA: dict[str, dict[str, Any]] = {
     "snapshot verify": {
         "output_schema": "urn:marketsieve:schema:snapshot-result:1.0.0",
         "effects": {"network": False, "secrets": False, "optional_writes": []},
-    },
-    "inspect": {
-        "output_schema": "urn:marketsieve:schema:inspect-result:2.0.0",
-        "effects": {"network": False, "secrets": False, "optional_writes": []},
-    },
-    **{
-        f"analyze {name}": {
-            "output_schema": "urn:marketsieve:schema:indicator-result:1.0.0",
-            "effects": {"network": False, "secrets": False, "optional_writes": []},
-        }
-        for name in (
-            "atr",
-            "ema",
-            "macd",
-            "maximum-drawdown",
-            "period-return",
-            "rsi",
-            "sma",
-        )
     },
 }
 
@@ -269,6 +246,90 @@ def doctor(context: click.Context, output_mode: str) -> None:
 
 
 @main.group()
+def matrix() -> None:
+    """Build and inspect the broad yfinance equity matrix."""
+
+
+@matrix.command("refresh")
+@click.option("--resume", "run_id", default=None, help="Resume one matching interrupted run.")
+@output_option
+@click.pass_context
+def matrix_refresh(context: click.Context, run_id: str | None, output_mode: str) -> None:
+    """Acquire all configured index constituents through yfinance."""
+
+    console = _console(context, output_mode)
+    try:
+        document = refresh_market_matrix(context.obj["config_path"], resume=run_id)
+    except (LookupError, OSError, RuntimeError, TypeError, ValueError) as error:
+        console.emit_error("matrix_refresh_failed", str(error))
+        raise click.exceptions.Exit(1) from None
+    console.emit_document(document, title="Market matrix")
+    if document["quality_status"] != "ready":
+        raise click.exceptions.Exit(1)
+
+
+@matrix.command("show")
+@click.argument("matrix_id", default="latest")
+@output_option
+@click.pass_context
+def matrix_show(context: click.Context, matrix_id: str, output_mode: str) -> None:
+    """Show one persisted matrix and its artifact paths."""
+
+    console = _console(context, output_mode)
+    try:
+        document = show_market_matrix(context.obj["config_path"], matrix_id)
+    except (LookupError, OSError, TypeError, ValueError) as error:
+        console.emit_error("matrix_show_failed", str(error))
+        raise click.exceptions.Exit(1) from None
+    console.emit_document(document, title="Market matrix")
+
+
+@matrix.command("row")
+@click.argument("instrument_id")
+@click.option("--matrix", "matrix_id", default="latest", show_default=True)
+@output_option
+@click.pass_context
+def matrix_row(
+    context: click.Context, instrument_id: str, matrix_id: str, output_mode: str
+) -> None:
+    """Read one computed security row without network access."""
+
+    console = _console(context, output_mode)
+    try:
+        document = read_market_matrix_row(context.obj["config_path"], matrix_id, instrument_id)
+    except (LookupError, OSError, TypeError, ValueError) as error:
+        console.emit_error("matrix_row_failed", str(error))
+        raise click.exceptions.Exit(1) from None
+    console.emit_document(document, title="Market matrix row")
+
+
+@matrix.command("compare")
+@click.argument("instrument_ids", nargs=-1, required=True)
+@click.option("--matrix", "matrix_id", default="latest", show_default=True)
+@click.option("--fields", "fields", multiple=True, help="Select one computed field per option.")
+@output_option
+@click.pass_context
+def matrix_compare(
+    context: click.Context,
+    instrument_ids: tuple[str, ...],
+    matrix_id: str,
+    fields: tuple[str, ...],
+    output_mode: str,
+) -> None:
+    """Compare computed rows without network access or recalculation."""
+
+    console = _console(context, output_mode)
+    try:
+        document = compare_market_matrix_rows(
+            context.obj["config_path"], matrix_id, instrument_ids, fields
+        )
+    except (LookupError, OSError, TypeError, ValueError) as error:
+        console.emit_error("matrix_compare_failed", str(error))
+        raise click.exceptions.Exit(1) from None
+    console.emit_document(document, title="Market matrix comparison")
+
+
+@main.group()
 def portfolio() -> None:
     """Import and inspect the local brokerage-neutral portfolio."""
 
@@ -319,23 +380,20 @@ def watchlist() -> None:
 
 @watchlist.command("add")
 @click.argument("instrument")
-@click.option("--from-screen", "screen_report_id", default=None)
 @output_option
 @click.pass_context
 def watchlist_add(
     context: click.Context,
     instrument: str,
-    screen_report_id: str | None,
     output_mode: str,
 ) -> None:
-    """Add one supported MIC:SYMBOL, optionally from a screening report."""
+    """Add one supported MIC:SYMBOL."""
 
     console = _console(context, output_mode)
     try:
         document = add_watchlist_instrument(
             instrument,
             as_of=datetime.now().astimezone(),
-            screen_report_id=screen_report_id,
         )
     except (LookupError, OSError, TypeError, ValueError) as error:
         console.emit_error("watchlist_add_failed", str(error))
@@ -428,14 +486,15 @@ def analysis() -> None:
 
 
 @analysis.command("build")
+@click.option("--matrix", "matrix_id", default="latest", show_default=True)
 @output_option
 @click.pass_context
-def analysis_build(context: click.Context, output_mode: str) -> None:
-    """Build deterministic context.json and analysis.md files."""
+def analysis_build(context: click.Context, matrix_id: str, output_mode: str) -> None:
+    """Build matrix-backed context.json and analysis.md files."""
 
     console = _console(context, output_mode)
     try:
-        document = create_analysis_workspace()
+        document = create_analysis_workspace(matrix_id)
         _, markdown = read_analysis_workspace()
     except (LookupError, OSError, TypeError, ValueError) as error:
         console.emit_error("analysis_build_failed", str(error))
@@ -462,84 +521,6 @@ def analysis_show(context: click.Context, output_mode: str) -> None:
         console.emit_document(document, title="Analysis context")
     else:
         click.echo(markdown, nl=False)
-
-
-@main.group()
-def screen() -> None:
-    """Update bounded universes and screen verified local data."""
-
-
-@screen.command("update")
-@click.argument("market", type=click.Choice(("jp", "us")))
-@output_option
-@click.pass_context
-def screen_update(context: click.Context, market: str, output_mode: str) -> None:
-    """Explicitly import or fetch one configured bounded universe."""
-
-    console = _console(context, output_mode)
-    try:
-        document = update_screening(context.obj["config_path"], market)
-    except (LookupError, OSError, RuntimeError, TypeError, ValueError) as error:
-        console.emit_error("screen_update_failed", str(error))
-        raise click.exceptions.Exit(1) from None
-    console.emit_document(document, title="Instrument universe")
-
-
-@screen.command("run")
-@click.argument("market", type=click.Choice(("jp", "us")))
-@click.option(
-    "--as-of",
-    default=None,
-    help="Use an explicit ISO 8601 knowledge time; defaults to the current time.",
-)
-@output_option
-@click.pass_context
-def screen_run(context: click.Context, market: str, as_of: str | None, output_mode: str) -> None:
-    """Screen verified local snapshots without network access."""
-
-    console = _console(context, output_mode)
-    try:
-        instant = datetime.now().astimezone() if as_of is None else datetime.fromisoformat(as_of)
-        document = run_screening(context.obj["config_path"], market, as_of=instant)
-    except (LookupError, OSError, RuntimeError, TypeError, ValueError) as error:
-        console.emit_error("screen_run_failed", str(error))
-        raise click.exceptions.Exit(1) from None
-    console.emit_document(document, title="Screening report")
-
-
-@screen.command("refresh")
-@click.argument("market", type=click.Choice(("jp", "us")))
-@output_option
-@click.pass_context
-def screen_refresh(context: click.Context, market: str, output_mode: str) -> None:
-    """Refresh one bounded candidate set and create a static screening report."""
-
-    console = _console(context, output_mode)
-    try:
-        document = refresh_screening(context.obj["config_path"], market)
-    except (LookupError, OSError, RuntimeError, TypeError, ValueError) as error:
-        console.emit_error("screen_refresh_failed", str(error))
-        raise click.exceptions.Exit(1) from None
-    console.emit_document(document, title="Screening report")
-
-
-@screen.command("show")
-@click.argument("report_id")
-@click.option("--market", type=click.Choice(("jp", "us")), default=None)
-@output_option
-@click.pass_context
-def screen_show(
-    context: click.Context, report_id: str, market: str | None, output_mode: str
-) -> None:
-    """Show an exact report or the newest stored screening result."""
-
-    console = _console(context, output_mode)
-    try:
-        document = read_screening(context.obj["config_path"], report_id, market=market)
-    except (LookupError, OSError, TypeError, ValueError) as error:
-        console.emit_error("screen_show_failed", str(error))
-        raise click.exceptions.Exit(1) from None
-    console.emit_document(document, title="Screening report")
 
 
 @main.group()
@@ -655,32 +636,6 @@ def report_export(report_id: str, export_format: str) -> None:
     except (LookupError, TypeError, ValueError, OSError) as error:
         raise click.ClickException(str(error)) from None
     click.echo(markdown, nl=False)
-
-
-@main.command()
-@click.argument("instruments", nargs=-1, required=True)
-@click.option("--source-profile", required=True, help="Select the exact stored source profile.")
-@output_option
-@click.pass_context
-def compare(
-    context: click.Context,
-    instruments: tuple[str, ...],
-    source_profile: str,
-    output_mode: str,
-) -> None:
-    """Compare stored equity views at one explicit knowledge horizon."""
-
-    if len(instruments) < 2:
-        raise click.UsageError("comparison requires at least two instruments")
-    console = _console(context, output_mode)
-    try:
-        document = build_snapshot_service(context.obj["config_path"]).compare(
-            instruments, source_profile
-        )
-    except (LookupError, RuntimeError, TypeError, ValueError, OSError) as error:
-        console.emit_error("compare_failed", str(error))
-        raise click.exceptions.Exit(1) from None
-    console.emit_document(document, title="Equity comparison")
 
 
 @main.group()
@@ -843,188 +798,6 @@ def _snapshot_read(
         console.emit_error("snapshot_read_failed", str(error))
         raise click.exceptions.Exit(1) from None
     console.emit_document(document, title=title)
-
-
-@main.command()
-@click.argument("instrument")
-@click.option("--source-profile", required=True, help="Select the exact stored source profile.")
-@output_option
-@click.pass_context
-def inspect(context: click.Context, instrument: str, source_profile: str, output_mode: str) -> None:
-    """Inspect available and missing equity sections offline."""
-
-    if instrument.count(":") != 1:
-        raise click.UsageError("instrument must use MIC:SYMBOL form")
-    console = _console(context, output_mode)
-    try:
-        document = build_snapshot_service(context.obj["config_path"]).inspect(
-            instrument, source_profile
-        )
-    except (LookupError, TypeError, ValueError, OSError) as error:
-        console.emit_error("inspect_failed", str(error))
-        raise click.exceptions.Exit(1) from None
-    console.emit_document(document, title="Equity inspection")
-
-
-@main.group()
-def analyze() -> None:
-    """Calculate one deterministic technical indicator offline."""
-
-
-def _run_analysis(
-    context: click.Context,
-    output_mode: str,
-    instrument: str,
-    source_profile: str,
-    indicator: str,
-    parameters: dict[str, int],
-) -> None:
-    console = _console(context, output_mode)
-    try:
-        document = build_snapshot_service(context.obj["config_path"]).analyze(
-            instrument, source_profile, indicator, **parameters
-        )
-    except (LookupError, RuntimeError, TypeError, ValueError, OSError) as error:
-        console.emit_error("analyze_failed", str(error))
-        raise click.exceptions.Exit(1) from None
-    console.emit_document(document, title="Indicator analysis")
-
-
-def period_option(default: int) -> Callable[[Any], Any]:
-    return click.option(
-        "--period",
-        type=click.IntRange(min=1),
-        default=default,
-        show_default=True,
-    )
-
-
-def _period_analysis(
-    context: click.Context,
-    instrument: str,
-    source_profile: str,
-    period: int,
-    output_mode: str,
-    indicator: str,
-) -> None:
-    _run_analysis(context, output_mode, instrument, source_profile, indicator, {"period": period})
-
-
-@analyze.command("sma")
-@click.argument("instrument")
-@period_option(20)
-@click.option("--source-profile", required=True)
-@output_option
-@click.pass_context
-def analyze_sma(
-    context: click.Context, instrument: str, period: int, source_profile: str, output_mode: str
-) -> None:
-    """Calculate a simple moving average."""
-
-    _period_analysis(context, instrument, source_profile, period, output_mode, "sma")
-
-
-@analyze.command("ema")
-@click.argument("instrument")
-@period_option(20)
-@click.option("--source-profile", required=True)
-@output_option
-@click.pass_context
-def analyze_ema(
-    context: click.Context, instrument: str, period: int, source_profile: str, output_mode: str
-) -> None:
-    """Calculate an exponential moving average."""
-
-    _period_analysis(context, instrument, source_profile, period, output_mode, "ema")
-
-
-@analyze.command("rsi")
-@click.argument("instrument")
-@period_option(14)
-@click.option("--source-profile", required=True)
-@output_option
-@click.pass_context
-def analyze_rsi(
-    context: click.Context, instrument: str, period: int, source_profile: str, output_mode: str
-) -> None:
-    """Calculate Wilder's relative strength index."""
-
-    _period_analysis(context, instrument, source_profile, period, output_mode, "rsi")
-
-
-@analyze.command("atr")
-@click.argument("instrument")
-@period_option(14)
-@click.option("--source-profile", required=True)
-@output_option
-@click.pass_context
-def analyze_atr(
-    context: click.Context, instrument: str, period: int, source_profile: str, output_mode: str
-) -> None:
-    """Calculate Wilder's average true range."""
-
-    _period_analysis(context, instrument, source_profile, period, output_mode, "atr")
-
-
-@analyze.command("period-return")
-@click.argument("instrument")
-@period_option(20)
-@click.option("--source-profile", required=True)
-@output_option
-@click.pass_context
-def analyze_period_return(
-    context: click.Context, instrument: str, period: int, source_profile: str, output_mode: str
-) -> None:
-    """Calculate simple return over a closing-price period."""
-
-    _period_analysis(context, instrument, source_profile, period, output_mode, "period_return")
-
-
-@analyze.command("maximum-drawdown")
-@click.argument("instrument")
-@period_option(252)
-@click.option("--source-profile", required=True)
-@output_option
-@click.pass_context
-def analyze_maximum_drawdown(
-    context: click.Context, instrument: str, period: int, source_profile: str, output_mode: str
-) -> None:
-    """Calculate maximum peak-relative drawdown over a period."""
-
-    _period_analysis(context, instrument, source_profile, period, output_mode, "maximum_drawdown")
-
-
-@analyze.command("macd")
-@click.argument("instrument")
-@click.option("--fast-period", type=click.IntRange(min=1), default=12, show_default=True)
-@click.option("--slow-period", type=click.IntRange(min=1), default=26, show_default=True)
-@click.option("--signal-period", type=click.IntRange(min=1), default=9, show_default=True)
-@click.option("--source-profile", required=True)
-@output_option
-@click.pass_context
-def analyze_macd(
-    context: click.Context,
-    instrument: str,
-    fast_period: int,
-    slow_period: int,
-    signal_period: int,
-    source_profile: str,
-    output_mode: str,
-) -> None:
-    """Calculate MACD, signal, and histogram values."""
-
-    _run_analysis(
-        context,
-        output_mode,
-        instrument,
-        source_profile,
-        "macd",
-        {
-            "fast_period": fast_period,
-            "slow_period": slow_period,
-            "signal_period": signal_period,
-        },
-    )
 
 
 def capabilities_document() -> dict[str, Any]:

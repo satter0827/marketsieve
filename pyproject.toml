@@ -11,6 +11,7 @@ dependencies = [
     "marketsieve-source-fred",
     "marketsieve-source-sec",
     "marketsieve-source-edinet",
+    "marketsieve-source-yfinance",
 ]
 
 [dependency-groups]
@@ -44,6 +45,7 @@ members = [
     "packages/source-fred",
     "packages/source-sec",
     "packages/source-edinet",
+    "packages/source-yfinance",
 ]
 
 [tool.uv.sources]
@@ -55,6 +57,7 @@ marketsieve-source-alphavantage = { workspace = true }
 marketsieve-source-fred = { workspace = true }
 marketsieve-source-sec = { workspace = true }
 marketsieve-source-edinet = { workspace = true }
+marketsieve-source-yfinance = { workspace = true }
 
 [[tool.marketsieve.public-packages]]
 distribution = "marketsieve"
@@ -116,11 +119,18 @@ path = "packages/source-edinet"
 module = "marketsieve_source_edinet"
 role = "adapter"
 
+[[tool.marketsieve.public-packages]]
+distribution = "marketsieve-source-yfinance"
+path = "packages/source-yfinance"
+module = "marketsieve_source_yfinance"
+role = "adapter"
+
 [tool.pytest.ini_options]
 addopts = "-q --strict-config --strict-markers"
 cache_dir = ".marketsieve/cache/pytest"
 pythonpath = ["."]
 testpaths = ["tests"]
+markers = ["live: explicit provider smoke tests disabled by default"]
 
 [tool.ruff]
 cache-dir = ".marketsieve/cache/ruff"
@@ -138,6 +148,7 @@ src = [
     "packages/source-fred/src",
     "packages/source-sec/src",
     "packages/source-edinet/src",
+    "packages/source-yfinance/src",
     "scripts",
     "tests",
 ]
@@ -164,6 +175,7 @@ files = [
     "packages/source-fred/src",
     "packages/source-sec/src",
     "packages/source-edinet/src",
+    "packages/source-yfinance/src",
     "scripts",
     "tests",
 ]
@@ -174,7 +186,7 @@ warn_unused_ignores = true
 [tool.coverage.run]
 branch = true
 data_file = ".marketsieve/coverage/data"
-source = ["marketsieve", "marketsieve_cli", "marketsieve_extension_api", "marketsieve_import_rakuten", "marketsieve_source_csv", "marketsieve_source_jquants", "marketsieve_source_alphavantage", "marketsieve_source_fred", "marketsieve_source_sec", "marketsieve_source_edinet"]
+source = ["marketsieve", "marketsieve_cli", "marketsieve_extension_api", "marketsieve_import_rakuten", "marketsieve_source_csv", "marketsieve_source_jquants", "marketsieve_source_alphavantage", "marketsieve_source_fred", "marketsieve_source_sec", "marketsieve_source_edinet", "marketsieve_source_yfinance"]
 omit = ["*/marketsieve_cli/__main__.py"]
 
 [tool.coverage.report]
@@ -185,7 +197,7 @@ skip_covered = true
 output = ".marketsieve/coverage/coverage.json"
 
 [tool.importlinter]
-root_packages = ["marketsieve", "marketsieve_cli", "marketsieve_extension_api", "marketsieve_import_rakuten", "marketsieve_source_csv", "marketsieve_source_jquants", "marketsieve_source_alphavantage", "marketsieve_source_fred", "marketsieve_source_sec", "marketsieve_source_edinet"]
+root_packages = ["marketsieve", "marketsieve_cli", "marketsieve_extension_api", "marketsieve_import_rakuten", "marketsieve_source_csv", "marketsieve_source_jquants", "marketsieve_source_alphavantage", "marketsieve_source_fred", "marketsieve_source_sec", "marketsieve_source_edinet", "marketsieve_source_yfinance"]
 
 [[tool.importlinter.contracts]]
 name = "Application dependencies point inward"
@@ -202,6 +214,7 @@ layers = [
     "marketsieve_source_fred",
     "marketsieve_source_sec",
     "marketsieve_source_edinet",
+    "marketsieve_source_yfinance",
     "marketsieve_extension_api",
     "marketsieve",
 ]
@@ -223,7 +236,7 @@ forbidden_modules = ["marketsieve_cli"]
 name = "Extension API is independent from implementations"
 type = "forbidden"
 source_modules = ["marketsieve_extension_api"]
-forbidden_modules = ["marketsieve_cli", "marketsieve_import_rakuten", "marketsieve_source_csv", "marketsieve_source_jquants", "marketsieve_source_alphavantage", "marketsieve_source_fred", "marketsieve_source_sec", "marketsieve_source_edinet"]
+forbidden_modules = ["marketsieve_cli", "marketsieve_import_rakuten", "marketsieve_source_csv", "marketsieve_source_jquants", "marketsieve_source_alphavantage", "marketsieve_source_fred", "marketsieve_source_sec", "marketsieve_source_edinet", "marketsieve_source_yfinance"]
 
 [[tool.importlinter.contracts]]
 name = "Rakuten importer does not depend on the CLI"
@@ -265,4 +278,10 @@ forbidden_modules = ["marketsieve_cli"]
 name = "EDINET source does not depend on the CLI"
 type = "forbidden"
 source_modules = ["marketsieve_source_edinet"]
+forbidden_modules = ["marketsieve_cli"]
+
+[[tool.importlinter.contracts]]
+name = "yfinance source does not depend on the CLI"
+type = "forbidden"
+source_modules = ["marketsieve_source_yfinance"]
 forbidden_modules = ["marketsieve_cli"]

@@ -197,7 +197,12 @@ class SecSource(FinancialFetcher, InstrumentUniverseFetcher):
             raise ValueError("SEC company ticker fields do not match the supported contract")
         if not isinstance(rows, list) or any(not isinstance(row, list) for row in rows):
             raise ValueError("SEC company ticker data must be an array of arrays")
-        exchange_mics = {"Nasdaq": "XNAS", "NYSE": "XNYS", "NYSE American": "XASE"}
+        exchange_mics = {
+            "Cboe BZX": "BATS",
+            "Nasdaq": "XNAS",
+            "NYSE": "XNYS",
+            "NYSE American": "XASE",
+        }
         instruments: list[Instrument] = []
         skipped = 0
         for row in rows:
@@ -271,8 +276,8 @@ class SecSource(FinancialFetcher, InstrumentUniverseFetcher):
     @staticmethod
     def _validate_instrument(request: FactFetchRequest) -> None:
         instrument = request.instrument
-        if instrument.mic not in {"XNAS", "XNYS"}:
-            raise ValueError("SEC source supports XNAS and XNYS instruments only")
+        if instrument.mic not in {"BATS", "XNAS", "XNYS"}:
+            raise ValueError("SEC source supports BATS, XNAS, and XNYS instruments only")
         if instrument.currency != "USD":
             raise ValueError("SEC source requires a USD instrument")
 

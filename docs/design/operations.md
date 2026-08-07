@@ -1,103 +1,56 @@
 # Operations
 
-## Supported current operation
+## Supported matrix operation
 
-MarketSieve supports one-shot local analysis, immutable storage, public distribution builds, and
-explicit market-data acquisition on Python 3.12 through 3.14. Python 3.13 is the primary development
-version.
+The normal broad-market workflow is:
 
 ```shell
 make sync
-make doctor
-make capabilities-json
-make build
-```
-
-Project-local caches, logs, generated evidence, reports, watchlists, screening state, and analysis
-workspace files live below `.marketsieve`. The repository does not load `.env` files. Credentials
-enter through provider-specific environment variables and are never copied into configuration,
-artifacts, logs, or subprocess metadata.
-
-## First use and empty state
-
-```shell
-make setup-config
-make portfolio-import BROKER=rakuten PORTFOLIO=/absolute/path.csv
-make daily-status
-```
-
-Configuration creation never overwrites an existing file. Portfolio import retains normalized
-values and a source digest, not the input path or bytes. An empty holdings state and empty watchlist
-are valid. Readiness directs the user to candidate discovery or explicit watchlist entry instead of
-requesting another import.
-
-## Discovery and watchlist
-
-```shell
-make screen-refresh-jp
-make screen-refresh-us
-make watchlist-add INSTRUMENT=XTKS:7203
-make watchlist-add INSTRUMENT=XTKS:7203 SCREEN_REPORT=REPORT_ID
-make watchlist-show
-```
-
-`screen refresh` performs configured universe acquisition, bounded daily-bar acquisition, and
-deterministic screening. Each market configures `acquisition_limit`, `fetch_limit`, `lookback_days`,
-`processing_limit`, and `display_limit`. The operation does not retry, switch providers, shorten a
-range, or present the universe prefix as a rank. Missing data, rate limits, and partial failures
-remain in the static report. The universe source applies `eligible_mics` before
-`acquisition_limit`. Refresh uses its post-acquisition knowledge time and exposes no historical-time
-option.
-
-Adding a candidate is always a separate human action. The watchlist revision records the exact
-screening report when `SCREEN_REPORT` is supplied. Supplying provenance for an existing item creates
-an explicit `add_provenance` revision instead of silently ignoring or overwriting history. Removing
-an instrument creates another immutable revision.
-
-## Daily and weekly reports
-
-```shell
-make daily-jp
-make daily-us
-make weekly
-```
-
-Daily commands acquire evidence only for the selected market's holdings and watchlist instruments.
-Price failure produces an indeterminate decision; optional financial and event failure lowers
-available evidence and remains diagnostic. A report with only indeterminate decisions remains
-inspectable but does not advance the latest usable reference.
-
-Weekly operation is offline. It requires eligible JP and US daily references, retains their exact
-IDs, and includes current screening candidates separately from portfolio decisions.
-
-## Static analysis workspace
-
-```shell
+make market-matrix
+uv run marketsieve matrix show latest
 make analysis-build
-make analysis-show
-make analysis-demo
 ```
 
-`analysis-build` projects verified local artifacts into deterministic `context.json` and
-`analysis.md`. Existing decision and screening objects remain unchanged. `analysis-show` verifies
-the projection before reading it. External tools may research current sources and discuss the
-result with a person, but MarketSieve does not store that research or conversation.
+No account, API key, or provider environment variable is required. The optional `[matrix]` table
+controls selected indices, history length, price batch size, company-information concurrency,
+timeout, retry policy, and coverage thresholds. Defaults are three years, batches of 50, two profile
+workers, 30 seconds, three attempts, two-second base backoff, 95% overall coverage, and 90% per
+index.
 
-The analysis context intentionally omits position quantities, acquisition prices, account types,
-portfolio file paths, personal identifiers, and credentials. Generated workspaces are local state
-and are never committed.
+Network failures, rate limits, unavailable financial statements, and insufficient history remain in
+the row-level missing map and `failures.jsonl`. Operators may resume only a run whose request
+fingerprint matches. They may adjust yfinance symbols, batching, waits, or retries when coverage is
+low; another provider is not an allowed recovery.
 
-## VS Code operation
+## Generated state
 
-Run and Debug is the primary human entry point. Configurations `01` through `03` establish local
-state, `10` and `20` discover candidates, `30` edits the watchlist, `40` and `50` run daily analysis,
-`60` builds the weekly brief, and `70` and `80` build and read the analysis workspace. Configurations
-`90` through `92` are representative code-debug entry points.
+Project-local caches, runs, matrices, reports, watchlists, snapshots, coverage, logs, and review
+evidence stay below `.marketsieve`. Immutable matrices are stored at
+`.marketsieve/matrices/objects/MATRIX_ID`. Decision reports and watchlists for the current schemas
+are stored below `.marketsieve/reports/v2` and `.marketsieve/watchlists/v2`; the current AI context
+is stored below `.marketsieve/analysis/v2`. Files directly below the pre-0.9 report, watchlist, and
+analysis roots are left physically recoverable but are not read, migrated, or deleted by the current
+application.
 
-Tasks provide grouped First Run, Discovery, Daily, Analysis, and Developer operations. Every normal
-operation delegates to a Make target; command behavior is not duplicated in editor JSON.
+Live matrix objects and analyses contain redistributable-provider-derived values and are local
+operational artifacts. They are not committed. yfinance use is limited to personal local research in
+accordance with its stated intended use.
+
+## Reading and comparing
+
+`matrix row` and `matrix compare` are offline views over the authoritative JSONL. Use `fields.json`
+to interpret names, units, formulas, periods, and missingness. Use `overview.html` for local search,
+sorting, and index filtering; it has no external CDN or runtime data request.
+
+## Other operations
+
+`make setup-config`, portfolio import, watchlist maintenance, daily analysis, weekly reporting, and
+experiment replay remain supported. They do not mutate or substitute the market matrix. Daily
+provider credentials remain in the invoking environment and are unrelated to yfinance matrix use.
 
 ## Development and review
+
+Run focused tests while editing and the shared gates before handoff:
 
 ```shell
 make format-check
@@ -105,16 +58,8 @@ make lint
 make typecheck
 make test
 make check
-make evidence
+make build
 ```
 
-After local evidence, review the final diff against `origin/develop`, fix findings as one batch,
-rerun the gate, commit, and attest that exact clean SHA. A code change after CI begins returns to the
-pre-PR review sequence.
-
-## Unsupported operation
-
-MarketSieve does not run models, send messages, place orders, automate a browser or brokerage,
-perform background scheduling, merge providers, or generate opaque investment scores. The SEC
-`SEC_USER_AGENT` contact value remains a source-specific fair-access header and is not a messaging
-feature.
+The review SHA is frozen before CI. Generated review evidence is stored below `.marketsieve` and is
+not a substitute for the tested source contract.

@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:marketsieve:schema:market-matrix-manifest:1.0.0",
+  "title": "MarketSieve immutable market matrix manifest",
+  "type": "object",
+  "required": ["schema", "matrix_id", "created_at", "request", "source", "input_snapshot_id", "universe_assets", "configuration", "row_count", "field_count", "failure_count", "coverage", "quality_status"],
+  "properties": {
+    "schema": {"const": "market-matrix-manifest/v1"},
+    "matrix_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "created_at": {"type": "string", "format": "date-time"},
+    "request": {
+      "type": "object",
+      "required": ["fingerprint", "schema", "indices", "assets", "start", "end", "adjustment", "settings", "source"],
+      "properties": {
+        "fingerprint": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "schema": {"const": "market-matrix-request/v1"},
+        "indices": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string"}},
+        "assets": {"type": "object"},
+        "start": {"type": "string", "format": "date"},
+        "end": {"type": "string", "format": "date"},
+        "adjustment": {"const": "adjusted"},
+        "settings": {"type": "object"},
+        "source": {
+          "type": "object",
+          "required": ["name", "profile"],
+          "properties": {
+            "name": {"const": "yfinance"},
+            "profile": {"const": "matrix-yfinance"}
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "source": {"type": "object"},
+    "input_snapshot_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "universe_assets": {"type": "object"},
+    "configuration": {"type": "object"},
+    "row_count": {"type": "integer", "minimum": 1},
+    "field_count": {"type": "integer", "minimum": 1},
+    "failure_count": {"type": "integer", "minimum": 0},
+    "coverage": {"$ref": "#/$defs/coverage"},
+    "quality_status": {"enum": ["ready", "partial"]}
+  },
+  "$defs": {
+    "coverage": {
+      "type": "object",
+      "required": ["overall", "indices"],
+      "properties": {
+        "overall": {"type": "string", "minLength": 1},
+        "indices": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {"enum": ["dow30", "nasdaq100", "nikkei225", "sp500", "topix500"]},
+          "additionalProperties": {"type": "string", "minLength": 1}
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
