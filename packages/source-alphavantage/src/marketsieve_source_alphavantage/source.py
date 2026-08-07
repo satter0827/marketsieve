@@ -41,8 +41,13 @@ from marketsieve_extension_api import (
 API_URL = "https://www.alphavantage.co/query"
 API_KEY_ENV = "ALPHAVANTAGE_API_KEY"
 SOURCE_VERSION = "alphavantage-query-api-v1"
-SUPPORTED_MICS = frozenset({"XNAS", "XNYS"})
-PROVIDER_EXCHANGES = {"NASDAQ": "XNAS", "NYSE": "XNYS"}
+SUPPORTED_MICS = frozenset({"BATS", "XNAS", "XNYS"})
+PROVIDER_EXCHANGES = {
+    "BATS": "BATS",
+    "CBOE": "BATS",
+    "NASDAQ": "XNAS",
+    "NYSE": "XNYS",
+}
 SUPPORTED_ASSET_TYPES = frozenset({"COMMON STOCK"})
 NUMERIC_CONTEXT = Context(prec=34, rounding=ROUND_HALF_EVEN)
 
@@ -276,7 +281,7 @@ class AlphaVantageSource(DailyBarFetcher, FinancialFetcher, EventFetcher):
         self, request: DailyBarFetchRequest | FactFetchRequest, kind: str
     ) -> tuple[float, str, str, tuple[str, ...]]:
         if request.instrument.mic not in SUPPORTED_MICS:
-            raise ValueError("Alpha Vantage source supports XNAS and XNYS instruments")
+            raise ValueError("Alpha Vantage source supports BATS, XNAS, and XNYS instruments")
         self._validate_market(request.instrument.currency, request.instrument.exchange_timezone.key)
         timeout, plan, outputsize = self._settings(request.settings, kind)
         credential = self._credential()

@@ -1,6 +1,6 @@
 [project]
 name = "marketsieve-cli"
-version = "0.8.0"
+version = "0.9.0"
 description = "Public command-line workbench for MarketSieve."
 readme = "README.md"
 requires-python = ">=3.12,<3.15"
@@ -11,29 +11,32 @@ authors = [
 ]
 dependencies = [
     "click>=8.1,<9",
-    "marketsieve>=0.8,<0.9",
-    "marketsieve-extension-api>=0.8,<0.9",
+    "marketsieve>=0.9,<0.10",
+    "marketsieve-extension-api>=0.9,<0.10",
+    "marketsieve-source-yfinance>=0.9,<0.10",
     "rich>=14,<15",
 ]
 
 [project.optional-dependencies]
 all-sources = [
-    "marketsieve-import-rakuten>=0.8,<0.9",
-    "marketsieve-source-csv>=0.8,<0.9",
-    "marketsieve-source-jquants>=0.8,<0.9",
-    "marketsieve-source-alphavantage>=0.8,<0.9",
-    "marketsieve-source-fred>=0.8,<0.9",
-    "marketsieve-source-sec>=0.8,<0.9",
-    "marketsieve-source-edinet>=0.8,<0.9",
+    "marketsieve-import-rakuten>=0.9,<0.10",
+    "marketsieve-source-csv>=0.9,<0.10",
+    "marketsieve-source-jquants>=0.9,<0.10",
+    "marketsieve-source-alphavantage>=0.9,<0.10",
+    "marketsieve-source-fred>=0.9,<0.10",
+    "marketsieve-source-sec>=0.9,<0.10",
+    "marketsieve-source-edinet>=0.9,<0.10",
+    "marketsieve-source-yfinance>=0.9,<0.10",
 ]
 all = [
-    "marketsieve-import-rakuten>=0.8,<0.9",
-    "marketsieve-source-csv>=0.8,<0.9",
-    "marketsieve-source-jquants>=0.8,<0.9",
-    "marketsieve-source-alphavantage>=0.8,<0.9",
-    "marketsieve-source-fred>=0.8,<0.9",
-    "marketsieve-source-sec>=0.8,<0.9",
-    "marketsieve-source-edinet>=0.8,<0.9",
+    "marketsieve-import-rakuten>=0.9,<0.10",
+    "marketsieve-source-csv>=0.9,<0.10",
+    "marketsieve-source-jquants>=0.9,<0.10",
+    "marketsieve-source-alphavantage>=0.9,<0.10",
+    "marketsieve-source-fred>=0.9,<0.10",
+    "marketsieve-source-sec>=0.9,<0.10",
+    "marketsieve-source-edinet>=0.9,<0.10",
+    "marketsieve-source-yfinance>=0.9,<0.10",
 ]
 
 [project.scripts]
@@ -64,3 +67,4 @@ marketsieve-source-alphavantage = { workspace = true }
 marketsieve-source-fred = { workspace = true }
 marketsieve-source-sec = { workspace = true }
 marketsieve-source-edinet = { workspace = true }
+marketsieve-source-yfinance = { workspace = true }

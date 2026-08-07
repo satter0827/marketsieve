@@ -20,6 +20,14 @@ from marketsieve_extension_api.economic import (
     EconomicSeriesSourceConfiguration,
     ImportedEconomicSeries,
 )
+from marketsieve_extension_api.equity import (
+    EquityAcquisitionFailure,
+    EquityBatchFetcher,
+    EquityBatchInstrument,
+    EquityBatchObservation,
+    EquityBatchRequest,
+    ImportedEquityBatch,
+)
 from marketsieve_extension_api.fundamentals import (
     Consolidation,
     CorporateEvent,
@@ -58,6 +66,11 @@ __all__ = [
     "EconomicSeriesFetchRequest",
     "EconomicSeriesFetcher",
     "EconomicSeriesSourceConfiguration",
+    "EquityAcquisitionFailure",
+    "EquityBatchFetcher",
+    "EquityBatchInstrument",
+    "EquityBatchObservation",
+    "EquityBatchRequest",
     "EventFetcher",
     "FactFetchRequest",
     "FilingDocument",
@@ -66,6 +79,7 @@ __all__ = [
     "FinancialPeriod",
     "ImportedDailyBars",
     "ImportedEconomicSeries",
+    "ImportedEquityBatch",
     "ImportedEvents",
     "ImportedFinancials",
     "ImportedInstrumentUniverse",

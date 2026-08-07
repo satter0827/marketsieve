@@ -7,28 +7,13 @@ from decimal import Decimal, InvalidOperation, localcontext
 from pathlib import Path
 from typing import Any, Protocol
 
-from marketsieve.analysis.indicators import (
-    CONTEXT,
-    IndicatorName,
-    IndicatorSpec,
-    calculate,
-    canonical_decimal,
-)
+from marketsieve.analysis.indicators import CONTEXT, canonical_decimal
 from marketsieve.data.daily import Adjustment, DailyBar
 from marketsieve.domain import Instrument
 from marketsieve.financial import (
     FinancialObservation,
     FinancialTrendReport,
     analyze_financial_history,
-)
-from marketsieve_cli.application.equity import (
-    comparison_document,
-    data_quality_section,
-    financial_section,
-    indicator_document,
-    risk_section,
-    technical_section,
-    valuation_section,
 )
 from marketsieve_extension_api import (
     DailyBarBundleImporter,
@@ -137,18 +122,6 @@ class SnapshotRepository(Protocol):
     def normalized(self, object_id: str) -> dict[str, Any]: ...
 
     def daily_bars(self, object_id: str) -> tuple[DailyBar, ...]: ...
-
-
-DEFAULT_INDICATORS = (
-    IndicatorSpec.create(IndicatorName.SMA, period=20),
-    IndicatorSpec.create(IndicatorName.EMA, period=20),
-    IndicatorSpec.create(IndicatorName.RSI, period=14),
-    IndicatorSpec.create(IndicatorName.MACD, fast_period=12, slow_period=26, signal_period=9),
-    IndicatorSpec.create(IndicatorName.ATR, period=14),
-    IndicatorSpec.create(IndicatorName.PERIOD_RETURN, period=20),
-    IndicatorSpec.create(IndicatorName.MAX_DRAWDOWN, period=252),
-)
-THIRDS = ("0", "0.333333", "0.666667", "1")
 
 
 class SnapshotService:
@@ -319,158 +292,6 @@ class SnapshotService:
     def verify(self, object_id: str) -> dict[str, Any]:
         stored = self._repository.verify(object_id)
         return {"schema_version": "1.0.0", "status": "verified", "object_id": stored.object_id}
-
-    def inspect(self, instrument: str, profile: str) -> dict[str, Any]:
-        stored = self._resolve(profile, instrument)
-        normalized = self._repository.normalized(stored.object_id)
-        daily_bars = self._repository.daily_bars(stored.object_id)
-        bars = normalized["bars"]
-        latest = bars[-1]
-        from marketsieve_cli.application.equity import digest
-
-        evidence = digest({"object_id": stored.object_id, "section": "price", "value": latest})
-        indicators = tuple(calculate(spec, daily_bars) for spec in DEFAULT_INDICATORS)
-        technical = technical_section(indicators, latest)
-        instrument_document = dict(normalized["instrument"])
-        if "instrument_profile" in normalized:
-            instrument_document["profile"] = normalized["instrument_profile"]
-        financial = financial_section(
-            self._optional_section(profile, instrument, "financials", "facts")
-        )
-        events = self._optional_section(profile, instrument, "events", "events")
-        price = {
-            "status": "available",
-            "as_of": latest["available_at"],
-            "completeness": "1",
-            "values": {
-                "trading_date": latest["trading_date"],
-                "open": latest["open"],
-                "high": latest["high"],
-                "low": latest["low"],
-                "close": latest["close"],
-                "volume": latest["volume"],
-                "adjustment": normalized["adjustment"],
-            },
-            "warnings": [],
-            "missing_reasons": [],
-            "provenance": [latest["provenance"]],
-            "evidence_id": evidence,
-        }
-        sections = {
-            "price": price,
-            "technical": technical,
-            "financial": financial,
-            "valuation": valuation_section(instrument_document, price, financial),
-            "risk": risk_section(technical),
-            "events": events,
-        }
-        sections["data_quality"] = data_quality_section(sections)
-        return {
-            "schema_version": "2.0.0",
-            "instrument": instrument_document,
-            "source_profile": profile,
-            "snapshot_id": stored.object_id,
-            "sections": sections,
-        }
-
-    def _optional_section(
-        self, profile: str, instrument: str, kind: str, values_key: str
-    ) -> dict[str, Any]:
-        try:
-            stored = self._repository.resolve(profile, instrument, kind)
-        except LookupError:
-            return {
-                "status": "unavailable",
-                "completeness": "0",
-                "values": {},
-                "warnings": [],
-                "missing_reasons": ["not_present_in_snapshot"],
-                "provenance": [],
-                "evidence_id": None,
-            }
-        except (TypeError, ValueError, OSError):
-            return {
-                "status": "invalid",
-                "completeness": "0",
-                "values": {},
-                "warnings": [],
-                "missing_reasons": ["snapshot_verification_failed"],
-                "provenance": [],
-                "evidence_id": None,
-            }
-        try:
-            normalized = self._repository.normalized(stored.object_id)
-            values = normalized[values_key]
-            missing = normalized.get("missing_reasons", [])
-            source = stored.manifest["source"]
-            timestamp_values: list[tuple[datetime, str]] = []
-            for item in values:
-                if not isinstance(item, dict) or not isinstance(item.get("available_at"), str):
-                    continue
-                timestamp = item["available_at"]
-                parsed = datetime.fromisoformat(timestamp)
-                if parsed.tzinfo is None or parsed.utcoffset() is None:
-                    raise ValueError("section availability must include a UTC offset")
-                timestamp_values.append((parsed, timestamp))
-            as_of = (
-                max(timestamp_values, key=lambda item: item[0])[1]
-                if timestamp_values
-                else stored.manifest["acquisition"]["retrieved_at"]
-            )
-        except (KeyError, TypeError, ValueError, OSError):
-            return {
-                "status": "invalid",
-                "completeness": "0",
-                "values": {},
-                "warnings": [],
-                "missing_reasons": ["snapshot_verification_failed"],
-                "provenance": [],
-                "evidence_id": stored.object_id,
-            }
-        completeness = self._section_completeness(kind, values, missing)
-        return {
-            "status": "available" if completeness == "1" and not missing else "partial",
-            "as_of": as_of,
-            "completeness": completeness,
-            "values": {values_key: values},
-            "warnings": [],
-            "missing_reasons": missing,
-            "provenance": [source],
-            "evidence_id": stored.object_id,
-        }
-
-    @staticmethod
-    def _section_completeness(kind: str, values: list[Any], missing: list[str]) -> str:
-        if kind == "financials":
-            return "1" if values and not missing else "0" if not values else "0.5"
-        unavailable_types = sum(
-            any(reason.startswith(prefix) for reason in missing)
-            for prefix in ("dividend_", "earnings_", "split_")
-        )
-        return THIRDS[3 - unavailable_types]
-
-    def analyze(
-        self,
-        instrument: str,
-        profile: str,
-        name: IndicatorName | str,
-        **parameters: int,
-    ) -> dict[str, Any]:
-        stored = self._resolve(profile, instrument)
-        result = calculate(
-            IndicatorSpec.create(name, **parameters),
-            self._repository.daily_bars(stored.object_id),
-        )
-        return {
-            "schema_version": "1.0.0",
-            "instrument": instrument,
-            "source_profile": profile,
-            "snapshot_id": stored.object_id,
-            "indicator": indicator_document(result),
-        }
-
-    def compare(self, instruments: tuple[str, ...], profile: str) -> dict[str, Any]:
-        return comparison_document(tuple(self.inspect(item, profile) for item in instruments))
 
     def bars(self, profile: str, instrument: str) -> tuple[DailyBar, ...]:
         """Read verified daily bars for a routine after explicit acquisition."""

@@ -1,11 +1,11 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:marketsieve:schema:review-report:2.1.0",
+  "$id": "urn:marketsieve:schema:review-report:2.2.0",
   "title": "MarketSieve review report",
   "type": "object",
   "required": ["schema_version", "repository", "base_sha", "head_sha", "environment", "changes", "checks", "metrics", "cli", "artifacts", "findings"],
   "properties": {
-    "schema_version": {"const": "2.1.0"},
+    "schema_version": {"const": "2.2.0"},
     "repository": {"type": "string", "minLength": 1},
     "base_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
     "head_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
@@ -57,45 +57,20 @@
     },
     "cli": {
       "type": "object",
-      "required": ["version", "doctor", "module_doctor", "capabilities"],
-      "anyOf": [
-        {"required": ["analysis"]},
-        {"required": ["report"]}
-      ],
+      "required": ["version", "doctor", "module_doctor", "capabilities", "snapshot"],
       "properties": {
         "version": {"type": "object"},
         "doctor": {"type": "object"},
         "module_doctor": {"type": "object"},
         "capabilities": {"type": "object"},
-        "analysis": {
+        "snapshot": {
           "type": "object",
-          "required": ["exit_code", "schema_valid", "reproducible", "analysis_id", "section_statuses"],
+          "required": ["exit_code", "schema_valid", "reproducible", "object_id"],
           "properties": {
             "exit_code": {"const": 0},
             "schema_valid": {"const": true},
             "reproducible": {"const": true},
-            "analysis_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-            "section_statuses": {
-              "type": "object",
-              "minProperties": 7,
-              "additionalProperties": {"enum": ["available", "partial", "unavailable", "invalid"]}
-            }
-          },
-          "additionalProperties": false
-        },
-        "report": {
-          "type": "object",
-          "required": ["exit_code", "schema_valid", "reproducible", "report_id", "section_statuses"],
-          "properties": {
-            "exit_code": {"const": 0},
-            "schema_valid": {"const": true},
-            "reproducible": {"const": true},
-            "report_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-            "section_statuses": {
-              "type": "object",
-              "minProperties": 7,
-              "additionalProperties": {"enum": ["available", "partial", "unavailable", "invalid"]}
-            }
+            "object_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
           },
           "additionalProperties": false
         }

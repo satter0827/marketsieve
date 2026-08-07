@@ -7,8 +7,10 @@ and release history.
 
 - Extend the Rakuten importer to non-empty holdings only after an anonymized real export defines
   its columns, account semantics, and instrument identifiers.
-- Broaden candidate-universe sources only when their provenance, licensing, completeness, and
-  bounded acquisition behavior are testable.
+- Refresh built-in constituent assets through a reviewed, reproducible process when official index
+  membership changes.
+- Improve matrix acquisition efficiency only when failure semantics, content identity, and the
+  yfinance-only source boundary remain unchanged.
 - Add more deterministic policy comparison metrics only when they retain exact dataset, decision,
   and evidence provenance.
 - Add scheduling only after one-shot commands and local recovery have proved reliable.

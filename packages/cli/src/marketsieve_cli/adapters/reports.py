@@ -25,7 +25,7 @@ from marketsieve import (
 )
 from marketsieve.domain import Instrument, InstrumentType
 
-REPORT_SCHEMA = "decision-report/v1"
+REPORT_SCHEMA = "decision-report/v2"
 REF_NAMES = {
     MarketSession.JP_CLOSE: "jp-latest",
     MarketSession.US_CLOSE: "us-latest",
@@ -131,8 +131,6 @@ def semantic_document(
     diagnostics: tuple[str, ...],
     previous_report_id: str | None,
     input_report_ids: tuple[str, ...] = (),
-    candidate_decisions: tuple[InstrumentDecision, ...] = (),
-    screening_report_ids: tuple[str, ...] = (),
 ) -> dict[str, object]:
     """Build canonical semantic content without its derived ID."""
 
@@ -161,8 +159,6 @@ def semantic_document(
         "diagnostics": list(diagnostics),
         "previous_report_id": previous_report_id,
         "input_report_ids": list(input_report_ids),
-        "candidate_decisions": [_decision_document(item) for item in candidate_decisions],
-        "screening_report_ids": list(screening_report_ids),
     }
 
 
@@ -175,8 +171,6 @@ def create_report(
     diagnostics: tuple[str, ...] = (),
     previous_report_id: str | None = None,
     input_report_ids: tuple[str, ...] = (),
-    candidate_decisions: tuple[InstrumentDecision, ...] = (),
-    screening_report_ids: tuple[str, ...] = (),
 ) -> DecisionReport:
     """Create a report whose ID is the digest of its canonical semantic content."""
 
@@ -188,8 +182,6 @@ def create_report(
         diagnostics,
         previous_report_id,
         input_report_ids,
-        candidate_decisions,
-        screening_report_ids,
     )
     report_id = hashlib.sha256(_json_bytes(semantic)).hexdigest()
     first = decisions[0]
@@ -206,8 +198,6 @@ def create_report(
         diagnostics,
         previous_report_id,
         input_report_ids,
-        candidate_decisions,
-        screening_report_ids,
     )
 
 
@@ -220,8 +210,6 @@ def report_document(report: DecisionReport) -> dict[str, object]:
         report.diagnostics,
         report.previous_report_id,
         report.input_report_ids,
-        report.candidate_decisions,
-        report.screening_report_ids,
     )
     expected = hashlib.sha256(_json_bytes(semantic)).hexdigest()
     if expected != report.report_id:
@@ -248,7 +236,6 @@ def render_markdown(report: DecisionReport, previous_report: DecisionReport | No
         if item.action
         not in {DecisionAction.KEEP, DecisionAction.PASS, DecisionAction.INDETERMINATE}
     )
-    candidates = report.candidate_decisions
     changed, unchanged, removed = _decision_changes(report, previous_report)
     title = "週末作戦会議" if report.session is MarketSession.WEEKLY else "Close Brief"
     conclusion = _conclusion(counts)
@@ -264,10 +251,6 @@ def render_markdown(report: DecisionReport, previous_report: DecisionReport | No
         "### 保有・監視",
         "",
         *_decision_lines(attention, empty="該当なし"),
-        "",
-        "### 残った候補",
-        "",
-        *_decision_lines(candidates, empty="該当なし"),
         "",
         "## 3. 前回からの変化",
         "",
@@ -297,17 +280,6 @@ def render_markdown(report: DecisionReport, previous_report: DecisionReport | No
                 f"- 確信度: {CONFIDENCE_LABELS[decision.confidence]}",
                 *_context_lines("財務", decision.fundamentals),
                 *_context_lines("評価", decision.valuation),
-                *(f"- 根拠: {item.code}" for item in decision.evidence),
-                "",
-            )
-        )
-    for decision in candidates:
-        lines.extend(
-            (
-                f"### 候補 {_instrument_key(decision.instrument)}",
-                "",
-                f"- 判断: {ACTION_LABELS[decision.action]}",
-                f"- 確信度: {CONFIDENCE_LABELS[decision.confidence]}",
                 *(f"- 根拠: {item.code}" for item in decision.evidence),
                 "",
             )
@@ -580,8 +552,6 @@ def _parse_report(value: dict[str, Any]) -> DecisionReport:
         tuple(value["diagnostics"]),
         value["previous_report_id"],
         tuple(value["input_report_ids"]),
-        tuple(_parse_decision(item) for item in value["candidate_decisions"]),
-        tuple(value["screening_report_ids"]),
     )
 
 

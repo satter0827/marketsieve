@@ -13,8 +13,9 @@ from typing import Any, cast
 from marketsieve import PortfolioSnapshot, WatchItem
 from marketsieve.domain import Instrument, InstrumentType
 
-WATCHLIST_SCHEMA = "watchlist-result/v1"
+WATCHLIST_SCHEMA = "watchlist-result/v2"
 MIC_DEFINITIONS = {
+    "BATS": ("USD", "America/New_York"),
     "XTKS": ("JPY", "Asia/Tokyo"),
     "XNAS": ("USD", "America/New_York"),
     "XNYS": ("USD", "America/New_York"),
@@ -60,7 +61,9 @@ def parse_instrument_key(value: str) -> Instrument:
 
     mic, separator, symbol = value.partition(":")
     if not separator or not symbol or symbol != symbol.strip() or mic not in MIC_DEFINITIONS:
-        raise ValueError("instrument must use supported MIC:SYMBOL form (XTKS, XNAS, or XNYS)")
+        raise ValueError(
+            "instrument must use supported MIC:SYMBOL form (BATS, XTKS, XNAS, or XNYS)"
+        )
     currency, timezone = MIC_DEFINITIONS[mic]
     return Instrument.create(
         symbol=symbol,
@@ -98,7 +101,6 @@ class WatchlistStore:
         instrument: Instrument,
         *,
         as_of: datetime,
-        screen_report_id: str | None = None,
     ) -> dict[str, Any]:
         self._validate_as_of(as_of)
         current = self._latest_or_empty()
@@ -106,26 +108,11 @@ class WatchlistStore:
         key = instrument_key(instrument)
         existing = next((item for item in items if item["key"] == key), None)
         if existing is not None:
-            if screen_report_id is None or existing["source_screen_report_id"] == screen_report_id:
-                return current
-            items = [
-                {**item, "source_screen_report_id": screen_report_id}
-                if item["key"] == key
-                else item
-                for item in items
-            ]
-            return self._put(
-                as_of,
-                current["watchlist_id"],
-                items,
-                "add_provenance",
-                key,
-            )
+            return current
         items.append(
             {
                 "key": key,
                 "instrument": _instrument_document(instrument),
-                "source_screen_report_id": screen_report_id,
             }
         )
         items.sort(key=lambda item: item["key"])
@@ -294,25 +281,18 @@ class WatchlistStore:
         change = document["change"]
         if not isinstance(change, dict) or set(change) != {"operation", "instrument"}:
             raise ValueError("watchlist change is invalid")
-        if change["operation"] not in {"add", "remove", "add_provenance"}:
+        if change["operation"] not in {"add", "remove"}:
             raise ValueError("watchlist change operation is invalid")
         items = document["items"]
         if not isinstance(items, list):
             raise ValueError("watchlist items are invalid")
         keys: list[str] = []
         for item in items:
-            if not isinstance(item, dict) or set(item) != {
-                "key",
-                "instrument",
-                "source_screen_report_id",
-            }:
+            if not isinstance(item, dict) or set(item) != {"key", "instrument"}:
                 raise ValueError("watchlist item is invalid")
             instrument = self._parse_instrument(item["instrument"])
             if item["key"] != instrument_key(instrument):
                 raise ValueError("watchlist item key is invalid")
-            source = item["source_screen_report_id"]
-            if source is not None:
-                self._validate_id(source)
             keys.append(item["key"])
         if keys != sorted(keys) or len(keys) != len(set(keys)):
             raise ValueError("watchlist items must be unique and sorted")

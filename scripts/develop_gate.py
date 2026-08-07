@@ -124,7 +124,7 @@ def check_smoke(path: Path) -> None:
     )
     module = capture(("uv", "run", "python", "-m", "marketsieve_cli", "doctor", "--output", "json"))
     capabilities = capture(("uv", "run", "marketsieve", "capabilities", "--output", "json"))
-    capture(
+    imported = capture(
         (
             "uv",
             "run",
@@ -136,41 +136,40 @@ def check_smoke(path: Path) -> None:
             "json",
         )
     )
-    analysis_first = capture(
+    object_id = json.loads(imported.stdout)["object_id"]
+    snapshot_first = capture(
         (
             "uv",
             "run",
             "marketsieve",
-            "inspect",
-            "XTKS:7203",
-            "--source-profile",
-            "example-jp",
+            "snapshot",
+            "show",
+            object_id,
             "--output",
             "json",
         )
     )
-    analysis_second = capture(
+    snapshot_second = capture(
         (
             "uv",
             "run",
             "marketsieve",
-            "inspect",
-            "XTKS:7203",
-            "--source-profile",
-            "example-jp",
+            "snapshot",
+            "show",
+            object_id,
             "--output",
             "json",
         )
     )
-    if analysis_first.stdout != analysis_second.stdout:
-        raise RuntimeError("offline inspection JSON is not reproducible")
+    if snapshot_first.stdout != snapshot_second.stdout:
+        raise RuntimeError("offline snapshot JSON is not reproducible")
     documents = {
         "doctor-result": json.loads(doctor.stdout),
         "capabilities-result": json.loads(capabilities.stdout),
-        "inspect-result": json.loads(analysis_first.stdout),
+        "snapshot-result": json.loads(snapshot_first.stdout),
     }
     for name, document in documents.items():
-        major = "v2" if name in {"capabilities-result", "inspect-result"} else "v1"
+        major = "v3" if name == "capabilities-result" else "v1"
         schema = json.loads(
             (ROOT / f"schemas/{name}/{major}/schema.json").read_text(encoding="utf-8")
         )
@@ -183,21 +182,17 @@ def check_smoke(path: Path) -> None:
             "exit_code": capabilities.returncode,
             "result": documents["capabilities-result"],
         },
-        "analysis": {
-            "exit_code": analysis_first.returncode,
+        "snapshot": {
+            "exit_code": snapshot_first.returncode,
             "schema_valid": True,
             "reproducible": True,
-            "analysis_id": documents["inspect-result"]["snapshot_id"],
-            "section_statuses": {
-                name: section["status"]
-                for name, section in documents["inspect-result"]["sections"].items()
-            },
+            "object_id": object_id,
         },
     }
     (path / "smoke.json").write_text(
         json.dumps(smoke, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
-    logs = doctor.stderr + analysis_first.stderr
+    logs = doctor.stderr + snapshot_first.stderr
     (path / "logs.jsonl").write_text(logs, encoding="utf-8")
 
     log_schema = json.loads(

@@ -18,7 +18,7 @@
           "entry_point": {"type": "string", "minLength": 1},
           "data_kinds": {
             "type": "array",
-            "items": {"enum": ["daily_bars", "financials", "events", "economic_series", "instrument_universe"]},
+            "items": {"enum": ["daily_bars", "financials", "events", "economic_series", "instrument_universe", "equity_batches"]},
             "uniqueItems": true
           },
           "loaded": {"const": false}

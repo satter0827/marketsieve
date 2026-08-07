@@ -15,6 +15,7 @@ from marketsieve_cli.adapters.watchlists import (
     WatchlistStore,
     parse_instrument_key,
 )
+from marketsieve_cli.bootstrap import build_watchlist_store
 
 
 class Portfolios:
@@ -25,15 +26,12 @@ class Portfolios:
         return self._snapshot
 
 
-def test_watchlist_add_remove_history_and_screening_provenance(tmp_path: Path) -> None:
+def test_watchlist_add_remove_history(tmp_path: Path) -> None:
     store = WatchlistStore(tmp_path / "watchlists")
     first_time = datetime(2026, 8, 6, 10, tzinfo=UTC)
-    screen_id = "a" * 64
-
     first = store.add(
         parse_instrument_key("XTKS:7203"),
         as_of=first_time,
-        screen_report_id=screen_id,
     )
     duplicate = store.add(
         parse_instrument_key("XTKS:7203"),
@@ -52,7 +50,18 @@ def test_watchlist_add_remove_history_and_screening_provenance(tmp_path: Path) -
     assert second["previous_watchlist_id"] == first["watchlist_id"]
     assert removed["previous_watchlist_id"] == second["watchlist_id"]
     assert removed["items"][0]["key"] == "XNAS:MSFT"
-    assert first["items"][0]["source_screen_report_id"] == screen_id
+    assert first["items"] == [
+        {
+            "key": "XTKS:7203",
+            "instrument": {
+                "mic": "XTKS",
+                "symbol": "7203",
+                "currency": "JPY",
+                "timezone": "Asia/Tokyo",
+                "type": "equity",
+            },
+        }
+    ]
     assert [item["watchlist_id"] for item in store.history()] == [
         first["watchlist_id"],
         second["watchlist_id"],
@@ -60,32 +69,35 @@ def test_watchlist_add_remove_history_and_screening_provenance(tmp_path: Path) -
     ]
 
 
-def test_existing_watchlist_item_records_later_screening_provenance(tmp_path: Path) -> None:
+def test_existing_watchlist_item_is_idempotent(tmp_path: Path) -> None:
     store = WatchlistStore(tmp_path / "watchlists")
     observed = datetime(2026, 8, 6, 10, tzinfo=UTC)
     instrument = parse_instrument_key("XNAS:MSFT")
     first = store.add(instrument, as_of=observed)
 
-    enriched = store.add(
-        instrument,
-        as_of=observed + timedelta(minutes=1),
-        screen_report_id="a" * 64,
-    )
+    duplicate = store.add(instrument, as_of=observed + timedelta(minutes=1))
 
-    assert enriched["previous_watchlist_id"] == first["watchlist_id"]
-    assert enriched["change"] == {
-        "operation": "add_provenance",
-        "instrument": "XNAS:MSFT",
-    }
-    assert enriched["items"][0]["source_screen_report_id"] == "a" * 64
-    assert (
-        store.add(
-            instrument,
-            as_of=observed + timedelta(minutes=2),
-            screen_report_id="a" * 64,
-        )
-        == enriched
+    assert duplicate == first
+    assert len(store.history()) == 1
+
+
+def test_composed_watchlist_store_does_not_read_legacy_v1_state(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    legacy = tmp_path / ".marketsieve/watchlists"
+    (legacy / "refs").mkdir(parents=True)
+    (legacy / "refs/latest.json").write_text("not-json", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+
+    store = build_watchlist_store()
+
+    assert store.history() == ()
+    store.add(
+        parse_instrument_key("XNAS:MSFT"),
+        as_of=datetime(2026, 8, 6, 10, tzinfo=UTC),
     )
+    assert (legacy / "refs/latest.json").read_text(encoding="utf-8") == "not-json"
+    assert (legacy / "v2/refs/latest.json").is_file()
 
 
 def test_holding_takes_precedence_over_watchlist_duplicate(tmp_path: Path) -> None:
@@ -117,6 +129,16 @@ def test_composed_snapshot_preserves_latest_watchlist_knowledge_time(tmp_path: P
 
     assert combined.as_of == watchlist_time
     assert [item.instrument.symbol for item in combined.watch_items] == ["MSFT"]
+
+
+def test_watchlist_accepts_the_bats_identity_emitted_by_the_matrix(tmp_path: Path) -> None:
+    store = WatchlistStore(tmp_path / "watchlists")
+    instrument = parse_instrument_key("BATS:CBOE")
+
+    document = store.add(instrument, as_of=datetime(2026, 8, 6, 10, tzinfo=UTC))
+
+    assert document["items"][0]["key"] == "BATS:CBOE"
+    assert store.watch_items()[0].instrument == instrument
 
 
 def test_watchlist_rejects_revision_older_than_predecessor(tmp_path: Path) -> None:
@@ -236,10 +258,7 @@ def test_watchlist_rejects_symlinked_storage_directory(tmp_path: Path, directory
         ),
         (lambda value: value.update(items={}), "items are invalid"),
         (lambda value: value["items"][0].update(key="XTKS:9999"), "item key is invalid"),
-        (
-            lambda value: value["items"][0].update(source_screen_report_id="bad"),
-            "lowercase SHA-256",
-        ),
+        (lambda value: value["items"][0].update(unexpected="bad"), "item is invalid"),
     ),
 )
 def test_watchlist_validates_stored_document_shape(
@@ -250,7 +269,6 @@ def test_watchlist_validates_stored_document_shape(
     document = store.add(
         parse_instrument_key("XTKS:7203"),
         as_of=datetime(2026, 8, 6, 10, tzinfo=UTC),
-        screen_report_id="a" * 64,
     )
     path = root / "objects" / f"{document['watchlist_id']}.json"
     value = json.loads(path.read_text(encoding="utf-8"))

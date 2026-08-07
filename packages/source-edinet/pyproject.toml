@@ -1,6 +1,6 @@
 [project]
 name = "marketsieve-source-edinet"
-version = "0.8.0"
+version = "0.9.0"
 description = "EDINET filing and XBRL-derived financial source for MarketSieve."
 readme = "README.md"
 requires-python = ">=3.12,<3.15"
@@ -8,8 +8,8 @@ license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "MarketSieve contributors" }]
 dependencies = [
-    "marketsieve>=0.8,<0.9",
-    "marketsieve-extension-api>=0.8,<0.9",
+    "marketsieve>=0.9,<0.10",
+    "marketsieve-extension-api>=0.9,<0.10",
 ]
 
 [project.entry-points."marketsieve.sources"]

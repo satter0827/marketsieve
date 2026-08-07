@@ -18,19 +18,20 @@ def test_schemas_are_draft_2020_12_and_semantically_versioned() -> None:
         "analysis-context",
         "capabilities-result",
         "cli-error",
-        "comparison-result",
         "doctor-result",
         "decision-report",
         "experiment-comparison",
         "experiment-run",
-        "inspect-result",
-        "indicator-result",
         "instrument-universe",
         "portfolio-result",
         "log-record",
         "report-list",
         "review-report",
-        "screening-report",
+        "market-matrix",
+        "market-matrix-comparison",
+        "market-matrix-manifest",
+        "market-matrix-row",
+        "market-matrix-security",
         "snapshot-result",
         "source-result",
         "watchlist-result",
@@ -64,3 +65,62 @@ def test_schemas_reject_unknown_major_versions() -> None:
             invalid = f"{path.parent.parent.name}/v{major + 1}"
         with pytest.raises(ValidationError):
             Draft202012Validator(schema).validate({version_property: invalid})
+
+
+@pytest.mark.parametrize(
+    ("schema_name", "major", "document"),
+    (
+        (
+            "watchlist-result",
+            2,
+            {
+                "watchlist_id": "a" * 64,
+                "schema": "watchlist-result/v2",
+                "as_of": "2026-08-07T00:00:00+00:00",
+                "previous_watchlist_id": None,
+                "change": None,
+                "items": [{"key": "XNAS:MSFT", "instrument": {}}],
+            },
+        ),
+        (
+            "market-matrix-row",
+            1,
+            {
+                "schema": "market-matrix-row/v1",
+                "matrix_id": "a" * 64,
+                "instrument_id": "XNAS:MSFT",
+                "instrument": {},
+                "provider_symbol": "MSFT",
+                "memberships": ["sp500"],
+                "retrieved_at": "2026-08-07T00:00:00+00:00",
+                "evidence_id": "b" * 64,
+                "values": {"close": "100"},
+                "missing": {},
+            },
+        ),
+        (
+            "market-matrix-comparison",
+            1,
+            {
+                "schema": "market-matrix-comparison/v1",
+                "matrix_id": "a" * 64,
+                "fields": ["close"],
+                "rows": [
+                    {"instrument_id": "XNAS:MSFT", "values": {}, "missing": {}},
+                    {"instrument_id": "XTKS:7203", "values": {}, "missing": {}},
+                ],
+            },
+        ),
+    ),
+)
+def test_replacement_schemas_reject_empty_nested_contracts(
+    schema_name: str, major: int, document: dict[str, object]
+) -> None:
+    schema = json.loads(
+        (SCHEMAS / schema_name / f"v{major}" / "schema.json").read_text(encoding="utf-8")
+    )
+
+    with pytest.raises(ValidationError):
+        Draft202012Validator(schema, format_checker=Draft202012Validator.FORMAT_CHECKER).validate(
+            document
+        )

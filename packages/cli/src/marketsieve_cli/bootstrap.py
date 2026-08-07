@@ -11,6 +11,7 @@ from marketsieve_cli.adapters.analysis import AnalysisWorkspace
 from marketsieve_cli.adapters.config import Configuration
 from marketsieve_cli.adapters.console import ConsoleOutput, OutputMode
 from marketsieve_cli.adapters.experiments import ExperimentStore
+from marketsieve_cli.adapters.matrices import MatrixStore
 from marketsieve_cli.adapters.plugins import SourcePluginRegistry
 from marketsieve_cli.adapters.portfolio_plugins import PortfolioPluginRegistry
 from marketsieve_cli.adapters.portfolios import (
@@ -23,22 +24,16 @@ from marketsieve_cli.adapters.reports import (
     create_report,
     report_document,
 )
-from marketsieve_cli.adapters.screening import (
-    ScreeningStore,
-    screening_document,
-    universe_document,
-)
 from marketsieve_cli.adapters.snapshots import SnapshotStore
 from marketsieve_cli.adapters.watchlists import (
     PortfolioWatchlistReader,
     WatchlistStore,
-    instrument_key,
     parse_instrument_key,
 )
 from marketsieve_cli.application.diagnostics import DiagnosticsService
 from marketsieve_cli.application.experiments import ExperimentService
+from marketsieve_cli.application.matrix import MatrixService
 from marketsieve_cli.application.routines import DailyBriefService, WeeklyBriefService
-from marketsieve_cli.application.screening import ScreeningService
 from marketsieve_cli.application.snapshots import SnapshotService
 from marketsieve_cli.observability import configure_logger
 from marketsieve_extension_api import verify_portfolio_snapshot_importer
@@ -78,7 +73,7 @@ def build_snapshot_service(config_path: Path | None = None) -> SnapshotService:
 def build_report_store() -> ReportStore:
     """Build the canonical decision-report repository."""
 
-    return ReportStore(Path(".marketsieve/reports"))
+    return ReportStore(Path(".marketsieve/reports/v2"))
 
 
 def build_portfolio_store() -> PortfolioStore:
@@ -90,7 +85,7 @@ def build_portfolio_store() -> PortfolioStore:
 def build_watchlist_store() -> WatchlistStore:
     """Build the independent watchlist history repository."""
 
-    return WatchlistStore(Path(".marketsieve/watchlists"))
+    return WatchlistStore(Path(".marketsieve/watchlists/v2"))
 
 
 def build_daily_brief_service(config_path: Path | None = None) -> DailyBriefService:
@@ -114,7 +109,6 @@ def build_weekly_brief_service(config_path: Path | None = None) -> WeeklyBriefSe
         build_report_store(),
         configuration,
         create_report,
-        ScreeningStore(Path(".marketsieve/screening")),
     )
 
 
@@ -127,67 +121,66 @@ def build_experiment_service() -> ExperimentService:
     )
 
 
-def build_screening_service(config_path: Path | None = None) -> ScreeningService:
-    """Build explicit universe acquisition and offline screening workflows."""
+def build_matrix_service(config_path: Path | None = None) -> MatrixService:
+    """Build the zero-configuration yfinance market-matrix workflow."""
 
-    return ScreeningService(
+    return MatrixService(
         SourcePluginRegistry(),
-        SnapshotStore(Path(".marketsieve/data")),
-        build_portfolio_store(),
-        ScreeningStore(Path(".marketsieve/screening")),
+        MatrixStore(Path(".marketsieve/matrices")),
         Configuration.resolve(config_path),
-        build_snapshot_service(config_path),
     )
+
+
+def refresh_market_matrix(config_path: Path | None, *, resume: str | None = None) -> dict[str, Any]:
+    """Acquire and persist the configured broad-equity matrix."""
+
+    return build_matrix_service(config_path).refresh(resume=resume)
+
+
+def show_market_matrix(config_path: Path | None, matrix_id: str) -> dict[str, Any]:
+    """Show one persisted matrix manifest and its artifacts."""
+
+    return build_matrix_service(config_path).show(matrix_id)
+
+
+def read_market_matrix_row(
+    config_path: Path | None, matrix_id: str, instrument_id: str
+) -> dict[str, Any]:
+    """Read one already-computed matrix row without network access."""
+
+    return build_matrix_service(config_path).row(matrix_id, instrument_id)
+
+
+def compare_market_matrix_rows(
+    config_path: Path | None,
+    matrix_id: str,
+    instrument_ids: tuple[str, ...],
+    fields: tuple[str, ...],
+) -> dict[str, Any]:
+    """Compare already-computed matrix cells without recalculation."""
+
+    return build_matrix_service(config_path).compare(matrix_id, instrument_ids, fields)
 
 
 def build_analysis_workspace() -> AnalysisWorkspace:
-    """Build the deterministic external-analysis workspace projection."""
+    """Build the deterministic matrix-backed external-analysis projection."""
 
     return AnalysisWorkspace(
-        Path(".marketsieve/analysis"),
-        build_portfolio_store(),
-        build_watchlist_store(),
-        build_report_store(),
-        ScreeningStore(Path(".marketsieve/screening")),
+        Path(".marketsieve/analysis/v2"),
+        MatrixStore(Path(".marketsieve/matrices")),
     )
 
 
-def create_analysis_workspace() -> dict[str, Any]:
+def create_analysis_workspace(matrix_id: str = "latest") -> dict[str, Any]:
     """Create or replace deterministic workspace projection files."""
 
-    return build_analysis_workspace().build()
+    return build_analysis_workspace().build(matrix_id)
 
 
 def read_analysis_workspace() -> tuple[dict[str, Any], str]:
     """Read and verify the current workspace projection."""
 
     return build_analysis_workspace().show()
-
-
-def update_screening(config_path: Path | None, market: str) -> dict[str, object]:
-    """Acquire, persist, and project one bounded instrument universe."""
-
-    return universe_document(build_screening_service(config_path).update(market))
-
-
-def run_screening(config_path: Path | None, market: str, *, as_of: datetime) -> dict[str, object]:
-    """Run and project one offline screening operation."""
-
-    return screening_document(build_screening_service(config_path).run(market, as_of=as_of))
-
-
-def refresh_screening(config_path: Path | None, market: str) -> dict[str, object]:
-    """Acquire a bounded universe and price set before deterministic screening."""
-
-    return screening_document(build_screening_service(config_path).refresh(market))
-
-
-def read_screening(
-    config_path: Path | None, report_id: str, *, market: str | None
-) -> dict[str, object]:
-    """Read and project one verified screening report."""
-
-    return screening_document(build_screening_service(config_path).show(report_id, market=market))
 
 
 def import_portfolio(path: Path, *, broker: str, as_of: str) -> dict[str, object]:
@@ -211,18 +204,11 @@ def read_portfolio() -> dict[str, object]:
     return portfolio_document(imported, object_id=object_id)
 
 
-def add_watchlist_instrument(
-    value: str, *, as_of: datetime, screen_report_id: str | None = None
-) -> dict[str, Any]:
-    """Add one explicitly selected instrument with optional screening provenance."""
+def add_watchlist_instrument(value: str, *, as_of: datetime) -> dict[str, Any]:
+    """Add one explicitly selected instrument."""
 
     instrument = parse_instrument_key(value)
-    if screen_report_id is not None:
-        report = ScreeningStore(Path(".marketsieve/screening")).show_report(screen_report_id)
-        candidates = {instrument_key(item.decision.instrument) for item in report.candidates}
-        if value not in candidates:
-            raise ValueError("instrument is not a candidate in the selected screening report")
-    return build_watchlist_store().add(instrument, as_of=as_of, screen_report_id=screen_report_id)
+    return build_watchlist_store().add(instrument, as_of=as_of)
 
 
 def remove_watchlist_instrument(value: str, *, as_of: datetime) -> dict[str, Any]:
@@ -238,7 +224,7 @@ def read_watchlist() -> dict[str, Any]:
     if not store.exists():
         return {
             "watchlist_id": None,
-            "schema": "watchlist-result/v1",
+            "schema": "watchlist-result/v2",
             "as_of": None,
             "previous_watchlist_id": None,
             "change": None,
