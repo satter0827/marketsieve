@@ -21,11 +21,11 @@ def test_license_copies_match() -> None:
     )
 
 
-def test_readmes_expose_the_static_analysis_path() -> None:
+def test_readmes_expose_the_self_contained_matrix_path() -> None:
     readmes = tuple(
         (ROOT / name).read_text(encoding="utf-8") for name in ("README.md", "README.ja.md")
     )
-    for command in ("make daily-status", "make market-matrix", "make analysis-build"):
+    for command in ("make daily-status", "make market-matrix", "marketsieve matrix query"):
         assert all(command in document for document in readmes)
 
 
@@ -94,13 +94,10 @@ def test_vscode_is_an_ascii_operational_entry_point() -> None:
         "40 Daily Use: Analyze JP Watchlist (Network)",
         "50 Daily Use: Analyze US Watchlist (Network)",
         "60 Weekly Use: Build Brief",
-        "70 Analysis: Build Workspace",
-        "80 Analysis: Show Workspace",
         "90 Debug: CLI Command",
         "91 Debug: JP Daily Analysis",
-        "92 Debug: Analysis Workspace Build",
     ]
-    assert [item["command"] for item in launches[:10]] == [
+    assert [item["command"] for item in launches[:8]] == [
         "make setup-config",
         "make portfolio-import BROKER=rakuten",
         "make daily-status",
@@ -109,14 +106,11 @@ def test_vscode_is_an_ascii_operational_entry_point() -> None:
         "make daily-jp",
         "make daily-us",
         "make weekly",
-        "make analysis-build",
-        "make analysis-show",
     ]
-    assert all(item["type"] == "node-terminal" for item in launches[:10])
-    assert all(item["type"] == "debugpy" for item in launches[10:])
-    assert all(item["module"] == "marketsieve_cli" for item in launches[10:])
-    assert launches[11]["args"] == ["--config", "marketsieve.toml", "daily", "jp"]
-    assert launches[12]["args"] == ["analysis", "build"]
+    assert all(item["type"] == "node-terminal" for item in launches[:8])
+    assert all(item["type"] == "debugpy" for item in launches[8:])
+    assert all(item["module"] == "marketsieve_cli" for item in launches[8:])
+    assert launches[9]["args"] == ["--config", "marketsieve.toml", "daily", "jp"]
 
     task_document = json.loads((vscode / "tasks.json").read_text(encoding="utf-8"))
     tasks = task_document["tasks"]
@@ -125,7 +119,6 @@ def test_vscode_is_an_ascii_operational_entry_point() -> None:
         "First Run",
         "Market Matrix",
         "Daily",
-        "Analysis",
         "Developer",
     }
     assert {entry["id"] for entry in task_document["inputs"]} == {
@@ -166,9 +159,6 @@ def test_makefile_exposes_stable_operational_and_developer_targets() -> None:
         "daily-jp",
         "daily-us",
         "weekly",
-        "analysis-build",
-        "analysis-show",
-        "analysis-demo",
         "sync",
         "format",
         "format-check",
@@ -245,6 +235,39 @@ def test_daily_status_rejects_invalid_configuration_before_portfolio_check(
     assert result.returncode == 2
     assert "[invalid] configuration" in result.stdout
     assert "correct" in result.stderr
+
+
+def test_daily_status_rejects_invalid_configuration_before_uv(tmp_path: Path) -> None:
+    config = tmp_path / "invalid.toml"
+    config.write_text("not = [valid\n", encoding="utf-8")
+    binaries = tmp_path / "bin"
+    binaries.mkdir()
+    uv = binaries / "uv"
+    uv.write_text("#!/bin/sh\necho uv-was-invoked\nexit 99\n", encoding="utf-8")
+    uv.chmod(0o755)
+    environment = {**os.environ, "PATH": f"{binaries}:{os.environ['PATH']}"}
+
+    result = subprocess.run(
+        ["make", "daily-status", f"CONFIG={config}", f"STATE_DIR={tmp_path / 'state'}"],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+        env=environment,
+    )
+
+    assert result.returncode == 2
+    assert "[invalid] configuration" in result.stdout
+    assert "uv-was-invoked" not in result.stdout
+
+
+def test_daily_status_uses_the_project_python_before_uv() -> None:
+    makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+    syntax_check = makefile.index("scripts.configuration_check --syntax-only")
+    doctor = makefile.index("uv run marketsieve doctor")
+
+    assert "CONFIGURATION_PYTHON ?= .venv/bin/python" in makefile
+    assert syntax_check < doctor
 
 
 def test_ci_and_rulesets_use_stable_gate_names() -> None:

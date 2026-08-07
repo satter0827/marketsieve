@@ -4,8 +4,8 @@ version = "0.1.0"
 description = "Minimal external portfolio importer plugin for MarketSieve."
 requires-python = ">=3.12,<3.15"
 dependencies = [
-    "marketsieve>=0.9,<0.10",
-    "marketsieve-extension-api>=0.9,<0.10",
+    "marketsieve>=0.10,<0.11",
+    "marketsieve-extension-api>=0.10,<0.11",
 ]
 
 [project.entry-points."marketsieve.portfolios.importers"]

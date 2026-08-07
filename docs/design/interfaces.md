@@ -10,36 +10,29 @@ complete and yfinance needs no credentials.
 
 ```text
 marketsieve matrix refresh [--resume RUN_ID]
+marketsieve matrix list
 marketsieve matrix show [MATRIX_ID|latest]
 marketsieve matrix row MIC:SYMBOL [--matrix MATRIX_ID|latest]
 marketsieve matrix compare MIC:SYMBOL... [--matrix MATRIX_ID|latest] [--fields FIELD]...
+marketsieve matrix query [--matrix MATRIX_ID|latest] [CLASSIFICATION FILTERS] [VALUE FILTERS]
 ```
 
 `refresh` is the only matrix command with network effects. It creates an immutable
-`market-matrix/v1` object and returns nonzero when configured coverage thresholds are not met.
-`show` verifies the stored `market-matrix-manifest/v1` object and returns its
-`market-matrix/v1` projection with summary and artifact paths. `row` returns one
+`market-matrix/v2` object and returns nonzero when configured coverage thresholds are not met.
+`show` verifies the stored `market-matrix-manifest/v2` object and returns its
+`market-matrix/v2` projection with summary and artifact paths. `row` returns one
 `market-matrix-row/v1` with the resolved immutable matrix ID; `compare` returns one
 `market-matrix-comparison/v1`. The latter two read `market-matrix-security/v1` records from
-`securities.jsonl` only and never fetch or recalculate.
+`securities.jsonl` only and never fetch or recalculate. `list` returns verified history as
+`market-matrix-list/v1`. `query` applies OR within one classification and AND across classifications,
+numeric bounds, and missingness tests, then returns instrument-ID-sorted `matrix-query-result/v1`.
+It does not persist a subset.
 
 The supported Make entry point is:
 
 ```text
 make market-matrix
 ```
-
-## Analysis workspace
-
-```text
-marketsieve analysis build [--matrix MATRIX_ID|latest]
-marketsieve analysis show
-```
-
-`analysis build` verifies the chosen matrix and writes canonical `analysis-context/v2` plus matching
-Markdown below `.marketsieve/analysis/v2`. The context records relative paths to the matrix manifest,
-field catalog, index summary, security JSONL, and failure JSONL. `analysis show` revalidates both the
-context identity and referenced matrix.
 
 ## Portfolio, watchlist, and routine reports
 
@@ -67,4 +60,5 @@ policy workflows. Their source selection is never used as a fallback for matrix 
 
 `marketsieve capabilities --output json` returns `capabilities-result/v3`. Operational failures use
 stable JSON error envelopes when JSON output is selected. Matrix cell failures additionally use the
-fixed provider-normalized codes documented by `fields.json` and `failures.jsonl`.
+fixed provider-normalized codes documented by `missing-reasons.json`. `failures.jsonl` excludes
+expected `not_applicable` cells.

@@ -8,7 +8,8 @@ The normal broad-market workflow is:
 make sync
 make market-matrix
 uv run marketsieve matrix show latest
-make analysis-build
+uv run marketsieve matrix list
+uv run marketsieve matrix query --market jp --present close --fields close
 ```
 
 No account, API key, or provider environment variable is required. The optional `[matrix]` table
@@ -27,10 +28,8 @@ low; another provider is not an allowed recovery.
 Project-local caches, runs, matrices, reports, watchlists, snapshots, coverage, logs, and review
 evidence stay below `.marketsieve`. Immutable matrices are stored at
 `.marketsieve/matrices/objects/MATRIX_ID`. Decision reports and watchlists for the current schemas
-are stored below `.marketsieve/reports/v2` and `.marketsieve/watchlists/v2`; the current AI context
-is stored below `.marketsieve/analysis/v2`. Files directly below the pre-0.9 report, watchlist, and
-analysis roots are left physically recoverable but are not read, migrated, or deleted by the current
-application.
+are stored below `.marketsieve/reports/v2` and `.marketsieve/watchlists/v2`. Matrix objects contain
+all files needed for handoff and do not refer to a separate analysis workspace.
 
 Live matrix objects and analyses contain redistributable-provider-derived values and are local
 operational artifacts. They are not committed. yfinance use is limited to personal local research in
@@ -38,9 +37,10 @@ accordance with its stated intended use.
 
 ## Reading and comparing
 
-`matrix row` and `matrix compare` are offline views over the authoritative JSONL. Use `fields.json`
+`matrix list`, `matrix query`, `matrix row`, and `matrix compare` are offline views over the
+authoritative JSONL. Use an explicit matrix ID for a reproducible historical cross-section. Use `fields.json`
 to interpret names, units, formulas, periods, and missingness. Use `overview.html` for local search,
-sorting, and index filtering; it has no external CDN or runtime data request.
+sorting, and classification filtering; it has no external CDN or runtime data request.
 
 ## Other operations
 

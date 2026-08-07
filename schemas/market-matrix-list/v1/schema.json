@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:marketsieve:schema:market-matrix-list:1.0.0",
+  "title": "MarketSieve persisted market matrix list",
+  "type": "object",
+  "required": ["schema", "matrices"],
+  "properties": {
+    "schema": {"const": "market-matrix-list/v1"},
+    "matrices": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["matrix_id", "created_at", "row_count", "field_count", "coverage", "quality_status"],
+        "properties": {
+          "matrix_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "created_at": {"type": "string", "format": "date-time"},
+          "row_count": {"type": "integer", "minimum": 1},
+          "field_count": {"type": "integer", "minimum": 1},
+          "coverage": {"$ref": "#/$defs/coverage"},
+          "quality_status": {"enum": ["ready", "partial"]}
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "$defs": {
+    "coverage": {
+      "type": "object",
+      "required": ["overall", "indices"],
+      "properties": {
+        "overall": {"type": "string", "minLength": 1},
+        "indices": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {"enum": ["dow30", "nasdaq100", "nikkei225", "sp500", "topix500"]},
+          "additionalProperties": {"type": "string", "minLength": 1}
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

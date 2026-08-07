@@ -1,6 +1,6 @@
 {
   "files.exclude": {
-    "**/.marketsieve": true
+    "**/.marketsieve": false
   },
   "files.watcherExclude": {
     "**/.marketsieve/**": true

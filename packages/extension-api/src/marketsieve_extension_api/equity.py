@@ -21,12 +21,15 @@ class EquityBatchInstrument:
     instrument: Instrument
     provider_symbol: str
     memberships: tuple[str, ...]
+    is_benchmark: bool = False
 
     def __post_init__(self) -> None:
         if not isinstance(self.instrument, Instrument):
             raise TypeError("batch instrument must use Instrument")
         if not self.provider_symbol:
             raise ValueError("provider symbol must not be empty")
+        if not isinstance(self.is_benchmark, bool):
+            raise TypeError("benchmark marker must be boolean")
         if (
             not self.memberships
             or self.memberships != tuple(sorted(self.memberships))

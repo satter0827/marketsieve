@@ -15,9 +15,10 @@ file.
 make sync
 make market-matrix
 uv run marketsieve matrix show latest
+uv run marketsieve matrix list
+uv run marketsieve matrix query --market jp --present close --fields close --fields return_252d
 uv run marketsieve matrix row XTKS:7203
 uv run marketsieve matrix compare XTKS:7203 XNAS:MSFT --fields return_252d --fields volatility_252d
-make analysis-build
 ```
 
 `make market-matrix` downloads three years of adjusted daily prices in batches and collects company
@@ -26,16 +27,16 @@ provenance; they are not a second runtime market-data source.
 
 Each immutable object is stored below `.marketsieve/matrices/objects/MATRIX_ID/`:
 
+- `README.md` explains the dataset without requiring outside context.
 - `securities.jsonl` is the authoritative one-row-per-security dataset.
 - `fields.json` defines every field, formula, unit, period, source, and definition version.
+- `missing-reasons.json` classifies stable missing-value codes.
 - `manifest.json`, `index-summary.json`, and `failures.jsonl` preserve provenance and quality.
-- `matrix.csv` and self-contained `overview.html` are deterministic views of the JSONL authority.
-- `analysis.md` describes market breadth, distributions, risk, liquidity, fundamentals,
-  concentration, sectors, and missingness without naming preferred securities.
+- `matrix.csv`, self-contained `overview.html`, and `summary.md` are deterministic views.
 
-`matrix row` and `matrix compare` read only the stored JSONL. They do not use the network or
-recalculate indicators. `analysis build` writes `analysis-context/v2`, which references the selected
-matrix instead of copying its rows.
+`matrix list`, `matrix query`, `matrix row`, and `matrix compare` read only saved objects. They do
+not use the network, recalculate indicators, or create subsets. A historical cross-section is selected
+by its matrix ID. External analysis remains outside the immutable matrix directory.
 
 ## Other supported workflows
 
@@ -44,12 +45,11 @@ matrix instead of copying its rows.
 | Create configuration | `make setup-config` | `01 First Run: Create Configuration` | No | `marketsieve.toml` |
 | Import Rakuten portfolio | `make portfolio-import BROKER=rakuten PORTFOLIO=/absolute/path.csv` | `02 First Run: Import Rakuten Portfolio` | No | immutable holdings state |
 | Check readiness | `make daily-status` | `03 Daily Use: Check Readiness` | No | next-action diagnostics |
-| Refresh broad matrix | `make market-matrix` | `10 Market Matrix: Refresh All Indices (Network)` | Yes | immutable matrix and analysis |
+| Refresh broad matrix | `make market-matrix` | `10 Market Matrix: Refresh All Indices (Network)` | Yes | self-contained immutable matrix |
 | Add an instrument | `make watchlist-add INSTRUMENT=XTKS:7203` | `30 Watchlist: Add Instrument` | No | immutable watchlist revision |
 | Analyze JP instruments | `make daily-jp` | `40 Daily Use: Analyze JP Watchlist (Network)` | Yes | static daily report |
 | Analyze US instruments | `make daily-us` | `50 Daily Use: Analyze US Watchlist (Network)` | Yes | static daily report |
 | Build weekly brief | `make weekly` | `60 Weekly Use: Build Brief` | No | static weekly report |
-| Build AI context | `make analysis-build` | `70 Analysis: Build Workspace` | No | `context.json`, `analysis.md` |
 
 The generic source, snapshot, portfolio, watchlist, daily/weekly, and experiment capabilities remain
 available because they serve reproducible workflows outside broad-universe matrix generation.

@@ -1,20 +1,36 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:marketsieve:schema:market-matrix:1.0.0",
-  "title": "MarketSieve market matrix manifest projection",
+  "$id": "urn:marketsieve:schema:market-matrix:2.0.0",
+  "title": "MarketSieve market matrix projection",
   "type": "object",
   "required": ["schema", "matrix_id", "created_at", "request", "source", "input_snapshot_id", "universe_assets", "configuration", "row_count", "field_count", "failure_count", "coverage", "quality_status", "summary", "artifacts"],
   "properties": {
-    "schema": {"const": "market-matrix/v1"},
-    "matrix_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "schema": {"const": "market-matrix/v2"},
+    "matrix_id": {"$ref": "#/$defs/digest"},
     "created_at": {"type": "string", "format": "date-time"},
+    "request": {"$ref": "#/$defs/request"},
+    "source": {"$ref": "#/$defs/source"},
+    "input_snapshot_id": {"$ref": "#/$defs/digest"},
+    "universe_assets": {"type": "object"},
+    "configuration": {"type": "object"},
+    "row_count": {"type": "integer", "minimum": 1},
+    "field_count": {"type": "integer", "minimum": 1},
+    "failure_count": {"type": "integer", "minimum": 0},
+    "coverage": {"$ref": "#/$defs/coverage"},
+    "quality_status": {"enum": ["ready", "partial"]},
+    "summary": {"$ref": "#/$defs/summary"},
+    "artifacts": {"$ref": "#/$defs/artifacts"}
+  },
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "indexName": {"enum": ["dow30", "nasdaq100", "nikkei225", "sp500", "topix500"]},
     "request": {
       "type": "object",
       "required": ["fingerprint", "schema", "indices", "assets", "start", "end", "adjustment", "settings", "source"],
       "properties": {
-        "fingerprint": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "fingerprint": {"$ref": "#/$defs/digest"},
         "schema": {"const": "market-matrix-request/v1"},
-        "indices": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string"}},
+        "indices": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/indexName"}},
         "assets": {"type": "object"},
         "start": {"type": "string", "format": "date"},
         "end": {"type": "string", "format": "date"},
@@ -32,19 +48,17 @@
       },
       "additionalProperties": false
     },
-    "source": {"type": "object"},
-    "input_snapshot_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-    "universe_assets": {"type": "object"},
-    "configuration": {"type": "object"},
-    "row_count": {"type": "integer", "minimum": 1},
-    "field_count": {"type": "integer", "minimum": 1},
-    "failure_count": {"type": "integer", "minimum": 0},
-    "coverage": {"$ref": "#/$defs/coverage"},
-    "quality_status": {"enum": ["ready", "partial"]},
-    "summary": {"$ref": "#/$defs/summary"},
-    "artifacts": {"$ref": "#/$defs/artifacts"}
-  },
-  "$defs": {
+    "source": {
+      "type": "object",
+      "required": ["name", "version", "dataset", "response_hash"],
+      "properties": {
+        "name": {"const": "yfinance"},
+        "version": {"type": "string", "minLength": 1},
+        "dataset": {"type": "string", "minLength": 1},
+        "response_hash": {"$ref": "#/$defs/digest"}
+      },
+      "additionalProperties": false
+    },
     "coverage": {
       "type": "object",
       "required": ["overall", "indices"],
@@ -53,7 +67,7 @@
         "indices": {
           "type": "object",
           "minProperties": 1,
-          "propertyNames": {"enum": ["dow30", "nasdaq100", "nikkei225", "sp500", "topix500"]},
+          "propertyNames": {"$ref": "#/$defs/indexName"},
           "additionalProperties": {"type": "string", "minLength": 1}
         }
       },
@@ -70,6 +84,11 @@
       },
       "additionalProperties": false
     },
+    "distributionsByCurrency": {
+      "type": "object",
+      "propertyNames": {"pattern": "^[A-Z]{3}$"},
+      "additionalProperties": {"$ref": "#/$defs/distribution"}
+    },
     "currencyDistributions": {
       "type": "object",
       "required": ["market_cap", "median_traded_value_20d"],
@@ -78,11 +97,6 @@
         "median_traded_value_20d": {"$ref": "#/$defs/distributionsByCurrency"}
       },
       "additionalProperties": false
-    },
-    "distributionsByCurrency": {
-      "type": "object",
-      "propertyNames": {"pattern": "^[A-Z]{3}$"},
-      "additionalProperties": {"$ref": "#/$defs/distribution"}
     },
     "concentrationEntry": {
       "type": "object",
@@ -140,11 +154,7 @@
     },
     "group": {
       "type": "object",
-      "required": [
-        "security_count", "price_count", "price_coverage", "advancing_count",
-        "declining_count", "unchanged_count", "above_sma_20_count", "above_sma_200_count",
-        "distributions", "currency_distributions", "concentration", "sectors", "missing"
-      ],
+      "required": ["security_count", "price_count", "price_coverage", "advancing_count", "declining_count", "unchanged_count", "above_sma_20_count", "above_sma_200_count", "distributions", "currency_distributions", "concentration", "sectors", "missing"],
       "properties": {
         "security_count": {"type": "integer", "minimum": 1},
         "price_count": {"type": "integer", "minimum": 0},
@@ -161,10 +171,7 @@
         },
         "currency_distributions": {"$ref": "#/$defs/currencyDistributions"},
         "concentration": {"$ref": "#/$defs/concentration"},
-        "sectors": {
-          "type": "object",
-          "additionalProperties": {"$ref": "#/$defs/sector"}
-        },
+        "sectors": {"type": "object", "additionalProperties": {"$ref": "#/$defs/sector"}},
         "missing": {"$ref": "#/$defs/missing"}
       },
       "additionalProperties": false
@@ -189,19 +196,18 @@
     },
     "artifacts": {
       "type": "object",
-      "required": [
-        "manifest.json", "fields.json", "securities.jsonl", "index-summary.json",
-        "failures.jsonl", "matrix.csv", "overview.html", "analysis.md"
-      ],
+      "required": ["README.md", "manifest.json", "fields.json", "missing-reasons.json", "securities.jsonl", "index-summary.json", "failures.jsonl", "matrix.csv", "overview.html", "summary.md"],
       "properties": {
+        "README.md": {"type": "string", "minLength": 1},
         "manifest.json": {"type": "string", "minLength": 1},
         "fields.json": {"type": "string", "minLength": 1},
+        "missing-reasons.json": {"type": "string", "minLength": 1},
         "securities.jsonl": {"type": "string", "minLength": 1},
         "index-summary.json": {"type": "string", "minLength": 1},
         "failures.jsonl": {"type": "string", "minLength": 1},
         "matrix.csv": {"type": "string", "minLength": 1},
         "overview.html": {"type": "string", "minLength": 1},
-        "analysis.md": {"type": "string", "minLength": 1}
+        "summary.md": {"type": "string", "minLength": 1}
       },
       "additionalProperties": false
     }

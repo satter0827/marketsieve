@@ -7,6 +7,29 @@ will follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-08-08
+
+### Added
+
+- Offline matrix history listing and deterministic classification, numeric, presence, and
+  missingness queries over saved JSONL rows.
+- A self-contained matrix README, missing-reason catalog, and neutral aggregate summary projection.
+- Corporate-action consistency validation for adjusted yfinance price histories.
+
+### Changed
+
+- TOPIX 500 relative metrics use the fixed `1308.T` TOPIX-linked ETF proxy because yfinance does
+  not return history for `^TOPX`; proxy use is explicit and never selected at runtime.
+- Matrix manifests and projections use v2 and public workspace packages use version 0.10.0.
+- Readiness checks validate TOML syntax with the standard library before invoking `uv` or installed
+  project packages.
+
+### Removed
+
+- The separate analysis workspace, `analysis-context/v2`, its CLI and Make commands, and duplicate
+  generated analysis files.
+- The destructive `clean-generated` Make target.
+
 ## [0.9.0] - 2026-08-07
 
 ### Added

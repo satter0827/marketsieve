@@ -25,7 +25,7 @@
               "network": {"type": "boolean"}, "secrets": {"type": "boolean"},
               "optional_writes": {
                 "type": "array", "uniqueItems": true,
-                "items": {"enum": ["analysis_workspace", "experiment", "log_file", "market_matrix", "matrix_run", "portfolio", "report", "snapshot", "watchlist"]}
+                "items": {"enum": ["experiment", "log_file", "market_matrix", "matrix_run", "portfolio", "report", "snapshot", "watchlist"]}
               }
             },
             "additionalProperties": false

@@ -7,7 +7,7 @@
 | Maintain built-in constituent assets | Maintainer | source URL, as-of date, count, and asset hash review |
 | Fetch yfinance observations | Automated | request fingerprint, source version, input snapshot, failures |
 | Calculate and store matrix | Automated | immutable object verifies and coverage is explicit |
-| Read rows or compare fields | Human or external agent | selected matrix ID and stored JSONL reference |
+| List, query, read, or compare stored rows | Human or external agent | selected matrix ID and verified JSONL |
 | Interpret aggregate analysis | Human or external agent | claims trace to matrix summary and definitions |
 | Adopt a security-specific conclusion | Human decision | outside MarketSieve canonical state |
 | Place an order or send a message | Unsupported | no product path exists |
@@ -26,13 +26,13 @@ decisions.
 3. Pure calculations create the common row field set and index-relative measures.
 4. Canonical JSONL, definitions, manifest, summary, and failures determine the matrix identity.
 5. CSV, HTML, and Markdown are generated from that authority and verified on read.
-6. AI context references one immutable matrix; it does not duplicate all rows.
-7. A later refresh creates another object. It never rewrites an earlier object.
+6. The matrix README and neutral summary make the directory understandable without external state.
+7. External interpretations remain outside the matrix object.
+8. A later refresh creates another object. It never rewrites an earlier object.
 
 Interrupted runs live separately from completed objects. Existing pre-0.9 local artifacts remain
 recoverable on disk but no current schema or command reads them. Current decision reports and
-watchlists use the isolated `.marketsieve/reports/v2` and `.marketsieve/watchlists/v2` roots, and
-the current analysis workspace uses `.marketsieve/analysis/v2`.
+watchlists use the isolated `.marketsieve/reports/v2` and `.marketsieve/watchlists/v2` roots.
 
 ## Documentation lifecycle
 

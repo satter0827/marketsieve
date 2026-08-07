@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from datetime import datetime
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, TextIO
 
 from marketsieve import __version__
-from marketsieve_cli.adapters.analysis import AnalysisWorkspace
 from marketsieve_cli.adapters.config import Configuration
 from marketsieve_cli.adapters.console import ConsoleOutput, OutputMode
 from marketsieve_cli.adapters.experiments import ExperimentStore
@@ -143,6 +143,36 @@ def show_market_matrix(config_path: Path | None, matrix_id: str) -> dict[str, An
     return build_matrix_service(config_path).show(matrix_id)
 
 
+def list_market_matrices(config_path: Path | None) -> dict[str, Any]:
+    """List verified persisted matrices in reverse chronological order."""
+
+    return build_matrix_service(config_path).list()
+
+
+def query_market_matrix(
+    config_path: Path | None,
+    matrix_id: str,
+    *,
+    filters: dict[str, tuple[str, ...]],
+    minimums: dict[str, Decimal],
+    maximums: dict[str, Decimal],
+    present: tuple[str, ...],
+    missing: tuple[str, ...],
+    fields: tuple[str, ...],
+) -> dict[str, Any]:
+    """Filter one persisted matrix without acquisition or recalculation."""
+
+    return build_matrix_service(config_path).query(
+        matrix_id,
+        filters=filters,
+        minimums=minimums,
+        maximums=maximums,
+        present=present,
+        missing=missing,
+        fields=fields,
+    )
+
+
 def read_market_matrix_row(
     config_path: Path | None, matrix_id: str, instrument_id: str
 ) -> dict[str, Any]:
@@ -160,27 +190,6 @@ def compare_market_matrix_rows(
     """Compare already-computed matrix cells without recalculation."""
 
     return build_matrix_service(config_path).compare(matrix_id, instrument_ids, fields)
-
-
-def build_analysis_workspace() -> AnalysisWorkspace:
-    """Build the deterministic matrix-backed external-analysis projection."""
-
-    return AnalysisWorkspace(
-        Path(".marketsieve/analysis/v2"),
-        MatrixStore(Path(".marketsieve/matrices")),
-    )
-
-
-def create_analysis_workspace(matrix_id: str = "latest") -> dict[str, Any]:
-    """Create or replace deterministic workspace projection files."""
-
-    return build_analysis_workspace().build(matrix_id)
-
-
-def read_analysis_workspace() -> tuple[dict[str, Any], str]:
-    """Read and verify the current workspace projection."""
-
-    return build_analysis_workspace().show()
 
 
 def import_portfolio(path: Path, *, broker: str, as_of: str) -> dict[str, object]:
