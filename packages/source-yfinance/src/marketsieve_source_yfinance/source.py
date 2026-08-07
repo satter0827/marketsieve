@@ -29,6 +29,7 @@ from marketsieve.data.daily import Adjustment, DailyBar, Provenance
 from marketsieve.domain import Instrument
 from marketsieve_extension_api import (
     EquityAcquisitionFailure,
+    EquityBatchInstrument,
     EquityBatchObservation,
     EquityBatchRequest,
     ImportedEquityBatch,
@@ -49,6 +50,7 @@ EXCHANGE_CALENDAR_BY_MIC = {
     "XTKS": "XTKS",
 }
 MAX_MARKET_REFERENCE_LAG_DAYS = 7
+PRICE_DATA_FIELDS = ("Open", "High", "Low", "Close")
 
 
 class _ProfileAcquisitionCancelled(Exception):
@@ -62,6 +64,10 @@ class _BatchDownloadError(Exception):
         super().__init__("yfinance batch contained provider failures")
         self.frame = frame
         self.errors = dict(errors)
+
+
+class _HistoryEmptyError(Exception):
+    """Mark a symbol omitted from an otherwise successful yfinance response."""
 
 
 PROFILE_FIELDS = {
@@ -151,7 +157,16 @@ def _text(value: object) -> str | None:
     return None
 
 
+def _is_finite_number(value: object) -> bool:
+    try:
+        return Decimal(str(value)).is_finite()
+    except (InvalidOperation, TypeError, ValueError):
+        return False
+
+
 def _failure_reason(error: BaseException | str) -> str:
+    if isinstance(error, _HistoryEmptyError):
+        return "history_empty"
     message = str(error).lower()
     name = type(error).__name__.lower()
     if (
@@ -208,6 +223,22 @@ def _download_batch(symbols: tuple[str, ...], **kwargs: Any) -> tuple[Any, Mappi
     finally:
         logger.disabled = logger_disabled
     return frame, dict(context.errors)
+
+
+def _symbol_frame(frame: Any, symbol: str) -> Any:
+    try:
+        return frame[symbol]
+    except (KeyError, TypeError, AttributeError):
+        return None
+
+
+def _frame_has_market_data(frame: Any) -> bool:
+    if frame is None or getattr(frame, "empty", True):
+        return False
+    return any(
+        all(_is_finite_number(row.get(field)) for field in PRICE_DATA_FIELDS)
+        for _, row in frame.iterrows()
+    )
 
 
 def _financial_text(source: str, value: object) -> str | None:
@@ -449,38 +480,42 @@ class YFinanceSource:
             batch = request.instruments[offset : offset + request.batch_size]
             symbols = tuple(value.provider_symbol for value in batch)
             batch_error: Exception | None = None
-            symbol_errors: Mapping[str, object] = {}
-            try:
-
-                def download(
-                    selected_symbols: tuple[str, ...] = symbols,
-                ) -> tuple[Any, Mapping[str, object]]:
-                    result = _download_batch(
-                        selected_symbols,
-                        start=request.start.isoformat(),
-                        end=(request.end + timedelta(days=1)).isoformat(),
-                        interval="1d",
-                        auto_adjust=request.adjustment is Adjustment.ADJUSTED,
-                        actions=True,
-                        group_by="ticker",
-                        threads=False,
-                        progress=False,
-                        timeout=request.timeout_seconds,
-                        session=session,
-                        multi_level_index=True,
-                    )
-                    if result[1]:
-                        raise _BatchDownloadError(*result)
-                    return result
-
-                frame, symbol_errors = self._retry(download, request)
-            except _BatchDownloadError as error:
-                frame = error.frame
-                symbol_errors = error.errors
-            except Exception as error:
-                frame = None
-                batch_error = error
+            symbol_errors: dict[str, object] = {}
+            frames: dict[str, tuple[Any, datetime]] = {}
+            frame, primary_errors, batch_error = self._price_batch(
+                symbols,
+                request=request,
+                session=session,
+            )
+            symbol_errors.update(primary_errors)
             batch_retrieved_at = self._retrieved_at()
+            for symbol in symbols:
+                symbol_frame = _symbol_frame(frame, symbol)
+                if _frame_has_market_data(symbol_frame):
+                    frames[symbol] = (symbol_frame, batch_retrieved_at)
+
+            recoverable = tuple(
+                value
+                for value in batch
+                if value.provider_symbol not in frames
+                and isinstance(
+                    symbol_errors.get(value.provider_symbol.upper()),
+                    _HistoryEmptyError,
+                )
+            )
+            if batch_error is None and recoverable:
+                groups: dict[str, list[EquityBatchInstrument]] = {}
+                for item in recoverable:
+                    groups.setdefault(self._market(item.instrument), []).append(item)
+                for market in sorted(groups):
+                    self._recover_prices(
+                        tuple(groups[market]),
+                        request=request,
+                        session=session,
+                        frames=frames,
+                        errors=symbol_errors,
+                    )
+
             for value in batch:
                 identity = (value.instrument.mic, value.instrument.symbol)
                 if batch_error is not None:
@@ -494,15 +529,15 @@ class YFinanceSource:
                         )
                     )
                     continue
-                try:
-                    symbol_frame = frame[value.provider_symbol]
-                except (KeyError, TypeError, AttributeError):
-                    symbol_frame = None
+                symbol_frame, retrieved_at = frames.get(
+                    value.provider_symbol,
+                    (None, batch_retrieved_at),
+                )
                 item_bars = self._bars(
                     symbol_frame,
                     instrument=value.instrument,
                     adjustment=request.adjustment,
-                    retrieved_at=batch_retrieved_at,
+                    retrieved_at=retrieved_at,
                     session_as_of=session_as_of,
                     version=version,
                 )
@@ -526,6 +561,78 @@ class YFinanceSource:
         failures.extend(self._reject_stale_histories(output, request))
         failures.extend(self._missing_volume_failures(output, request))
         return output, tuple(failures)
+
+    def _price_batch(
+        self,
+        symbols: tuple[str, ...],
+        *,
+        request: EquityBatchRequest,
+        session: Session[Response],
+    ) -> tuple[Any, dict[str, object], Exception | None]:
+        def download() -> tuple[Any, Mapping[str, object]]:
+            frame, raw_errors = _download_batch(
+                symbols,
+                start=request.start.isoformat(),
+                end=(request.end + timedelta(days=1)).isoformat(),
+                interval="1d",
+                auto_adjust=request.adjustment is Adjustment.ADJUSTED,
+                actions=True,
+                group_by="ticker",
+                threads=False,
+                progress=False,
+                timeout=request.timeout_seconds,
+                session=session,
+                multi_level_index=True,
+            )
+            errors = {str(symbol).upper(): error for symbol, error in raw_errors.items()}
+            for symbol in symbols:
+                symbol_frame = _symbol_frame(frame, symbol)
+                if symbol.upper() not in errors and not _frame_has_market_data(symbol_frame):
+                    errors[symbol.upper()] = _HistoryEmptyError(symbol)
+            if errors:
+                raise _BatchDownloadError(frame, errors)
+            return frame, errors
+
+        try:
+            frame, errors = self._retry(download, request)
+            return frame, dict(errors), None
+        except _BatchDownloadError as error:
+            return error.frame, error.errors, None
+        except Exception as error:
+            return None, {}, error
+
+    def _recover_prices(
+        self,
+        items: tuple[EquityBatchInstrument, ...],
+        *,
+        request: EquityBatchRequest,
+        session: Session[Response],
+        frames: dict[str, tuple[Any, datetime]],
+        errors: dict[str, object],
+    ) -> None:
+        """Retry one bounded same-market group from a silently omitted batch."""
+
+        if not items:
+            return
+        symbols = tuple(value.provider_symbol for value in items)
+        frame, recovered_errors, batch_error = self._price_batch(
+            symbols,
+            request=request,
+            session=session,
+        )
+        retrieved_at = self._retrieved_at()
+        for item in items:
+            symbol = item.provider_symbol
+            symbol_frame = _symbol_frame(frame, symbol)
+            if _frame_has_market_data(symbol_frame):
+                frames[symbol] = (symbol_frame, retrieved_at)
+                errors.pop(symbol.upper(), None)
+                continue
+            if batch_error is not None:
+                errors[symbol.upper()] = batch_error
+                continue
+            error = recovered_errors.get(symbol.upper(), _HistoryEmptyError(symbol))
+            errors[symbol.upper()] = error
 
     @staticmethod
     def _market(instrument: Instrument) -> str:
@@ -672,13 +779,17 @@ class YFinanceSource:
         factor = Decimal(1)
         factors: dict[Any, Decimal] = {}
         for index, row in reversed(rows):
-            factors[index] = factor
+            has_price = any(_is_finite_number(row.get(field)) for field in PRICE_DATA_FIELDS)
             try:
                 split = Decimal(str(row.get("Stock Splits", 0)))
             except (InvalidOperation, TypeError, ValueError):
                 return None
+            if split.is_nan() and not has_price:
+                continue
             if not split.is_finite() or split < 0:
                 return None
+            if has_price:
+                factors[index] = factor
             if split > 0:
                 factor *= split
         return factors
