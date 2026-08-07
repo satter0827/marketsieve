@@ -148,7 +148,7 @@ def test_landing_and_version_are_immediately_useful() -> None:
 
     assert landing.exit_code == 0
     assert "再現可能な日本株・米国株分析" in landing.stdout
-    assert "marketsieve inspect MIC:SYMBOL" in landing.stdout
+    assert "marketsieve matrix refresh" in landing.stdout
     assert version.output == f"marketsieve, version {__version__}\n"
 
 
@@ -182,35 +182,26 @@ def test_capabilities_match_click_commands_and_validate_schema() -> None:
 
     assert result.exit_code == 0
     document = json.loads(result.stdout)
-    validate("capabilities-result", document, major=2)
+    validate("capabilities-result", document, major=3)
     command_names = [item["name"] for item in document["commands"]]
     assert command_names == [
         "analysis build",
         "analysis show",
-        "analyze atr",
-        "analyze ema",
-        "analyze macd",
-        "analyze maximum-drawdown",
-        "analyze period-return",
-        "analyze rsi",
-        "analyze sma",
         "capabilities",
-        "compare",
         "daily",
         "doctor",
         "experiment compare",
         "experiment run",
         "experiment show",
-        "inspect",
+        "matrix compare",
+        "matrix refresh",
+        "matrix row",
+        "matrix show",
         "portfolio import",
         "portfolio show",
         "report export",
         "report list",
         "report show",
-        "screen refresh",
-        "screen run",
-        "screen show",
-        "screen update",
         "snapshot list",
         "snapshot show",
         "snapshot verify",
@@ -232,6 +223,243 @@ def test_capabilities_match_click_commands_and_validate_schema() -> None:
     assert not {"agent doctor", "ai import", "report explain", "experiment explain"} & set(
         command_names
     )
+    for removed in ("screen", "inspect", "analyze", "compare"):
+        assert CliRunner().invoke(main, [removed]).exit_code == 2
+
+
+def test_matrix_commands_project_versioned_documents(monkeypatch: pytest.MonkeyPatch) -> None:
+    matrix_id = "a" * 64
+    matrix_document: dict[str, object] = {
+        "schema": "market-matrix/v1",
+        "matrix_id": matrix_id,
+        "input_snapshot_id": "d" * 64,
+        "created_at": "2026-08-07T00:00:00+00:00",
+        "request": {
+            "fingerprint": "c" * 64,
+            "schema": "market-matrix-request/v1",
+            "indices": ["sp500"],
+            "assets": {},
+            "start": "2023-08-08",
+            "end": "2026-08-07",
+            "adjustment": "adjusted",
+            "settings": {},
+            "source": {"name": "yfinance", "profile": "matrix-yfinance"},
+        },
+        "source": {},
+        "universe_assets": {},
+        "configuration": {},
+        "row_count": 2,
+        "field_count": 2,
+        "failure_count": 1,
+        "coverage": {"overall": "1", "indices": {"sp500": "1"}},
+        "quality_status": "ready",
+        "summary": {
+            "schema": "market-matrix-summary/v1",
+            "generated_at": "2026-08-07T00:00:00+00:00",
+            "coverage": {"overall": "1", "indices": {"sp500": "1"}},
+            "quality_status": "ready",
+            "groups": {
+                name: {
+                    "security_count": 2,
+                    "price_count": 2,
+                    "price_coverage": "1",
+                    "advancing_count": 1,
+                    "declining_count": 1,
+                    "unchanged_count": 0,
+                    "above_sma_20_count": 1,
+                    "above_sma_200_count": 1,
+                    "distributions": {},
+                    "currency_distributions": {
+                        "market_cap": {},
+                        "median_traded_value_20d": {},
+                    },
+                    "concentration": {
+                        "market_cap_observation_count": 0,
+                        "top_10_market_cap_share": None,
+                        "by_currency": {},
+                    },
+                    "sectors": {},
+                    "missing": {"fields": {}, "reasons": {}},
+                }
+                for name in ("all", "sp500")
+            },
+        },
+        "artifacts": {
+            name: f"/fixture/{name}"
+            for name in (
+                "manifest.json",
+                "fields.json",
+                "securities.jsonl",
+                "index-summary.json",
+                "failures.jsonl",
+                "matrix.csv",
+                "overview.html",
+                "analysis.md",
+            )
+        },
+    }
+    row_document: dict[str, object] = {
+        "schema": "market-matrix-row/v1",
+        "matrix_id": matrix_id,
+        "instrument_id": "XNAS:MSFT",
+        "instrument": {
+            "mic": "XNAS",
+            "symbol": "MSFT",
+            "currency": "USD",
+            "exchange_timezone": "America/New_York",
+            "instrument_type": "equity",
+        },
+        "provider_symbol": "MSFT",
+        "memberships": ["sp500"],
+        "retrieved_at": "2026-08-07T00:00:00+00:00",
+        "evidence_id": "b" * 64,
+        "values": {"close": "100"},
+        "missing": {"trailing_pe": "field_absent"},
+    }
+    comparison_document: dict[str, object] = {
+        "schema": "market-matrix-comparison/v1",
+        "matrix_id": matrix_id,
+        "fields": ["close"],
+        "rows": [
+            {"instrument_id": "XNAS:MSFT", "values": {"close": "100"}, "missing": {}},
+            {"instrument_id": "XTKS:7203", "values": {"close": "200"}, "missing": {}},
+        ],
+    }
+    cli_module = importlib.import_module("marketsieve_cli.interfaces.cli.main")
+
+    def refresh(config: Path | None, *, resume: str | None) -> dict[str, object]:
+        assert config is None and resume == "fixture-run"
+        return matrix_document
+
+    monkeypatch.setattr(cli_module, "refresh_market_matrix", refresh)
+    monkeypatch.setattr(
+        cli_module,
+        "show_market_matrix",
+        lambda config, selected: (
+            matrix_document if config is None and selected == matrix_id else {}
+        ),
+    )
+    monkeypatch.setattr(
+        cli_module,
+        "read_market_matrix_row",
+        lambda config, selected, instrument: (
+            row_document
+            if config is None and (selected, instrument) == (matrix_id, "XNAS:MSFT")
+            else {}
+        ),
+    )
+    monkeypatch.setattr(
+        cli_module,
+        "compare_market_matrix_rows",
+        lambda config, selected, instruments, fields: (
+            comparison_document
+            if config is None
+            and selected == matrix_id
+            and instruments == ("XNAS:MSFT", "XTKS:7203")
+            and fields == ("close",)
+            else {}
+        ),
+    )
+    runner = CliRunner()
+    results = (
+        runner.invoke(main, ["matrix", "refresh", "--resume", "fixture-run", "--output", "json"]),
+        runner.invoke(main, ["matrix", "show", matrix_id, "--output", "json"]),
+        runner.invoke(
+            main,
+            ["matrix", "row", "XNAS:MSFT", "--matrix", matrix_id, "--output", "json"],
+        ),
+        runner.invoke(
+            main,
+            [
+                "matrix",
+                "compare",
+                "XNAS:MSFT",
+                "XTKS:7203",
+                "--matrix",
+                matrix_id,
+                "--fields",
+                "close",
+                "--output",
+                "json",
+            ],
+        ),
+    )
+
+    assert all(result.exit_code == 0 for result in results)
+    documents = [json.loads(result.stdout) for result in results]
+    validate("market-matrix", documents[0])
+    validate("market-matrix", documents[1])
+    validate("market-matrix-row", documents[2])
+    validate("market-matrix-comparison", documents[3])
+
+
+@pytest.mark.parametrize(
+    ("target", "arguments", "error_code"),
+    (
+        ("refresh_market_matrix", ("matrix", "refresh"), "matrix_refresh_failed"),
+        ("show_market_matrix", ("matrix", "show"), "matrix_show_failed"),
+        ("read_market_matrix_row", ("matrix", "row", "XNAS:MSFT"), "matrix_row_failed"),
+        (
+            "compare_market_matrix_rows",
+            ("matrix", "compare", "XNAS:MSFT", "XTKS:7203"),
+            "matrix_compare_failed",
+        ),
+    ),
+)
+def test_matrix_commands_normalize_failures(
+    monkeypatch: pytest.MonkeyPatch,
+    target: str,
+    arguments: tuple[str, ...],
+    error_code: str,
+) -> None:
+    cli_module = importlib.import_module("marketsieve_cli.interfaces.cli.main")
+
+    def fail(*_args: object, **_kwargs: object) -> None:
+        raise ValueError("fixture matrix failure")
+
+    monkeypatch.setattr(cli_module, target, fail)
+    result = CliRunner().invoke(main, [*arguments, "--output", "json"])
+
+    assert result.exit_code == 1
+    assert json.loads(result.stderr)["error"] == error_code
+
+
+def test_analysis_commands_project_matrix_context(monkeypatch: pytest.MonkeyPatch) -> None:
+    context: dict[str, object] = {
+        "context_id": "a" * 64,
+        "schema": "analysis-context/v2",
+        "as_of": "2026-08-07T00:00:00+00:00",
+        "matrix": {
+            "matrix_id": "b" * 64,
+            "created_at": "2026-08-07T00:00:00+00:00",
+            "row_count": 2,
+            "field_count": 100,
+            "quality_status": "ready",
+            "coverage": {"overall": "1", "indices": {"sp500": "1"}},
+            "manifest_path": "../matrices/manifest.json",
+            "fields_path": "../matrices/fields.json",
+            "index_summary_path": "../matrices/index-summary.json",
+            "securities_jsonl_path": "../matrices/securities.jsonl",
+            "failures_jsonl_path": "../matrices/failures.jsonl",
+        },
+        "constraints": ["Do not rank securities."],
+    }
+    cli_module = importlib.import_module("marketsieve_cli.interfaces.cli.main")
+    monkeypatch.setattr(
+        cli_module,
+        "create_analysis_workspace",
+        lambda matrix_id: context if matrix_id == "b" * 64 else {},
+    )
+    monkeypatch.setattr(cli_module, "read_analysis_workspace", lambda: (context, "# Analysis\n"))
+    runner = CliRunner()
+    built = runner.invoke(main, ["analysis", "build", "--matrix", "b" * 64, "--output", "json"])
+    shown = runner.invoke(main, ["analysis", "show", "--output", "json"])
+    markdown = runner.invoke(main, ["analysis", "show", "--output", "text"])
+
+    assert built.exit_code == shown.exit_code == markdown.exit_code == 0
+    validate("analysis-context", json.loads(built.stdout), major=2)
+    validate("analysis-context", json.loads(shown.stdout), major=2)
+    assert markdown.stdout == "# Analysis\n"
 
 
 def test_experiment_commands_project_service_documents(
@@ -286,64 +514,6 @@ def test_experiment_commands_project_service_documents(
     assert json.loads(results[0].stdout) == run_document
     assert json.loads(results[1].stdout) == run_document
     assert json.loads(results[2].stdout) == comparison_document
-
-
-def test_screen_commands_project_explicit_update_and_offline_results(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    universe_document: dict[str, object] = {
-        "schema": "instrument-universe/v1",
-        "universe_id": "a" * 64,
-    }
-    report_document: dict[str, object] = {
-        "schema": "screening-report/v1",
-        "report_id": "b" * 64,
-    }
-
-    def stub_update(config_path: Path | None, market: str) -> dict[str, object]:
-        assert config_path is None
-        assert market == "us"
-        return universe_document
-
-    def stub_run(config_path: Path | None, market: str, *, as_of: datetime) -> dict[str, object]:
-        assert config_path is None
-        assert market == "us"
-        assert as_of == datetime.fromisoformat("2026-08-02T12:00:00+00:00")
-        return report_document
-
-    def stub_read(
-        config_path: Path | None, report_id: str, *, market: str | None
-    ) -> dict[str, object]:
-        assert config_path is None
-        assert (report_id, market) == ("latest", "us")
-        return report_document
-
-    cli_module = importlib.import_module("marketsieve_cli.interfaces.cli.main")
-    monkeypatch.setattr(cli_module, "update_screening", stub_update)
-    monkeypatch.setattr(cli_module, "run_screening", stub_run)
-    monkeypatch.setattr(cli_module, "read_screening", stub_read)
-    runner = CliRunner()
-    results = (
-        runner.invoke(main, ["screen", "update", "us", "--output", "json"]),
-        runner.invoke(
-            main,
-            [
-                "screen",
-                "run",
-                "us",
-                "--as-of",
-                "2026-08-02T12:00:00+00:00",
-                "--output",
-                "json",
-            ],
-        ),
-        runner.invoke(main, ["screen", "show", "latest", "--market", "us", "--output", "json"]),
-    )
-
-    assert all(result.exit_code == 0 for result in results)
-    assert json.loads(results[0].stdout) == universe_document
-    assert json.loads(results[1].stdout) == report_document
-    assert json.loads(results[2].stdout) == report_document
 
 
 def test_experiment_commands_report_service_failures_without_tracebacks(
@@ -419,49 +589,22 @@ def test_canonical_portfolio_import_and_show_are_offline_and_deterministic() -> 
     validate("portfolio-result", shown_document, major=3)
 
 
-def test_watchlist_and_analysis_workspace_complete_an_offline_cli_flow() -> None:
+def test_watchlist_commands_complete_an_offline_cli_flow() -> None:
     runner = CliRunner()
     with runner.isolated_filesystem():
-        source = Path("portfolio.csv")
-        source.write_text(
-            "mic,symbol,currency,timezone,quantity,average_acquisition_price,account_type\n"
-            "XTKS,7203,JPY,Asia/Tokyo,10,2500,NISA\n",
-            encoding="utf-8",
-        )
-        imported = runner.invoke(
-            main,
-            [
-                "portfolio",
-                "import",
-                str(source),
-                "--broker",
-                "canonical",
-                "--as-of",
-                "2026-08-06T20:00:00+09:00",
-                "--output",
-                "json",
-            ],
-        )
         added = runner.invoke(main, ["watchlist", "add", "XNAS:MSFT", "--output", "json"])
         shown = runner.invoke(main, ["watchlist", "show", "--output", "json"])
-        built = runner.invoke(main, ["analysis", "build", "--output", "json"])
-        first_bytes = Path(".marketsieve/analysis/context.json").read_bytes()
-        rebuilt = runner.invoke(main, ["analysis", "build", "--output", "json"])
-        displayed = runner.invoke(main, ["analysis", "show", "--output", "json"])
+        removed = runner.invoke(main, ["watchlist", "remove", "XNAS:MSFT", "--output", "json"])
 
-        assert all(
-            result.exit_code == 0 for result in (imported, added, shown, built, rebuilt, displayed)
-        )
-        assert first_bytes == Path(".marketsieve/analysis/context.json").read_bytes()
+        assert all(result.exit_code == 0 for result in (added, shown, removed))
         added_document = json.loads(added.stdout)
         shown_document = json.loads(shown.stdout)
-        context = json.loads(built.stdout)
-        validate("watchlist-result", added_document)
-        validate("watchlist-result", shown_document)
-        validate("analysis-context", context)
-        assert context == json.loads(rebuilt.stdout) == json.loads(displayed.stdout)
-        assert context["watchlist"]["items"][0]["key"] == "XNAS:MSFT"
-        assert "quantity" not in first_bytes.decode("utf-8")
+        removed_document = json.loads(removed.stdout)
+        validate("watchlist-result", added_document, major=2)
+        validate("watchlist-result", shown_document, major=2)
+        validate("watchlist-result", removed_document, major=2)
+        assert shown_document["items"][0]["key"] == "XNAS:MSFT"
+        assert removed_document["items"] == []
 
 
 def test_watchlist_show_exposes_dangling_latest_object() -> None:
@@ -469,7 +612,7 @@ def test_watchlist_show_exposes_dangling_latest_object() -> None:
     with runner.isolated_filesystem():
         added = runner.invoke(main, ["watchlist", "add", "XNAS:MSFT", "--output", "json"])
         document = json.loads(added.stdout)
-        Path(f".marketsieve/watchlists/objects/{document['watchlist_id']}.json").unlink()
+        Path(f".marketsieve/watchlists/v2/objects/{document['watchlist_id']}.json").unlink()
 
         shown = runner.invoke(main, ["watchlist", "show", "--output", "json"])
 
@@ -501,7 +644,7 @@ def test_rakuten_empty_portfolio_import_is_offline_and_private() -> None:
         assert "watch_items" not in document
         assert document["source"] == "rakuten_assetbalance_empty"
         assert document["source_name"] == "rakuten"
-        assert document["source_version"] == "0.8.0"
+        assert document["source_version"] == "0.9.0"
         assert document["dataset"] == "assetbalance-all-empty/v1"
         assert document["diagnostics"] == ["empty_portfolio"]
         assert not any(
@@ -589,7 +732,7 @@ def test_entrypoint_renders_json_usage_errors(
     assert error["error"] == "invalid_cli_usage"
 
 
-def test_csv_import_snapshot_and_price_inspect_are_one_offline_path(tmp_path: Path) -> None:
+def test_csv_import_and_snapshot_commands_are_one_offline_path(tmp_path: Path) -> None:
     runner = CliRunner()
     bundle = write_csv_bundle(tmp_path / "bundle")
     with runner.isolated_filesystem():
@@ -600,31 +743,6 @@ def test_csv_import_snapshot_and_price_inspect_are_one_offline_path(tmp_path: Pa
         listed = runner.invoke(main, ["snapshot", "list", "--output", "json"])
         shown = runner.invoke(main, ["snapshot", "show", object_id, "--output", "json"])
         verified = runner.invoke(main, ["snapshot", "verify", object_id, "--output", "json"])
-        inspected = runner.invoke(
-            main,
-            [
-                "inspect",
-                "XTKS:7203",
-                "--source-profile",
-                "offline-jp",
-                "--output",
-                "json",
-            ],
-        )
-        analyzed = runner.invoke(
-            main,
-            [
-                "analyze",
-                "sma",
-                "XTKS:7203",
-                "--period",
-                "2",
-                "--source-profile",
-                "offline-jp",
-                "--output",
-                "json",
-            ],
-        )
 
     assert sources.exit_code == imported.exit_code == 0
     source_document = json.loads(sources.stdout)
@@ -653,24 +771,14 @@ def test_csv_import_snapshot_and_price_inspect_are_one_offline_path(tmp_path: Pa
     for result in (listed, shown, verified):
         assert result.exit_code == 0
         validate("snapshot-result", json.loads(result.stdout))
-    assert inspected.exit_code == 0
-    inspection = json.loads(inspected.stdout)
-    validate("inspect-result", inspection, major=2)
-    assert inspection["sections"]["price"]["values"]["close"] == "112"
-    assert inspection["sections"]["technical"]["status"] == "partial"
-    assert inspection["sections"]["financial"]["missing_reasons"] == ["not_present_in_snapshot"]
-    assert analyzed.exit_code == 0
-    analysis = json.loads(analyzed.stdout)
-    validate("indicator-result", analysis)
-    assert analysis["indicator"]["values"] == {"sma": "108.5"}
 
 
 def test_report_commands_preserve_one_immutable_report() -> None:
     runner = CliRunner()
 
     with runner.isolated_filesystem():
-        report_id = write_decision_report(Path(".marketsieve/reports"))
-        report_path = Path(f".marketsieve/reports/objects/{report_id}.json")
+        report_id = write_decision_report(Path(".marketsieve/reports/v2"))
+        report_path = Path(f".marketsieve/reports/v2/objects/{report_id}.json")
         original_report = report_path.read_bytes()
         listed = runner.invoke(main, ["report", "list", "--output", "json"])
         shown = runner.invoke(main, ["report", "show", "latest", "--output", "json"])
@@ -683,7 +791,7 @@ def test_report_commands_preserve_one_immutable_report() -> None:
     assert list_document["reports"][0]["report_id"] == report_id
     assert shown.exit_code == 0, shown.output
     shown_document = json.loads(shown.stdout)
-    validate("decision-report", shown_document)
+    validate("decision-report", shown_document, major=2)
     assert shown_document["report_id"] == report_id
     assert exported.exit_code == 0
     assert exported.stdout.startswith("# Close Brief\n")
@@ -728,10 +836,6 @@ def test_jquants_doctor_and_fetch_use_only_explicit_profile(
             ["source", "doctor", "japan", "--output", "json"],
             env={"JQUANTS_API_KEY": ""},
         )
-        missing_snapshot = runner.invoke(
-            main,
-            ["inspect", "XTKS:7203", "--source-profile", "japan", "--output", "json"],
-        )
         fetched = runner.invoke(
             main,
             [
@@ -748,75 +852,13 @@ def test_jquants_doctor_and_fetch_use_only_explicit_profile(
             ],
             env={"JQUANTS_API_KEY": "example"},
         )
-        inspected = runner.invoke(
-            main,
-            ["inspect", "XTKS:7203", "--source-profile", "japan", "--output", "json"],
-        )
-        assert inspected.exit_code == 0, (inspected.output, inspected.exception)
 
     assert missing.exit_code == 1
     validate("source-result", json.loads(missing.stdout))
-    assert missing_snapshot.exit_code == 1
-    assert (
-        "marketsieve source fetch japan XTKS:7203" in json.loads(missing_snapshot.stderr)["message"]
-    )
     assert fetched.exit_code == 0
     fetch_document = json.loads(fetched.stdout)
     validate("source-result", fetch_document)
     assert fetch_document["status"] == "fetched"
-    inspection = json.loads(inspected.stdout)
-    validate("inspect-result", inspection, major=2)
-    assert inspection["instrument"]["profile"]["names"]["ja"] == "テスト株式会社"
-    assert inspection["instrument"]["profile"]["availability_basis"] == "retrieval"
-    assert inspection["instrument"]["profile"]["available_at"] == "2026-08-01T12:00:00+00:00"
-
-
-def test_inspect_never_fetches_and_explains_missing_snapshot() -> None:
-    runner = CliRunner()
-    with runner.isolated_filesystem():
-        result = runner.invoke(
-            main,
-            [
-                "inspect",
-                "XTKS:7203",
-                "--source-profile",
-                "offline-jp",
-                "--output",
-                "json",
-            ],
-        )
-
-    assert result.exit_code == 1
-    error = json.loads(result.stderr)
-    assert error["error"] == "inspect_failed"
-    assert "marketsieve source import PATH" in error["message"]
-
-
-def test_configured_import_only_source_explains_import_recovery() -> None:
-    runner = CliRunner()
-    with runner.isolated_filesystem():
-        Path("marketsieve.toml").write_text(
-            "[source_profiles.offline-jp]\n"
-            'currency = "JPY"\n'
-            'timezone = "Asia/Tokyo"\n'
-            "[source_profiles.offline-jp.daily_bars]\n"
-            'plugin = "csv"\n',
-            encoding="utf-8",
-        )
-        result = runner.invoke(
-            main,
-            [
-                "inspect",
-                "XTKS:7203",
-                "--source-profile",
-                "offline-jp",
-                "--output",
-                "json",
-            ],
-        )
-
-    assert result.exit_code == 1
-    assert "marketsieve source import PATH" in json.loads(result.stderr)["message"]
 
 
 def test_jquants_financials_and_events_join_price_inspection_offline(
@@ -941,20 +983,6 @@ def test_jquants_financials_and_events_join_price_inspection_offline(
             )
             for kind in ("daily_bars", "financials", "events")
         ]
-        inspected = runner.invoke(
-            main,
-            ["inspect", "XTKS:7203", "--source-profile", "japan", "--output", "json"],
-        )
-        assert inspected.exit_code == 0, (inspected.output, inspected.exception)
-        financial_id = json.loads(results[1].stdout)["object_id"]
-        normalized = (
-            Path(".marketsieve/data/objects") / financial_id / "normalized" / "financials.json"
-        )
-        normalized.write_bytes(normalized.read_bytes().replace(b'"revenue"', b'"tampered"'))
-        inspected_with_corrupt_financials = runner.invoke(
-            main,
-            ["inspect", "XTKS:7203", "--source-profile", "japan", "--output", "json"],
-        )
 
         def mismatched_financials(
             source: JQuantsSource, request: FactFetchRequest
@@ -1006,27 +1034,6 @@ def test_jquants_financials_and_events_join_price_inspection_offline(
     for result in results:
         assert result.exit_code == 0, result.output
         validate("source-result", json.loads(result.stdout))
-    inspection = json.loads(inspected.stdout)
-    validate("inspect-result", inspection, major=2)
-    assert inspection["sections"]["financial"]["values"]["facts"][0]["concept"] == "revenue"
-    assert inspection["sections"]["financial"]["completeness"] == (
-        "0.1111111111111111111111111111111111"
-    )
-    assert (
-        "compatible_annual_financial_period_not_available"
-        in inspection["sections"]["financial"]["missing_reasons"]
-    )
-    assert inspection["sections"]["financial"]["as_of"] == "2026-07-31T07:00:00+00:00"
-    assert inspection["sections"]["events"]["values"]["events"][0]["type"] == "earnings"
-    assert inspection["sections"]["events"]["completeness"] == "0.333333"
-    corrupt_inspection = json.loads(inspected_with_corrupt_financials.stdout)
-    validate("inspect-result", corrupt_inspection, major=2)
-    assert inspected_with_corrupt_financials.exit_code == 0
-    assert corrupt_inspection["sections"]["price"]["status"] == "available"
-    assert corrupt_inspection["sections"]["financial"]["status"] == "invalid"
-    assert corrupt_inspection["sections"]["financial"]["missing_reasons"] == [
-        "snapshot_verification_failed"
-    ]
     for mismatched in (mismatched_financial_result, mismatched_event_result):
         assert mismatched.exit_code == 1
         assert "preserve the exact request" in json.loads(mismatched.stderr)["message"]

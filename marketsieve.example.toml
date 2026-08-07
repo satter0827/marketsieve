@@ -60,20 +60,13 @@ financial_lookback_days = 1500
 [routines.weekly]
 max_age_days = 7
 
-[screening.jp]
-source_profile = "japan"
-acquisition_limit = 100
-eligible_mics = ["XTKS"]
-fetch_limit = 20
-lookback_days = 100
-processing_limit = 100
-display_limit = 20
-
-[screening.us]
-source_profile = "us"
-acquisition_limit = 100
-eligible_mics = ["XNAS", "XNYS"]
-fetch_limit = 20
-lookback_days = 100
-processing_limit = 100
-display_limit = 20
+[matrix]
+indices = ["nikkei225", "topix500", "sp500", "dow30", "nasdaq100"]
+history_days = 1095
+batch_size = 50
+profile_workers = 2
+timeout_seconds = 30
+max_retries = 3
+retry_base_seconds = 2
+minimum_overall_price_coverage = 0.95
+minimum_index_price_coverage = 0.90

@@ -148,6 +148,39 @@ def test_fetches_bounded_us_exchange_universe_with_class_share_symbol() -> None:
     )
 
 
+def test_sec_universe_and_financials_accept_bats_identity() -> None:
+    universe = source(
+        [
+            response(
+                {
+                    "fields": ["cik", "name", "ticker", "exchange"],
+                    "data": [[1, "Cboe Global Markets", "CBOE", "Cboe BZX"]],
+                }
+            )
+        ]
+    ).fetch_universe(UniverseRequest("sec-us", "us", 1, {}, ("BATS",)))
+    cboe = Instrument.create(
+        symbol="CBOE",
+        mic="BATS",
+        currency="USD",
+        exchange_timezone="America/New_York",
+    )
+    financial_request = FactFetchRequest(
+        "sec-us",
+        cboe,
+        date(2026, 7, 1),
+        date(2026, 7, 31),
+        {"cik": CIK},
+    )
+
+    imported = source([response(submissions()), response(companyfacts())]).fetch_financials(
+        financial_request
+    )
+
+    assert universe.instruments == (cboe,)
+    assert imported.request.instrument == cboe
+
+
 def source(
     responses: list[HttpResponse],
     *,
@@ -582,7 +615,7 @@ def test_rejects_unsupported_market_and_unsafe_transport_values() -> None:
         jp.end,
         jp.settings,
     )
-    with pytest.raises(ValueError, match="XNAS and XNYS"):
+    with pytest.raises(ValueError, match="BATS, XNAS, and XNYS"):
         source([]).fetch_financials(jp)
 
     with pytest.raises(ValueError, match="valid JSON"):

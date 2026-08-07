@@ -6,10 +6,10 @@ from dataclasses import replace
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import cast
 
 import pytest
 from jsonschema import Draft202012Validator
+from jsonschema.exceptions import ValidationError
 
 from marketsieve import (
     DecisionAction,
@@ -30,6 +30,7 @@ from marketsieve_cli.adapters.reports import (
     render_markdown,
     report_document,
 )
+from marketsieve_cli.bootstrap import build_report_store
 
 ROOT = Path(__file__).parents[2]
 AS_OF = datetime(2026, 8, 5, 22, tzinfo=UTC)
@@ -152,7 +153,7 @@ def test_report_identity_normalizes_equivalent_decimal_representations() -> None
 
 def test_report_document_matches_published_schema() -> None:
     schema = json.loads(
-        (ROOT / "schemas/decision-report/v1/schema.json").read_text(encoding="utf-8")
+        (ROOT / "schemas/decision-report/v2/schema.json").read_text(encoding="utf-8")
     )
 
     Draft202012Validator(schema, format_checker=Draft202012Validator.FORMAT_CHECKER).validate(
@@ -160,28 +161,18 @@ def test_report_document_matches_published_schema() -> None:
     )
 
 
-def test_weekly_report_keeps_screening_candidates_separate_and_static() -> None:
-    base = _report(session=MarketSession.WEEKLY)
-    candidate = next(item for item in base.decisions if not item.held)
-    report = create_report(
-        MarketSession.WEEKLY,
-        base.as_of,
-        base.portfolio,
-        base.decisions,
-        diagnostics=base.diagnostics,
-        input_report_ids=base.input_report_ids,
-        candidate_decisions=(candidate,),
-        screening_report_ids=("3" * 64,),
+@pytest.mark.parametrize("field", ("portfolio", "policy", "decisions"))
+def test_decision_report_schema_rejects_empty_nested_contracts(field: str) -> None:
+    schema = json.loads(
+        (ROOT / "schemas/decision-report/v2/schema.json").read_text(encoding="utf-8")
     )
+    document = report_document(_report())
+    document[field] = [{}] if field == "decisions" else {}
 
-    document = report_document(report)
-    markdown = render_markdown(report)
-
-    decisions = cast(list[object], document["decisions"])
-    assert document["candidate_decisions"] == [decisions[0]]
-    assert document["screening_report_ids"] == ["3" * 64]
-    assert "### 残った候補" in markdown
-    assert "- XNAS:AAPL: 買い候補" in markdown
+    with pytest.raises(ValidationError):
+        Draft202012Validator(schema, format_checker=Draft202012Validator.FORMAT_CHECKER).validate(
+            document
+        )
 
 
 def test_report_store_writes_authority_projection_and_latest_reference(tmp_path: Path) -> None:
@@ -199,6 +190,22 @@ def test_report_store_writes_authority_projection_and_latest_reference(tmp_path:
     assert reference == {"report_id": report.report_id}
     assert store.resolve(report.report_id) == report
     assert store.resolve("latest") == report
+
+
+def test_composed_report_store_does_not_read_legacy_v1_state(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    legacy = tmp_path / ".marketsieve/reports"
+    (legacy / "objects").mkdir(parents=True)
+    (legacy / "objects/legacy.json").write_text("not-json", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+
+    store = build_report_store()
+
+    assert store.list() == ()
+    store.put(_report())
+    assert (legacy / "objects/legacy.json").read_text(encoding="utf-8") == "not-json"
+    assert next((legacy / "v2/objects").iterdir()).is_file()
 
 
 def test_latest_resolution_uses_as_of_then_stable_identity(tmp_path: Path) -> None:

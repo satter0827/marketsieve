@@ -7,7 +7,6 @@ CONFIG ?= marketsieve.toml
 PORTFOLIO ?=
 BROKER ?= canonical
 INSTRUMENT ?=
-SCREEN_REPORT ?=
 AS_OF ?= $(shell date +"%Y-%m-%dT%H:%M:%S%z")
 BASE_SHA ?= origin/develop
 HEAD_SHA ?= HEAD
@@ -23,7 +22,7 @@ RELEASE_DIR ?= $(STATE_DIR)/artifacts/release/$(COMMIT)
 export UV_CACHE_DIR := $(abspath $(STATE_DIR))/cache/uv
 export PYTHONPYCACHEPREFIX := $(abspath $(STATE_DIR))/cache/python
 
-.PHONY: help setup-config portfolio-import portfolio-show daily-status screen-refresh-jp screen-refresh-us screen-update-jp screen-update-us screen-run-jp screen-run-us watchlist-add watchlist-remove watchlist-show daily-jp daily-us weekly analysis-build analysis-show analysis-demo doctor sync format format-check lint typecheck test secret-check check capabilities-json build evidence evidence-bundle evidence-validate review-attest governance-check release-build release-verify release-check clean-generated
+.PHONY: help setup-config portfolio-import portfolio-show daily-status market-matrix watchlist-add watchlist-remove watchlist-show daily-jp daily-us weekly analysis-build analysis-show analysis-demo doctor sync format format-check lint typecheck test secret-check check capabilities-json build evidence evidence-bundle evidence-validate review-attest governance-check release-build release-verify release-check clean-generated
 
 help: ## Show daily-use commands first, followed by developer commands.
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z0-9_-]+:.*## / {printf "%-22s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -57,29 +56,19 @@ daily-status: doctor ## Check configuration, portfolio, reports, and installatio
 	@uv run marketsieve report list --output json
 	@uv run python -m scripts.portfolio_check "$(CONFIG)"
 
-screen-refresh-jp: ## Discover bounded JP candidates and store a static report (Network).
-	@test -f "$(CONFIG)" || { echo "Missing $(CONFIG). Next VS Code operation: 01 First Run: Create Configuration" >&2; exit 2; }
-	uv run marketsieve --config "$(CONFIG)" screen refresh jp
+market-matrix: ## Build the full yfinance market matrix with no registration or API key.
+	@if test -f "$(CONFIG)"; then \
+		uv run marketsieve --config "$(CONFIG)" matrix refresh; \
+	elif test "$(origin CONFIG)" != "file"; then \
+		echo "Configuration file not found: $(CONFIG)" >&2; \
+		exit 2; \
+	else \
+		uv run marketsieve matrix refresh; \
+	fi
 
-screen-refresh-us: ## Discover bounded US candidates and store a static report (Network).
-	@test -f "$(CONFIG)" || { echo "Missing $(CONFIG). Next VS Code operation: 01 First Run: Create Configuration" >&2; exit 2; }
-	uv run marketsieve --config "$(CONFIG)" screen refresh us
-
-screen-update-jp: ## Update the bounded JP universe only (Network).
-	uv run marketsieve --config "$(CONFIG)" screen update jp
-
-screen-update-us: ## Update the bounded US universe only (Network).
-	uv run marketsieve --config "$(CONFIG)" screen update us
-
-screen-run-jp: ## Screen stored JP snapshots without acquisition (Offline).
-	uv run marketsieve --config "$(CONFIG)" screen run jp
-
-screen-run-us: ## Screen stored US snapshots without acquisition (Offline).
-	uv run marketsieve --config "$(CONFIG)" screen run us
-
-watchlist-add: ## Add INSTRUMENT=MIC:SYMBOL, optionally SCREEN_REPORT=ID (Offline).
+watchlist-add: ## Add INSTRUMENT=MIC:SYMBOL (Offline).
 	@test -n "$(INSTRUMENT)" || { echo "INSTRUMENT is required. Next: make watchlist-add INSTRUMENT=XTKS:7203" >&2; exit 2; }
-	uv run marketsieve watchlist add "$(INSTRUMENT)" $(if $(SCREEN_REPORT),--from-screen "$(SCREEN_REPORT)",)
+	uv run marketsieve watchlist add "$(INSTRUMENT)"
 
 watchlist-remove: ## Remove INSTRUMENT=MIC:SYMBOL (Offline).
 	@test -n "$(INSTRUMENT)" || { echo "INSTRUMENT is required. Next: make watchlist-remove INSTRUMENT=XTKS:7203" >&2; exit 2; }

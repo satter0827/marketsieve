@@ -14,7 +14,7 @@ from marketsieve import PortfolioSnapshot
 from marketsieve_extension_api import ImportedPortfolioSnapshot
 
 MAX_SOURCE_BYTES = 4 * 1024 * 1024
-SOURCE_VERSION = "0.8.0"
+SOURCE_VERSION = "0.9.0"
 DATASET = "assetbalance-all-empty/v1"
 _SUMMARY_MARKER = "■資産合計欄"
 _DETAIL_MARKER = "■ 保有商品詳細 (すべて）"  # noqa: RUF001 - exact observed marker

@@ -3,17 +3,19 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from decimal import Decimal
 
 
 @dataclass(frozen=True, slots=True)
-class ScreeningConfiguration:
-    source_profile: str
-    plugin: str
-    operation: str
-    settings: dict[str, str]
-    acquisition_limit: int
-    eligible_mics: tuple[str, ...]
-    fetch_limit: int
-    lookback_days: int
-    processing_limit: int
-    display_limit: int
+class MatrixConfiguration:
+    """Complete operational bounds for one market-matrix run."""
+
+    indices: tuple[str, ...]
+    history_days: int
+    batch_size: int
+    profile_workers: int
+    timeout_seconds: int
+    max_retries: int
+    retry_base_seconds: float
+    minimum_overall_price_coverage: Decimal
+    minimum_index_price_coverage: Decimal

@@ -52,12 +52,12 @@ def main() -> int:
         diagnostics = daily_source_diagnostics(arguments.config)
     except (LookupError, OSError, TypeError, ValueError) as error:
         print(f"[invalid] portfolio: {error}")
-        print("Next VS Code operation: 02 First Run: Import Portfolio CSV")
+        print("Next VS Code operation: 02 First Run: Import Rakuten Portfolio")
         return 2
     if not markets:
         print("[ready] portfolio and watchlist are empty")
-        print("Next: run 10 Discovery: Refresh JP Candidates (Network),")
-        print("20 Discovery: Refresh US Candidates (Network), or 30 Watchlist: Add Instrument")
+        print("Next: run 10 Market Matrix: Refresh All Indices (Network) for broad analysis,")
+        print("or run 30 Watchlist: Add Instrument to prepare daily analysis")
         return 0
     print(f"[ready] analysis markets: {', '.join(sorted(markets))}")
     runnable = runnable_markets(markets, diagnostics)

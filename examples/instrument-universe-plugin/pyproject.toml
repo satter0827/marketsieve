@@ -4,8 +4,8 @@ version = "0.1.0"
 description = "Minimal external instrument-universe plugin for MarketSieve."
 requires-python = ">=3.12,<3.15"
 dependencies = [
-    "marketsieve>=0.8,<0.9",
-    "marketsieve-extension-api>=0.8,<0.9",
+    "marketsieve>=0.9,<0.10",
+    "marketsieve-extension-api>=0.9,<0.10",
 ]
 
 [project.entry-points."marketsieve.sources.instrument_universe.importers"]

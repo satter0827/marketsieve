@@ -9,6 +9,7 @@ from marketsieve_extension_api import (
     DailyBarBundleImporter,
     DailyBarFetcher,
     EconomicSeriesFetcher,
+    EquityBatchFetcher,
     EventFetcher,
     FinancialFetcher,
     InstrumentUniverseFetcher,
@@ -23,6 +24,7 @@ EVENT_ENTRY_POINT_GROUP = "marketsieve.sources.events.fetchers"
 ECONOMIC_SERIES_ENTRY_POINT_GROUP = "marketsieve.sources.economic_series.fetchers"
 UNIVERSE_IMPORTER_ENTRY_POINT_GROUP = "marketsieve.sources.instrument_universe.importers"
 UNIVERSE_FETCHER_ENTRY_POINT_GROUP = "marketsieve.sources.instrument_universe.fetchers"
+EQUITY_BATCH_FETCHER_ENTRY_POINT_GROUP = "marketsieve.sources.equity_batches.fetchers"
 
 
 def source_entry_points() -> metadata.EntryPoints:
@@ -61,6 +63,10 @@ def universe_fetcher_entry_points() -> metadata.EntryPoints:
     return metadata.entry_points(group=UNIVERSE_FETCHER_ENTRY_POINT_GROUP)
 
 
+def equity_batch_fetcher_entry_points() -> metadata.EntryPoints:
+    return metadata.entry_points(group=EQUITY_BATCH_FETCHER_ENTRY_POINT_GROUP)
+
+
 @dataclass(frozen=True, slots=True)
 class InstalledSource:
     """Package metadata available without importing plugin code."""
@@ -84,6 +90,7 @@ class SourcePluginRegistry:
         economic_series = {entry.name for entry in economic_series_entry_points()}
         universe_importers = {entry.name for entry in universe_importer_entry_points()}
         universe_fetchers = {entry.name for entry in universe_fetcher_entry_points()}
+        equity_batches = {entry.name for entry in equity_batch_fetcher_entry_points()}
         return tuple(
             sorted(
                 (
@@ -100,6 +107,7 @@ class SourcePluginRegistry:
                                 ("events", events),
                                 ("economic_series", economic_series),
                                 ("instrument_universe", universe_importers | universe_fetchers),
+                                ("equity_batches", equity_batches),
                             )
                             if entry.name in names
                         ),
@@ -157,6 +165,12 @@ class SourcePluginRegistry:
         candidate = self._load_capability(name, universe_fetcher_entry_points())
         if not isinstance(candidate, InstrumentUniverseFetcher):
             raise TypeError(f"source plugin {name!r} does not implement universe fetch")
+        return candidate
+
+    def load_equity_batch_fetcher(self, name: str) -> EquityBatchFetcher:
+        candidate = self._load_capability(name, equity_batch_fetcher_entry_points())
+        if not isinstance(candidate, EquityBatchFetcher):
+            raise TypeError(f"source plugin {name!r} does not implement equity batch fetch")
         return candidate
 
     @staticmethod

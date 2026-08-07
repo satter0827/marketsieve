@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from marketsieve_cli.adapters.config import Configuration, ScreeningProfile
+from marketsieve_cli.adapters.config import Configuration
 
 
 def test_explicit_configuration_resolves_one_exact_profile(tmp_path: Path) -> None:
@@ -108,66 +108,70 @@ def test_weekly_routine_age_has_a_low_burden_default_and_bounds(tmp_path: Path) 
         Configuration(path).weekly_max_age_days()
 
 
-def test_screening_configuration_is_explicit_and_bounded(tmp_path: Path) -> None:
-    path = tmp_path / "screening.toml"
+def test_matrix_configuration_has_complete_zero_key_defaults(tmp_path: Path) -> None:
+    defaults = Configuration(None).matrix_configuration()
+
+    assert defaults.indices == ("dow30", "nasdaq100", "nikkei225", "sp500", "topix500")
+    assert defaults.history_days == 1095
+    assert defaults.batch_size == 50
+    assert defaults.profile_workers == 2
+    assert defaults.timeout_seconds == 30
+    assert defaults.max_retries == 3
+    assert defaults.retry_base_seconds == 2
+    assert str(defaults.minimum_overall_price_coverage) == "0.95"
+    assert str(defaults.minimum_index_price_coverage) == "0.90"
+
+    path = tmp_path / "matrix.toml"
     path.write_text(
-        "[source_profiles.offline-us]\n"
-        'currency = "USD"\n'
-        'timezone = "America/New_York"\n'
-        "[source_profiles.offline-us.instrument_universe]\n"
-        'plugin = "csv"\n'
-        'operation = "import"\n'
-        "[source_profiles.offline-us.instrument_universe.settings]\n"
-        'path = "universe.csv"\n'
-        "[screening.us]\n"
-        'source_profile = "offline-us"\n'
-        "acquisition_limit = 80\n"
-        "display_limit = 10\n",
+        "[matrix]\n"
+        'indices = ["sp500", "dow30"]\n'
+        "history_days = 400\n"
+        "batch_size = 1\n"
+        "profile_workers = 1\n"
+        "timeout_seconds = 1\n"
+        "max_retries = 1\n"
+        "retry_base_seconds = 0\n"
+        "minimum_overall_price_coverage = 0\n"
+        "minimum_index_price_coverage = 1\n",
         encoding="utf-8",
     )
-    configuration = Configuration(path)
-
-    profile = configuration.source_profile("offline-us")
-    assert profile.binding("instrument_universe").operation == "import"
-    assert configuration.screening_profile("us") == ScreeningProfile(
-        "offline-us", 80, ("XNAS", "XNYS"), 20, 100, 100, 10
-    )
-
-    path.write_text('[screening.us]\nsource_profile = "offline-us"\ndisplay_limit = 101\n')
-    with pytest.raises(ValueError, match="display_limit"):
-        Configuration(path).screening_profile("us")
-
-    path.write_text(
-        '[screening.us]\nsource_profile = "offline-us"\neligible_mics = ["XNAS", "XNAS"]\n'
-    )
-    with pytest.raises(ValueError, match="eligible_mics"):
-        Configuration(path).screening_profile("us")
+    configured = Configuration(path).matrix_configuration()
+    assert configured.indices == ("dow30", "sp500")
+    assert configured.minimum_overall_price_coverage == 0
+    assert configured.minimum_index_price_coverage == 1
 
 
-def test_screen_refresh_rejects_alpha_vantage_plan_range_mismatch_before_use(
-    tmp_path: Path,
+@pytest.mark.parametrize(
+    ("document", "message"),
+    (
+        ("matrix = 1\n", "must be a TOML table"),
+        ("[matrix]\nunknown = 1\n", "unsupported settings"),
+        ("[matrix]\nindices = []\n", "unique non-empty"),
+        ('[matrix]\nindices = ["unknown"]\n', "unique non-empty"),
+        ('[matrix]\nindices = ["sp500", "sp500"]\n', "unique non-empty"),
+        ("[matrix]\nhistory_days = true\n", "history_days must be an integer"),
+        ("[matrix]\nbatch_size = 0\n", "batch_size must be an integer"),
+        ("[matrix]\nprofile_workers = 9\n", "profile_workers must be an integer"),
+        ("[matrix]\ntimeout_seconds = 0\n", "timeout_seconds must be an integer"),
+        ("[matrix]\nmax_retries = 0\n", "max_retries must be an integer"),
+        ("[matrix]\nretry_base_seconds = false\n", "retry_base_seconds must be a number"),
+        ("[matrix]\nretry_base_seconds = 61\n", "retry_base_seconds must be a number"),
+        (
+            '[matrix]\nminimum_overall_price_coverage = "invalid"\n',
+            "must be a decimal ratio",
+        ),
+        ('[matrix]\nminimum_overall_price_coverage = "NaN"\n', "finite decimal ratio"),
+        ("[matrix]\nminimum_index_price_coverage = 1.1\n", "must be from 0 through 1"),
+    ),
+)
+def test_matrix_configuration_rejects_invalid_shapes(
+    tmp_path: Path, document: str, message: str
 ) -> None:
-    path = tmp_path / "alpha.toml"
-    path.write_text(
-        "[source_profiles.us]\n"
-        'currency = "USD"\n'
-        'timezone = "America/New_York"\n'
-        "[source_profiles.us.daily_bars]\n"
-        'plugin = "alphavantage"\n'
-        "[source_profiles.us.daily_bars.settings]\n"
-        'plan = "free"\n'
-        'outputsize = "compact"\n'
-        "[source_profiles.us.instrument_universe]\n"
-        'plugin = "sec"\n'
-        'operation = "fetch"\n'
-        "[screening.us]\n"
-        'source_profile = "us"\n'
-        "lookback_days = 101\n",
-        encoding="utf-8",
-    )
+    path = tmp_path / "invalid-matrix.toml"
+    path.write_text(document, encoding="utf-8")
 
-    with pytest.raises(ValueError, match="outputsize=full and plan=premium"):
-        Configuration(path).screening_refresh_configuration("us")
+    with pytest.raises(ValueError, match=message):
+        Configuration(path).matrix_configuration()
 
 
 def test_universe_source_requires_explicit_operation(tmp_path: Path) -> None:
