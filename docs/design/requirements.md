@@ -31,15 +31,15 @@ orders.
 - **MAT-10:** A ready matrix meets 95% overall and 90% per-index price coverage by default. Failure
   to meet a threshold remains visible and never triggers another provider.
 
-## Stored views and AI context
+## Stored views and portable context
 
-- **VIEW-01:** `matrix show`, `matrix row`, and `matrix compare` verify and read stored matrix data
+- **VIEW-01:** `matrix list`, `matrix show`, `matrix query`, `matrix row`, and `matrix compare` verify and read stored matrix data
   without network access or indicator recalculation.
-- **VIEW-02:** `analysis-context/v2` identifies one matrix and references its definitions, summary,
-  authoritative JSONL, failures, and coverage without copying security rows.
-- **VIEW-03:** Matrix analysis describes aggregate breadth, distributions, risk, liquidity,
-  valuation, profitability, growth, concentration, sectors, and missingness. It does not identify a
-  preferred security.
+- **VIEW-02:** One matrix object is self-contained and transferable. Its README explains only the
+  data contract and file roles; no agent prompt, reasoning sequence, question, or conclusion format
+  is embedded.
+- **VIEW-03:** `summary.md` is a neutral projection of aggregate evidence. External interpretation
+  is not written back to an immutable matrix object.
 
 ## Maintained non-matrix capabilities
 

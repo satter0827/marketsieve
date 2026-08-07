@@ -23,8 +23,7 @@ from marketsieve.matrix import (
     field_definitions,
 )
 from marketsieve.synthetic.daily import JP_INSTRUMENT, US_INSTRUMENT, fixture_bars
-from marketsieve_cli.adapters.analysis import AnalysisWorkspace, render_analysis
-from marketsieve_cli.adapters.matrices import MatrixStore, _row_document
+from marketsieve_cli.adapters.matrices import MatrixStore, _json_bytes, _row_document
 from marketsieve_cli.application.matrix import (
     MatrixService,
     _configuration_document,
@@ -34,7 +33,6 @@ from marketsieve_cli.application.matrix import (
     _provider_failure_fields,
     _summary,
 )
-from marketsieve_cli.bootstrap import create_analysis_workspace
 from marketsieve_cli.contracts import MatrixConfiguration
 from marketsieve_extension_api import (
     EquityAcquisitionFailure,
@@ -387,24 +385,6 @@ def test_summary_omits_distributions_without_observations() -> None:
     assert distributions["trailing_pe"]["count"] == 1
 
 
-def test_analysis_marks_omitted_distributions_as_unavailable(tmp_path: Path) -> None:
-    store = MatrixStore(tmp_path / "matrices")
-    row = build_matrix_row(replace(_security(count=0), bars=()), {})
-    summary = _summary((row,), _configuration(), datetime(2026, 8, 7, tzinfo=UTC))
-    manifest = {
-        "matrix_id": "a" * 64,
-        "created_at": "2026-08-07T00:00:00+00:00",
-        "row_count": 1,
-        "field_count": len(field_definitions()),
-        "universe_assets": {},
-    }
-
-    analysis = store._analysis_markdown(manifest, summary)
-
-    assert "- return_20d: 取得値なし" in analysis
-    assert "median=None" not in analysis
-
-
 def _stored_matrix(tmp_path: Path) -> tuple[MatrixStore, dict[str, object], tuple[MatrixRow, ...]]:
     first = build_matrix_row(_security(), {"sp500": _bars(US_INSTRUMENT)})
     jp_security = _security(
@@ -447,7 +427,9 @@ def _stored_matrix(tmp_path: Path) -> tuple[MatrixStore, dict[str, object], tupl
             "configuration": {},
             "row_count": 2,
             "field_count": len(field_definitions()),
-            "failure_count": sum(len(row.missing) for row in rows),
+            "failure_count": sum(
+                reason != "not_applicable" for row in rows for _, reason in row.missing
+            ),
             "coverage": summary["coverage"],
             "quality_status": summary["quality_status"],
         },
@@ -463,12 +445,13 @@ def _stored_matrix(tmp_path: Path) -> tuple[MatrixStore, dict[str, object], tupl
             }
             for row in rows
             for field, reason in row.missing
+            if reason != "not_applicable"
         ),
     )
     return store, document, rows
 
 
-def test_matrix_store_projects_jsonl_csv_html_analysis_and_offline_views(tmp_path: Path) -> None:
+def test_matrix_store_projects_self_contained_artifacts_and_offline_views(tmp_path: Path) -> None:
     store, document, rows = _stored_matrix(tmp_path)
     matrix_id = str(document["matrix_id"])
     path = tmp_path / "matrices" / "objects" / matrix_id
@@ -477,18 +460,20 @@ def test_matrix_store_projects_jsonl_csv_html_analysis_and_offline_views(tmp_pat
     schema_root = Path(__file__).parents[2] / "schemas"
     stored_manifest = json.loads((path / "manifest.json").read_text(encoding="utf-8"))
     stored_manifest_schema = json.loads(
-        (schema_root / "market-matrix-manifest/v1/schema.json").read_text(encoding="utf-8")
+        (schema_root / "market-matrix-manifest/v2/schema.json").read_text(encoding="utf-8")
     )
     Draft202012Validator(stored_manifest_schema, format_checker=FormatChecker()).validate(
         stored_manifest
     )
     projection_schema = json.loads(
-        (schema_root / "market-matrix/v1/schema.json").read_text(encoding="utf-8")
+        (schema_root / "market-matrix/v2/schema.json").read_text(encoding="utf-8")
     )
     Draft202012Validator(projection_schema, format_checker=FormatChecker()).validate(document)
     for incomplete in (
         {**document, "coverage": {}},
+        {**document, "coverage": {"nonsense": True}},
         {**document, "summary": {}},
+        {**document, "summary": {"nonsense": True}},
         {**document, "artifacts": {}},
     ):
         assert not Draft202012Validator(projection_schema, format_checker=FormatChecker()).is_valid(
@@ -513,13 +498,16 @@ def test_matrix_store_projects_jsonl_csv_html_analysis_and_offline_views(tmp_pat
         )
     html = (path / "overview.html").read_text(encoding="utf-8")
     assert "https://" not in html and "http://" not in html
-    assert "data-column" in html and 'id="index"' in html
+    assert "data-column" in html and 'id="index"' in html and 'id="market"' in html
     assert "free_cash_flow_yield" in html
-    analysis = (path / "analysis.md").read_text(encoding="utf-8")
-    assert "集中度・セクター構成" in analysis
-    assert "median_traded_value_20d (JPY)" in analysis
-    assert "median_traded_value_20d (USD)" in analysis
-    assert "売買推奨は行わず" in analysis
+    readme = (path / "README.md").read_text(encoding="utf-8")
+    summary_markdown = (path / "summary.md").read_text(encoding="utf-8")
+    missing_reasons = json.loads((path / "missing-reasons.json").read_text())
+    assert "securities.jsonl" in readme and "One row represents one security" in readme
+    assert "Price coverage" in summary_markdown
+    assert any(item["category"] == "expected" for item in missing_reasons)
+    assert all(item["path"] == name for name, item in stored_manifest["artifacts"].items())
+    assert not (path / "analysis.md").exists()
     assert not list(path.glob("*.xlsx"))
 
     first_id = f"{rows[0].security.instrument.mic}:{rows[0].security.instrument.symbol}"
@@ -554,6 +542,146 @@ def test_matrix_store_projects_jsonl_csv_html_analysis_and_offline_views(tmp_pat
         store.compare("latest", (first_id, second_id), ("close", "close"))
 
 
+def test_matrix_store_lists_history_and_queries_saved_rows(tmp_path: Path) -> None:
+    store, document, rows = _stored_matrix(tmp_path)
+    request = {
+        "schema": "market-matrix-request/v1",
+        "indices": ["nikkei225", "sp500", "topix500"],
+        "assets": {},
+        "start": "2023-08-09",
+        "end": "2026-08-08",
+        "adjustment": "adjusted",
+        "settings": {},
+        "source": {"name": "yfinance", "profile": "matrix-yfinance"},
+    }
+    fingerprint = _request_fingerprint(request)
+    run_id = store.begin_run(fingerprint, request, resume=None)
+    summary = _summary(
+        rows,
+        _configuration(("nikkei225", "sp500", "topix500")),
+        datetime(2026, 8, 8, tzinfo=UTC),
+    )
+    failures = tuple(
+        {
+            "instrument_id": f"{row.security.instrument.mic}:{row.security.instrument.symbol}",
+            "stage": "matrix",
+            "field": field,
+            "reason": reason,
+        }
+        for row in rows
+        for field, reason in row.missing
+        if reason != "not_applicable"
+    )
+    newer = store.put(
+        run_id=run_id,
+        manifest_body={
+            "created_at": "2026-08-08T00:00:00+00:00",
+            "request": {"fingerprint": fingerprint, **request},
+            "source": {
+                "name": "yfinance",
+                "version": "1.5.2",
+                "dataset": "fixture",
+                "response_hash": "d" * 64,
+            },
+            "input_snapshot_id": "d" * 64,
+            "universe_assets": {},
+            "configuration": {},
+            "row_count": len(rows),
+            "field_count": len(field_definitions()),
+            "failure_count": len(failures),
+            "coverage": summary["coverage"],
+            "quality_status": summary["quality_status"],
+        },
+        fields=field_definitions(),
+        rows=rows,
+        summary=summary,
+        failures=failures,
+    )
+
+    listing = store.list()
+    assert listing["schema"] == "market-matrix-list/v1"
+    assert [item["matrix_id"] for item in listing["matrices"]] == [
+        newer["matrix_id"],
+        document["matrix_id"],
+    ]
+
+    result = store.query(
+        str(document["matrix_id"]),
+        filters={"market": ("jp",), "index": ("nikkei225", "dow30")},
+        minimums={"close": Decimal("300")},
+        maximums={"close": Decimal("400")},
+        present=("trailing_pe",),
+        missing=("forward_pe",),
+        fields=("close", "trailing_pe", "forward_pe"),
+    )
+
+    assert result["schema"] == "matrix-query-result/v1"
+    assert result["matched_count"] == 1
+    assert [row["instrument_id"] for row in result["rows"]] == ["XTKS:7203"]
+    assert result["rows"][0]["missing"] == {"forward_pe": "field_absent"}
+
+    with pytest.raises(ValueError, match="numeric fields"):
+        store.query(
+            "latest",
+            filters={},
+            minimums={"name": Decimal("1")},
+            maximums={},
+            present=(),
+            missing=(),
+            fields=(),
+        )
+    with pytest.raises(ValueError, match="unknown matrix fields"):
+        store.query(
+            "latest",
+            filters={},
+            minimums={},
+            maximums={},
+            present=("unknown",),
+            missing=(),
+            fields=(),
+        )
+    with pytest.raises(ValueError, match="unknown matrix indices"):
+        store.query(
+            "latest",
+            filters={"index": ("bogus",)},
+            minimums={},
+            maximums={},
+            present=(),
+            missing=(),
+            fields=(),
+        )
+    with pytest.raises(ValueError, match="cannot be empty"):
+        store.query(
+            "latest",
+            filters={"sector": ()},
+            minimums={},
+            maximums={},
+            present=(),
+            missing=(),
+            fields=(),
+        )
+
+
+def test_matrix_store_lists_empty_history(tmp_path: Path) -> None:
+    assert MatrixStore(tmp_path / "matrices").list() == {
+        "schema": "market-matrix-list/v1",
+        "matrices": [],
+    }
+
+
+def test_matrix_store_list_ignores_legacy_objects(tmp_path: Path) -> None:
+    store, document, _ = _stored_matrix(tmp_path)
+    legacy = tmp_path / "matrices" / "objects" / ("f" * 64)
+    legacy.mkdir()
+    legacy.joinpath("manifest.json").write_bytes(
+        _json_bytes({"schema": "market-matrix-manifest/v1", "matrix_id": "f" * 64})
+    )
+
+    listing = store.list()
+
+    assert [item["matrix_id"] for item in listing["matrices"]] == [document["matrix_id"]]
+
+
 def test_matrix_store_keeps_published_object_when_run_cleanup_fails(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -586,6 +714,7 @@ def test_matrix_store_keeps_published_object_when_run_cleanup_fails(
         }
         for row in rows
         for field, reason in row.missing
+        if reason != "not_applicable"
     )
     original_rmtree = cast(Any, shutil.rmtree)
 
@@ -660,6 +789,7 @@ def test_matrix_store_preserves_run_when_latest_publication_fails(
         }
         for row in rows
         for field, reason in row.missing
+        if reason != "not_applicable"
     )
     original_replace = Path.replace
 
@@ -750,7 +880,14 @@ def test_matrix_store_does_not_expose_a_partially_initialized_run(
 
 @pytest.mark.parametrize(
     "artifact",
-    ("manifest.json", "fields.json", "index-summary.json", "securities.jsonl", "failures.jsonl"),
+    (
+        "manifest.json",
+        "fields.json",
+        "missing-reasons.json",
+        "index-summary.json",
+        "securities.jsonl",
+        "failures.jsonl",
+    ),
 )
 def test_matrix_store_rejects_noncanonical_evidence(tmp_path: Path, artifact: str) -> None:
     store, document, _ = _stored_matrix(tmp_path)
@@ -767,7 +904,8 @@ def test_matrix_store_rejects_noncanonical_evidence(tmp_path: Path, artifact: st
     (
         ("matrix.csv", "CSV projection"),
         ("overview.html", "HTML projection"),
-        ("analysis.md", "analysis projection"),
+        ("README.md", "README projection"),
+        ("summary.md", "summary projection"),
     ),
 )
 def test_matrix_store_rejects_tampered_projections(
@@ -785,110 +923,19 @@ def test_matrix_store_rejects_tampered_projections(
         store.row(matrix_id, f"{instrument.mic}:{instrument.symbol}")
 
 
-def test_analysis_context_v2_references_matrix_without_copying_rows(tmp_path: Path) -> None:
-    store, matrix, _ = _stored_matrix(tmp_path)
-    workspace = AnalysisWorkspace(tmp_path / "analysis", store)
-
-    document = workspace.build(str(matrix["matrix_id"]))
-    loaded, markdown = workspace.show()
-
-    assert loaded == document
-    assert document["schema"] == "analysis-context/v2"
-    assert document["matrix"]["matrix_id"] == matrix["matrix_id"]
-    assert "securities_jsonl_path" in document["matrix"]
-    assert "rows" not in document and "screening_reports" not in document
-    assert "Security rows" in markdown
-
-
-def test_analysis_context_v2_preserves_legacy_workspace(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    _, matrix, _ = _stored_matrix(tmp_path / ".marketsieve")
-    legacy_root = tmp_path / ".marketsieve" / "analysis"
-    legacy_context = b'{"schema":"analysis-context/v1"}\n'
-    legacy_markdown = b"# Legacy analysis\n"
-    legacy_root.mkdir()
-    legacy_root.joinpath("context.json").write_bytes(legacy_context)
-    legacy_root.joinpath("analysis.md").write_bytes(legacy_markdown)
-    monkeypatch.chdir(tmp_path)
-
-    document = create_analysis_workspace(str(matrix["matrix_id"]))
-
-    assert document["schema"] == "analysis-context/v2"
-    assert legacy_root.joinpath("context.json").read_bytes() == legacy_context
-    assert legacy_root.joinpath("analysis.md").read_bytes() == legacy_markdown
-    assert legacy_root.joinpath("v2/context.json").is_file()
-    assert legacy_root.joinpath("v2/analysis.md").is_file()
-
-
-def test_analysis_context_rejects_coherently_tampered_matrix_reference(tmp_path: Path) -> None:
-    store, matrix, _ = _stored_matrix(tmp_path)
-    workspace_root = tmp_path / "analysis"
-    workspace = AnalysisWorkspace(workspace_root, store)
-    document = workspace.build(str(matrix["matrix_id"]))
-    document["matrix"]["row_count"] += 1
-    document["matrix"]["coverage"]["overall"] = "0"
-    document["matrix"]["securities_jsonl_path"] = "../not-the-matrix.jsonl"
-    semantic = {key: value for key, value in document.items() if key != "context_id"}
-    document["context_id"] = hashlib.sha256(
-        json.dumps(semantic, ensure_ascii=False, separators=(",", ":"), sort_keys=True).encode()
-        + b"\n"
-    ).hexdigest()
-    workspace_root.joinpath("context.json").write_text(
-        json.dumps(document, ensure_ascii=False, separators=(",", ":"), sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
-    workspace_root.joinpath("analysis.md").write_text(render_analysis(document), encoding="utf-8")
-
-    with pytest.raises(ValueError, match="analysis matrix reference is invalid"):
-        workspace.show()
-
-
-@pytest.mark.parametrize("artifact", ("context.json", "analysis.md"))
-def test_analysis_context_rejects_symlinked_artifacts(tmp_path: Path, artifact: str) -> None:
-    store, matrix, _ = _stored_matrix(tmp_path)
-    workspace_root = tmp_path / "analysis"
-    workspace = AnalysisWorkspace(workspace_root, store)
-    workspace.build(str(matrix["matrix_id"]))
-    path = workspace_root / artifact
-    target = tmp_path / f"external-{artifact}"
-    path.replace(target)
-    path.symlink_to(target)
-
-    with pytest.raises(LookupError, match="analysis build"):
-        workspace.show()
-
-
-def test_analysis_context_rejects_symlinked_workspace_root(tmp_path: Path) -> None:
-    store, matrix, _ = _stored_matrix(tmp_path)
-    real_root = tmp_path / "external-analysis"
-    workspace = AnalysisWorkspace(real_root, store)
-    workspace.build(str(matrix["matrix_id"]))
-    linked_root = tmp_path / "analysis"
-    linked_root.symlink_to(real_root, target_is_directory=True)
-
-    with pytest.raises(ValueError, match="root must be a real directory"):
-        AnalysisWorkspace(linked_root, store).show()
-
-    external_state = tmp_path / "external-state"
-    external_root = external_state / "analysis"
-    external_workspace = AnalysisWorkspace(external_root, store)
-    external_workspace.build(str(matrix["matrix_id"]))
-    linked_state = tmp_path / ".marketsieve"
-    linked_state.symlink_to(external_state, target_is_directory=True)
-
-    with pytest.raises(ValueError, match="root must be a real directory"):
-        AnalysisWorkspace(linked_state / "analysis", store).show()
-
-
 def test_built_in_universe_deduplicates_overlapping_memberships() -> None:
-    securities, assets = _load_universe(("dow30", "nasdaq100", "sp500"))
+    securities, assets = _load_universe(("dow30", "nasdaq100", "sp500", "topix500"))
     identities = [(security.instrument.mic, security.instrument.symbol) for security in securities]
 
     assert len(identities) == len(set(identities))
-    assert set(assets) == {"dow30", "nasdaq100", "sp500"}
+    assert set(assets) == {"dow30", "nasdaq100", "sp500", "topix500"}
     assert all(len(asset["asset_hash"]) == 64 for asset in assets.values())
     assert any(len(security.memberships) > 1 for security in securities)
+    assert assets["topix500"]["benchmark_symbol"] == "1308.T"
+    assert assets["topix500"]["benchmark_kind"] == "etf_proxy"
+    topix_fields = {field.name: field for field in field_definitions() if "topix500" in field.name}
+    assert topix_fields
+    assert all("ETF proxy 1308.T" in field.definition for field in topix_fields.values())
 
 
 @dataclass
@@ -1215,6 +1262,16 @@ def test_matrix_store_rejects_symlinked_object_directory(tmp_path: Path) -> None
 
     with pytest.raises(LookupError, match="storage directory"):
         store.show(str(document["matrix_id"]))
+    with pytest.raises(LookupError, match="storage directory"):
+        store.query(
+            str(document["matrix_id"]),
+            filters={},
+            minimums={},
+            maximums={},
+            present=(),
+            missing=(),
+            fields=(),
+        )
 
 
 def test_matrix_store_rejects_an_invalid_latest_reference(tmp_path: Path) -> None:

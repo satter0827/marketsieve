@@ -15,7 +15,6 @@ SCHEMAS = ROOT / "schemas"
 def test_schemas_are_draft_2020_12_and_semantically_versioned() -> None:
     paths = sorted(SCHEMAS.glob("*/v*/schema.json"))
     assert {path.parent.parent.name for path in paths} == {
-        "analysis-context",
         "capabilities-result",
         "cli-error",
         "doctor-result",
@@ -32,6 +31,8 @@ def test_schemas_are_draft_2020_12_and_semantically_versioned() -> None:
         "market-matrix-manifest",
         "market-matrix-row",
         "market-matrix-security",
+        "market-matrix-list",
+        "matrix-query-result",
         "snapshot-result",
         "source-result",
         "watchlist-result",
@@ -124,3 +125,53 @@ def test_replacement_schemas_reject_empty_nested_contracts(
         Draft202012Validator(schema, format_checker=Draft202012Validator.FORMAT_CHECKER).validate(
             document
         )
+
+
+@pytest.mark.parametrize(("schema_name", "major"), (("market-matrix-row", 1),))
+def test_matrix_row_schemas_accept_corporate_action_mismatch(schema_name: str, major: int) -> None:
+    schema = json.loads(
+        (SCHEMAS / schema_name / f"v{major}" / "schema.json").read_text(encoding="utf-8")
+    )
+    document = {
+        "schema": "market-matrix-row/v1",
+        "matrix_id": "a" * 64,
+        "instrument_id": "XNAS:MSFT",
+        "instrument": {
+            "mic": "XNAS",
+            "symbol": "MSFT",
+            "currency": "USD",
+            "exchange_timezone": "America/New_York",
+            "instrument_type": "equity",
+        },
+        "provider_symbol": "MSFT",
+        "memberships": ["sp500"],
+        "retrieved_at": "2026-08-07T00:00:00+00:00",
+        "evidence_id": "b" * 64,
+        "values": {},
+        "missing": {"close": "corporate_action_mismatch"},
+    }
+
+    Draft202012Validator(schema, format_checker=Draft202012Validator.FORMAT_CHECKER).validate(
+        document
+    )
+
+
+def test_matrix_comparison_schema_accepts_corporate_action_mismatch() -> None:
+    schema = json.loads(
+        (SCHEMAS / "market-matrix-comparison/v1/schema.json").read_text(encoding="utf-8")
+    )
+    document = {
+        "schema": "market-matrix-comparison/v1",
+        "matrix_id": "a" * 64,
+        "fields": ["close"],
+        "rows": [
+            {
+                "instrument_id": "XNAS:MSFT",
+                "values": {},
+                "missing": {"close": "corporate_action_mismatch"},
+            },
+            {"instrument_id": "XTKS:7203", "values": {"close": "1"}, "missing": {}},
+        ],
+    }
+
+    Draft202012Validator(schema).validate(document)

@@ -18,11 +18,12 @@ BUNDLE ?= $(REVIEW_DIR)
 VERSION ?=
 COMMIT ?=
 RELEASE_DIR ?= $(STATE_DIR)/artifacts/release/$(COMMIT)
+CONFIGURATION_PYTHON ?= .venv/bin/python
 
 export UV_CACHE_DIR := $(abspath $(STATE_DIR))/cache/uv
 export PYTHONPYCACHEPREFIX := $(abspath $(STATE_DIR))/cache/python
 
-.PHONY: help setup-config portfolio-import portfolio-show daily-status market-matrix watchlist-add watchlist-remove watchlist-show daily-jp daily-us weekly analysis-build analysis-show analysis-demo doctor sync format format-check lint typecheck test secret-check check capabilities-json build evidence evidence-bundle evidence-validate review-attest governance-check release-build release-verify release-check clean-generated
+.PHONY: help setup-config portfolio-import portfolio-show daily-status market-matrix watchlist-add watchlist-remove watchlist-show daily-jp daily-us weekly doctor sync format format-check lint typecheck test secret-check check capabilities-json build evidence evidence-bundle evidence-validate review-attest governance-check release-build release-verify release-check
 
 help: ## Show daily-use commands first, followed by developer commands.
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z0-9_-]+:.*## / {printf "%-22s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -47,11 +48,13 @@ portfolio-import: ## First use: import PORTFOLIO=... with BROKER=canonical|rakut
 portfolio-show: ## Show the latest normalized portfolio (Offline).
 	uv run marketsieve portfolio show
 
-daily-status: doctor ## Check configuration, portfolio, reports, and installation (Offline).
+daily-status: ## Check configuration, portfolio, reports, and installation (Offline).
 	@if ! test -f "$(CONFIG)"; then \
-		echo "[missing] configuration. Next VS Code operation: 01 First Run: Create Configuration" >&2; \
+		echo "[invalid] configuration: file not found: $(CONFIG)"; \
 		exit 2; \
 	fi
+	@"$(CONFIGURATION_PYTHON)" -m scripts.configuration_check --syntax-only "$(CONFIG)" || { echo "Next: correct $(CONFIG)" >&2; exit 2; }
+	@uv run marketsieve doctor
 	@uv run python -m scripts.configuration_check "$(CONFIG)" || { echo "Next: correct $(CONFIG) or the credential environment variables" >&2; exit 2; }
 	@uv run marketsieve report list --output json
 	@uv run python -m scripts.portfolio_check "$(CONFIG)"
@@ -88,14 +91,6 @@ daily-us: ## Analyze US holdings and watchlist, then store a static report (Netw
 weekly: ## Build the static weekly brief from eligible JP and US reports (Offline).
 	@test -f "$(CONFIG)" || { echo "Missing $(CONFIG). Next VS Code operation: 01 First Run: Create Configuration" >&2; exit 2; }
 	uv run marketsieve --config "$(CONFIG)" weekly
-
-analysis-build: ## Build context.json and analysis.md for an external analysis tool (Offline).
-	uv run marketsieve analysis build
-
-analysis-show: ## Verify and show the current static analysis workspace (Offline).
-	uv run marketsieve analysis show
-
-analysis-demo: analysis-build analysis-show ## Build and verify the workspace from current local artifacts.
 
 doctor: ## Run offline installation diagnostics.
 	uv run marketsieve doctor
@@ -156,7 +151,3 @@ release-verify: ## Verify an existing VERSION and COMMIT release directory.
 	python3 -m scripts.release_gate verify --version "$(VERSION)" --commit "$(COMMIT)" --dist-dir "$(RELEASE_DIR)"
 
 release-check: release-build release-verify ## Build once and verify a release candidate locally.
-
-clean-generated: ## Remove only the repository-local generated-state directory.
-	@test "$(STATE_DIR)" = ".marketsieve" || { echo "STATE_DIR must be .marketsieve" >&2; exit 2; }
-	rm -rf -- .marketsieve

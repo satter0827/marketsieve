@@ -20,12 +20,18 @@ from marketsieve_source_yfinance import YFinanceSource
 from marketsieve_source_yfinance import source as source_module
 
 
-def _instrument(symbol: str = "MSFT") -> Instrument:
+def _instrument(
+    symbol: str = "MSFT",
+    *,
+    mic: str = "XNAS",
+    currency: str = "USD",
+    timezone: str = "America/New_York",
+) -> Instrument:
     return Instrument.create(
         symbol=symbol,
-        mic="XNAS",
-        currency="USD",
-        exchange_timezone="America/New_York",
+        mic=mic,
+        currency=currency,
+        exchange_timezone=timezone,
     )
 
 
@@ -882,6 +888,30 @@ def test_yfinance_source_rejects_history_behind_latest_market_session(
     )
 
 
+def test_yfinance_source_accepts_one_day_provider_publication_lag(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    instruments = (
+        EquityBatchInstrument(_instrument("AAA"), "AAA", ("sp500",)),
+        EquityBatchInstrument(_instrument("ZZZ"), "ZZZ", ("sp500",)),
+    )
+    frame = _history(("AAA", "ZZZ"))
+    frame.loc[pd.Timestamp("2026-08-05"), "AAA"] = float("nan")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(source_module.YFINANCE, "download", lambda symbols, **kwargs: frame)
+    monkeypatch.setattr(source_module.YFINANCE, "Ticker", _Ticker)
+    monkeypatch.setattr(source_module.YFINANCE, "set_tz_cache_location", lambda value: None)
+
+    imported = YFinanceSource().fetch(_request(*instruments))
+    observations = {
+        observation.requested.provider_symbol: observation for observation in imported.observations
+    }
+
+    assert observations["AAA"].bars[-1].trading_date == date(2026, 8, 4)
+    assert observations["ZZZ"].bars[-1].trading_date == date(2026, 8, 5)
+    assert not any(failure.reason == "stale_history" for failure in imported.failures)
+
+
 def test_yfinance_source_rejects_a_market_reference_far_before_request_end(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -1151,10 +1181,23 @@ def test_yfinance_source_preserves_profile_when_one_statement_fails(
     )
 
 
+@pytest.mark.parametrize(
+    ("instrument", "provider_symbol"),
+    (
+        (_instrument("GSPC"), "^GSPC"),
+        (
+            _instrument("1308", mic="XTKS", currency="JPY", timezone="Asia/Tokyo"),
+            "1308.T",
+        ),
+    ),
+)
 def test_yfinance_source_does_not_fetch_profiles_for_benchmarks(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    instrument: Instrument,
+    provider_symbol: str,
 ) -> None:
-    benchmark = EquityBatchInstrument(_instrument("GSPC"), "^GSPC", ("sp500",))
+    benchmark = EquityBatchInstrument(instrument, provider_symbol, ("sp500",), True)
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(
@@ -1171,6 +1214,116 @@ def test_yfinance_source_does_not_fetch_profiles_for_benchmarks(
 
     assert imported.observations[0].profile == ()
     assert imported.failures == ()
+
+
+@pytest.mark.parametrize(
+    ("close_after_split", "split"),
+    ((10.0, 10.0), (25.0, 4.0), (50.05, 2.0), (66.7, 1.5)),
+)
+def test_yfinance_source_rejects_adjusted_history_with_unadjusted_split_jump(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    close_after_split: float,
+    split: float,
+) -> None:
+    frame = _history(("MSFT",))
+    frame[("MSFT", "Close")] = [100.0, close_after_split, close_after_split * 1.05]
+    frame[("MSFT", "Stock Splits")] = [0.0, split, 0.0]
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(source_module.YFINANCE, "download", lambda symbols, **kwargs: frame)
+    monkeypatch.setattr(source_module.YFINANCE, "Ticker", _Ticker)
+    monkeypatch.setattr(source_module.YFINANCE, "set_tz_cache_location", lambda value: None)
+
+    imported = YFinanceSource().fetch(_request())
+
+    assert imported.observations[0].bars == ()
+    assert any(
+        failure.stage == "price" and failure.reason == "corporate_action_mismatch"
+        for failure in imported.failures
+    )
+
+
+def test_yfinance_source_keeps_large_split_day_market_return(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    frame = _history(("MSFT",))
+    frame[("MSFT", "Close")] = [100.0, 75.0, 76.0]
+    frame[("MSFT", "Open")] = [100.0, 75.0, 76.0]
+    frame[("MSFT", "High")] = [101.0, 76.0, 77.0]
+    frame[("MSFT", "Low")] = [99.0, 74.0, 75.0]
+    frame[("MSFT", "Stock Splits")] = [0.0, 1.5, 0.0]
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(source_module.YFINANCE, "download", lambda symbols, **kwargs: frame)
+    monkeypatch.setattr(source_module.YFINANCE, "Ticker", _Ticker)
+    monkeypatch.setattr(source_module.YFINANCE, "set_tz_cache_location", lambda value: None)
+
+    imported = YFinanceSource().fetch(_request())
+
+    assert len(imported.observations[0].bars) == 3
+    assert not any(failure.reason == "corporate_action_mismatch" for failure in imported.failures)
+
+
+def test_yfinance_source_skips_malformed_close_without_rejecting_history(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    frame = _history(("MSFT",))
+    frame[("MSFT", "Close")] = [100.0, "bad", 102.0]
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(source_module.YFINANCE, "download", lambda symbols, **kwargs: frame)
+    monkeypatch.setattr(source_module.YFINANCE, "Ticker", _Ticker)
+    monkeypatch.setattr(source_module.YFINANCE, "set_tz_cache_location", lambda value: None)
+
+    imported = YFinanceSource().fetch(_request())
+
+    assert len(imported.observations[0].bars) == 2
+    assert not any(failure.reason == "corporate_action_mismatch" for failure in imported.failures)
+
+
+def test_yfinance_source_skips_empty_batch_alignment_row(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    frame = _history(("MSFT",))
+    frame[("MSFT", "Stock Splits")] = [0.0, 0.0, 0.0]
+    for field in ("Open", "High", "Low", "Close", "Volume", "Stock Splits"):
+        frame.loc[frame.index[1], ("MSFT", field)] = float("nan")
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(source_module.YFINANCE, "download", lambda symbols, **kwargs: frame)
+    monkeypatch.setattr(source_module.YFINANCE, "Ticker", _Ticker)
+    monkeypatch.setattr(source_module.YFINANCE, "set_tz_cache_location", lambda value: None)
+
+    imported = YFinanceSource().fetch(_request())
+
+    assert len(imported.observations[0].bars) == 2
+    assert not any(failure.reason == "corporate_action_mismatch" for failure in imported.failures)
+
+
+def test_yfinance_source_rejects_split_jump_across_action_only_row(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    frame = _history(("MSFT",))
+    frame[("MSFT", "Close")] = [100.0, float("nan"), 10.0]
+    frame[("MSFT", "Open")] = [100.0, float("nan"), 10.0]
+    frame[("MSFT", "High")] = [101.0, float("nan"), 10.1]
+    frame[("MSFT", "Low")] = [99.0, float("nan"), 9.9]
+    frame[("MSFT", "Volume")] = [100.0, float("nan"), 1000.0]
+    frame[("MSFT", "Stock Splits")] = [0.0, 10.0, 0.0]
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(source_module.YFINANCE, "download", lambda symbols, **kwargs: frame)
+    monkeypatch.setattr(source_module.YFINANCE, "Ticker", _Ticker)
+    monkeypatch.setattr(source_module.YFINANCE, "set_tz_cache_location", lambda value: None)
+
+    imported = YFinanceSource().fetch(_request())
+
+    assert imported.observations[0].bars == ()
+    assert any(
+        failure.stage == "price" and failure.reason == "corporate_action_mismatch"
+        for failure in imported.failures
+    )
 
 
 @pytest.mark.live
@@ -1191,22 +1344,24 @@ def test_yfinance_live_smoke_jp_us_and_five_benchmarks(tmp_path: Path) -> None:
             ("nikkei225", "topix500"),
         ),
         EquityBatchInstrument(_instrument("MSFT"), "MSFT", ("nasdaq100", "sp500")),
-        EquityBatchInstrument(_instrument("DJI"), "^DJI", ("dow30",)),
-        EquityBatchInstrument(_instrument("GSPC"), "^GSPC", ("sp500",)),
-        EquityBatchInstrument(_instrument("NDX"), "^NDX", ("nasdaq100",)),
+        EquityBatchInstrument(_instrument("DJI"), "^DJI", ("dow30",), True),
+        EquityBatchInstrument(_instrument("GSPC"), "^GSPC", ("sp500",), True),
+        EquityBatchInstrument(_instrument("NDX"), "^NDX", ("nasdaq100",), True),
         EquityBatchInstrument(
             Instrument.create(
                 symbol="N225", mic="XTKS", currency="JPY", exchange_timezone="Asia/Tokyo"
             ),
             "^N225",
             ("nikkei225",),
+            True,
         ),
         EquityBatchInstrument(
             Instrument.create(
-                symbol="TOPX", mic="XTKS", currency="JPY", exchange_timezone="Asia/Tokyo"
+                symbol="1308", mic="XTKS", currency="JPY", exchange_timezone="Asia/Tokyo"
             ),
-            "^TOPX",
+            "1308.T",
             ("topix500",),
+            True,
         ),
     )
     request = EquityBatchRequest(
@@ -1230,13 +1385,13 @@ def test_yfinance_live_smoke_jp_us_and_five_benchmarks(tmp_path: Path) -> None:
         observation.requested.provider_symbol: observation for observation in imported.observations
     }
     bar_counts = {symbol: len(observation.bars) for symbol, observation in observations.items()}
-    assert all(
-        observations[symbol].bars for symbol in ("7203.T", "MSFT", "^DJI", "^GSPC", "^NDX", "^N225")
-    ), bar_counts
-    if not observations["^TOPX"].bars:
-        assert any(
-            failure.instrument.symbol == "TOPX"
-            and failure.stage == "price"
-            and failure.reason in {"history_empty", "symbol_not_found"}
+    required = ("7203.T", "MSFT", "^DJI", "^GSPC", "^NDX", "^N225", "1308.T")
+    missing_symbols = [symbol for symbol in required if not observations[symbol].bars]
+    assert not missing_symbols, {
+        "missing_symbols": missing_symbols,
+        "bar_counts": bar_counts,
+        "failures": [
+            (failure.instrument.symbol, failure.stage, failure.field, failure.reason)
             for failure in imported.failures
-        )
+        ],
+    }

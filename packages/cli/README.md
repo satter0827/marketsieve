@@ -7,7 +7,8 @@ marketsieve matrix refresh
 marketsieve matrix show latest
 marketsieve matrix row XTKS:7203
 marketsieve matrix compare XTKS:7203 XNAS:MSFT --fields return_252d
-marketsieve analysis build
+marketsieve matrix list
+marketsieve matrix query --market jp --present close --fields close
 ```
 
 The CLI owns configuration, explicit source selection, local persistence, static projections, and

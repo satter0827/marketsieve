@@ -3,23 +3,30 @@
 from __future__ import annotations
 
 import argparse
+import tomllib
 from pathlib import Path
-
-from marketsieve_cli.adapters.config import Configuration
-from marketsieve_cli.adapters.plugins import SourcePluginRegistry
-from marketsieve_extension_api import (
-    DailyBarSourceConfiguration,
-    SourceConfiguration,
-    SourceDiagnostic,
-)
+from typing import Any
 
 
-def daily_source_diagnostics(path: Path) -> dict[str, SourceDiagnostic]:
+def validate_toml_syntax(path: Path) -> None:
+    """Validate existence and TOML syntax without importing project packages."""
+
+    with path.open("rb") as stream:
+        document = tomllib.load(stream)
+    if not isinstance(document, dict):
+        raise ValueError("configuration root must be a TOML table")
+
+
+def daily_source_diagnostics(path: Path) -> dict[str, Any]:
     """Inspect each configured daily-bar provider without using the network."""
+
+    from marketsieve_cli.adapters.config import Configuration
+    from marketsieve_cli.adapters.plugins import SourcePluginRegistry
+    from marketsieve_extension_api import DailyBarSourceConfiguration
 
     configuration = Configuration(path)
     sources = SourcePluginRegistry()
-    diagnostics: dict[str, SourceDiagnostic] = {}
+    diagnostics: dict[str, Any] = {}
     expected_markets = {
         "jp": ("JPY", "Asia/Tokyo"),
         "us": ("USD", "America/New_York"),
@@ -39,6 +46,10 @@ def daily_source_diagnostics(path: Path) -> dict[str, SourceDiagnostic]:
 
 def validate_daily_configuration(path: Path) -> None:
     """Validate every configuration path used by the numbered workflow."""
+
+    from marketsieve_cli.adapters.config import Configuration
+    from marketsieve_cli.adapters.plugins import SourcePluginRegistry
+    from marketsieve_extension_api import SourceConfiguration
 
     configuration = Configuration(path)
     sources = SourcePluginRegistry()
@@ -71,11 +82,21 @@ def main() -> int:
     """Validate one configuration and print a concise readiness result."""
 
     parser = argparse.ArgumentParser()
+    parser.add_argument("--syntax-only", action="store_true")
     parser.add_argument("config", type=Path)
     arguments = parser.parse_args()
     try:
-        validate_daily_configuration(arguments.config)
-    except (LookupError, OSError, TypeError, ValueError) as error:
+        validate_toml_syntax(arguments.config)
+        if not arguments.syntax_only:
+            validate_daily_configuration(arguments.config)
+    except (
+        ImportError,
+        LookupError,
+        OSError,
+        TypeError,
+        ValueError,
+        tomllib.TOMLDecodeError,
+    ) as error:
         print(f"[invalid] configuration: {error}")
         return 2
     print(f"[ready] configuration: {arguments.config}")
