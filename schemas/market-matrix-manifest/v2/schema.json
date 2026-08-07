@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:marketsieve:schema:market-matrix-manifest:2.0.0",
+  "title": "MarketSieve self-contained market matrix manifest",
+  "type": "object",
+  "required": ["schema", "matrix_id", "created_at", "request", "source", "input_snapshot_id", "universe_assets", "configuration", "row_count", "field_count", "failure_count", "coverage", "quality_status", "artifacts"],
+  "properties": {
+    "schema": {"const": "market-matrix-manifest/v2"},
+    "matrix_id": {"$ref": "#/$defs/digest"},
+    "created_at": {"type": "string", "format": "date-time"},
+    "request": {"$ref": "#/$defs/request"},
+    "source": {"$ref": "#/$defs/source"},
+    "input_snapshot_id": {"$ref": "#/$defs/digest"},
+    "universe_assets": {"type": "object"},
+    "configuration": {"type": "object"},
+    "row_count": {"type": "integer", "minimum": 1},
+    "field_count": {"type": "integer", "minimum": 1},
+    "failure_count": {"type": "integer", "minimum": 0},
+    "coverage": {"$ref": "#/$defs/coverage"},
+    "quality_status": {"enum": ["ready", "partial"]},
+    "artifacts": {"$ref": "#/$defs/artifacts"}
+  },
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "indexName": {"enum": ["dow30", "nasdaq100", "nikkei225", "sp500", "topix500"]},
+    "request": {
+      "type": "object",
+      "required": ["fingerprint", "schema", "indices", "assets", "start", "end", "adjustment", "settings", "source"],
+      "properties": {
+        "fingerprint": {"$ref": "#/$defs/digest"},
+        "schema": {"const": "market-matrix-request/v1"},
+        "indices": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/indexName"}},
+        "assets": {"type": "object"},
+        "start": {"type": "string", "format": "date"},
+        "end": {"type": "string", "format": "date"},
+        "adjustment": {"const": "adjusted"},
+        "settings": {"type": "object"},
+        "source": {
+          "type": "object",
+          "required": ["name", "profile"],
+          "properties": {
+            "name": {"const": "yfinance"},
+            "profile": {"const": "matrix-yfinance"}
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "source": {
+      "type": "object",
+      "required": ["name", "version", "dataset", "response_hash"],
+      "properties": {
+        "name": {"const": "yfinance"},
+        "version": {"type": "string", "minLength": 1},
+        "dataset": {"type": "string", "minLength": 1},
+        "response_hash": {"$ref": "#/$defs/digest"}
+      },
+      "additionalProperties": false
+    },
+    "coverage": {
+      "type": "object",
+      "required": ["overall", "indices"],
+      "properties": {
+        "overall": {"type": "string", "minLength": 1},
+        "indices": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {"$ref": "#/$defs/indexName"},
+          "additionalProperties": {"type": "string", "minLength": 1}
+        }
+      },
+      "additionalProperties": false
+    },
+    "artifact": {
+      "type": "object",
+      "required": ["path", "role"],
+      "properties": {
+        "path": {"type": "string", "pattern": "^[^/]+$"},
+        "role": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    },
+    "artifacts": {
+      "type": "object",
+      "required": ["README.md", "manifest.json", "fields.json", "missing-reasons.json", "securities.jsonl", "index-summary.json", "failures.jsonl", "matrix.csv", "overview.html", "summary.md"],
+      "properties": {
+        "README.md": {"$ref": "#/$defs/artifact"},
+        "manifest.json": {"$ref": "#/$defs/artifact"},
+        "fields.json": {"$ref": "#/$defs/artifact"},
+        "missing-reasons.json": {"$ref": "#/$defs/artifact"},
+        "securities.jsonl": {"$ref": "#/$defs/artifact"},
+        "index-summary.json": {"$ref": "#/$defs/artifact"},
+        "failures.jsonl": {"$ref": "#/$defs/artifact"},
+        "matrix.csv": {"$ref": "#/$defs/artifact"},
+        "overview.html": {"$ref": "#/$defs/artifact"},
+        "summary.md": {"$ref": "#/$defs/artifact"}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

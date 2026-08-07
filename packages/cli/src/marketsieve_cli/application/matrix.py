@@ -64,10 +64,24 @@ class MatrixRepository(Protocol):
 
     def show(self, matrix_id: str) -> dict[str, Any]: ...
 
+    def list(self) -> dict[str, Any]: ...
+
     def row(self, matrix_id: str, instrument_id: str) -> dict[str, Any]: ...
 
     def compare(
         self, matrix_id: str, instrument_ids: tuple[str, ...], fields: tuple[str, ...]
+    ) -> dict[str, Any]: ...
+
+    def query(
+        self,
+        matrix_id: str,
+        *,
+        filters: dict[str, tuple[str, ...]],
+        minimums: dict[str, Decimal],
+        maximums: dict[str, Decimal],
+        present: tuple[str, ...],
+        missing: tuple[str, ...],
+        fields: tuple[str, ...],
     ) -> dict[str, Any]: ...
 
 
@@ -250,6 +264,9 @@ class MatrixService:
     def show(self, matrix_id: str) -> dict[str, Any]:
         return self._store.show(matrix_id)
 
+    def list(self) -> dict[str, Any]:
+        return self._store.list()
+
     def row(self, matrix_id: str, instrument_id: str) -> dict[str, Any]:
         return self._store.row(matrix_id, instrument_id)
 
@@ -262,6 +279,27 @@ class MatrixService:
             raise ValueError("matrix compare instruments must be unique")
         return self._store.compare(matrix_id, instrument_ids, fields)
 
+    def query(
+        self,
+        matrix_id: str,
+        *,
+        filters: dict[str, tuple[str, ...]],
+        minimums: dict[str, Decimal],
+        maximums: dict[str, Decimal],
+        present: tuple[str, ...],
+        missing: tuple[str, ...],
+        fields: tuple[str, ...],
+    ) -> dict[str, Any]:
+        return self._store.query(
+            matrix_id,
+            filters=filters,
+            minimums=minimums,
+            maximums=maximums,
+            present=present,
+            missing=missing,
+            fields=fields,
+        )
+
 
 def _json_bytes(value: object) -> bytes:
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"), sort_keys=True).encode()
@@ -273,6 +311,7 @@ _FAILURE_REASON_PRIORITY = {
     "history_empty": 2,
     "stale_history": 3,
     "symbol_not_found": 3,
+    "corporate_action_mismatch": 4,
     "provider_error": 4,
     "network_error": 5,
     "rate_limited": 6,
@@ -445,6 +484,8 @@ def _load_universe(
     document = json.loads(path.read_text(encoding="utf-8"))
     if document.get("schema") != "index-universe/v1":
         raise ValueError("unsupported built-in index universe")
+    if not isinstance(document.get("asset_version"), str) or not document["asset_version"]:
+        raise ValueError("built-in index universe has no asset version")
     indices = document["indices"]
     grouped: dict[tuple[str, str], dict[str, Any]] = {}
     assets: dict[str, Any] = {}
@@ -458,12 +499,15 @@ def _load_universe(
             for key in (
                 "name",
                 "benchmark_symbol",
+                "benchmark_kind",
+                "benchmark_name",
                 "as_of",
                 "source_url",
                 "source_hash",
                 "constituent_count",
             )
         }
+        assets[index]["asset_version"] = document["asset_version"]
         assets[index]["asset_hash"] = hashlib.sha256(_json_bytes(value)).hexdigest()
         for member in members:
             identity = (str(member["mic"]), str(member["symbol"]))
@@ -499,7 +543,7 @@ def _benchmark_seeds(indices: tuple[str, ...]) -> tuple[EquityBatchInstrument, .
         "nasdaq100": ("NDX", "XNAS", "USD", "America/New_York"),
         "nikkei225": ("N225", "XTKS", "JPY", "Asia/Tokyo"),
         "sp500": ("GSPC", "XNYS", "USD", "America/New_York"),
-        "topix500": ("TOPX", "XTKS", "JPY", "Asia/Tokyo"),
+        "topix500": ("1308", "XTKS", "JPY", "Asia/Tokyo"),
     }
     return tuple(
         EquityBatchInstrument(
@@ -511,6 +555,7 @@ def _benchmark_seeds(indices: tuple[str, ...]) -> tuple[EquityBatchInstrument, .
             ),
             INDEX_BENCHMARKS[index],
             (index,),
+            True,
         )
         for index in indices
     )
@@ -789,6 +834,7 @@ def _failures(
         output.extend(
             {"instrument_id": instrument_id, "stage": "matrix", "field": field, "reason": reason}
             for field, reason in row.missing
+            if reason != "not_applicable"
         )
     return tuple(
         sorted(

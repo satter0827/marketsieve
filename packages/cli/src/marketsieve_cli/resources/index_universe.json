@@ -1,8 +1,10 @@
 {
-  "asset_version": "2026-08-07",
+  "asset_version": "2026-08-08",
   "indices": {
     "dow30": {
       "as_of": "2026-07-01",
+      "benchmark_kind": "index",
+      "benchmark_name": "Dow Jones Industrial Average",
       "benchmark_symbol": "^DJI",
       "constituent_count": 30,
       "members": [
@@ -193,6 +195,8 @@
     },
     "nasdaq100": {
       "as_of": "2026-07-01",
+      "benchmark_kind": "index",
+      "benchmark_name": "Nasdaq-100 Index",
       "benchmark_symbol": "^NDX",
       "constituent_count": 101,
       "members": [
@@ -809,6 +813,8 @@
     },
     "nikkei225": {
       "as_of": "2026-08-05",
+      "benchmark_kind": "index",
+      "benchmark_name": "Nikkei 225",
       "benchmark_symbol": "^N225",
       "constituent_count": 225,
       "members": [
@@ -2169,6 +2175,8 @@
     },
     "sp500": {
       "as_of": "2026-07-01",
+      "benchmark_kind": "index",
+      "benchmark_name": "S&P 500 Index",
       "benchmark_symbol": "^GSPC",
       "constituent_count": 503,
       "members": [
@@ -5197,7 +5205,9 @@
     },
     "topix500": {
       "as_of": "2025-10-31",
-      "benchmark_symbol": "^TOPX",
+      "benchmark_kind": "etf_proxy",
+      "benchmark_name": "Listed Index Fund TOPIX",
+      "benchmark_symbol": "1308.T",
       "constituent_count": 501,
       "members": [
         {

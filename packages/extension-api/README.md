@@ -10,7 +10,7 @@ exclude filings and facts that were not yet public or available.
 The equity-batch capability preserves every requested security, adjusted price observations,
 profile and financial values, and normalized partial failures for broad matrix acquisition.
 
-External packages should depend on `marketsieve-extension-api>=0.9,<0.10` and the matching SDK minor
+External packages should depend on `marketsieve-extension-api>=0.10,<0.11` and the matching SDK minor
 series. The public `verify_instrument_universe_importer` function executes the universe-import
 contract against a caller-supplied fixture. The repository's
 `examples/instrument-universe-plugin` project shows an independently buildable entry point.

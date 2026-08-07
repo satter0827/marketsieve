@@ -185,8 +185,6 @@ def test_capabilities_match_click_commands_and_validate_schema() -> None:
     validate("capabilities-result", document, major=3)
     command_names = [item["name"] for item in document["commands"]]
     assert command_names == [
-        "analysis build",
-        "analysis show",
         "capabilities",
         "daily",
         "doctor",
@@ -194,6 +192,8 @@ def test_capabilities_match_click_commands_and_validate_schema() -> None:
         "experiment run",
         "experiment show",
         "matrix compare",
+        "matrix list",
+        "matrix query",
         "matrix refresh",
         "matrix row",
         "matrix show",
@@ -230,7 +230,7 @@ def test_capabilities_match_click_commands_and_validate_schema() -> None:
 def test_matrix_commands_project_versioned_documents(monkeypatch: pytest.MonkeyPatch) -> None:
     matrix_id = "a" * 64
     matrix_document: dict[str, object] = {
-        "schema": "market-matrix/v1",
+        "schema": "market-matrix/v2",
         "matrix_id": matrix_id,
         "input_snapshot_id": "d" * 64,
         "created_at": "2026-08-07T00:00:00+00:00",
@@ -245,7 +245,12 @@ def test_matrix_commands_project_versioned_documents(monkeypatch: pytest.MonkeyP
             "settings": {},
             "source": {"name": "yfinance", "profile": "matrix-yfinance"},
         },
-        "source": {},
+        "source": {
+            "name": "yfinance",
+            "version": "1.5.2",
+            "dataset": "fixture",
+            "response_hash": "e" * 64,
+        },
         "universe_assets": {},
         "configuration": {},
         "row_count": 2,
@@ -287,14 +292,16 @@ def test_matrix_commands_project_versioned_documents(monkeypatch: pytest.MonkeyP
         "artifacts": {
             name: f"/fixture/{name}"
             for name in (
+                "README.md",
                 "manifest.json",
                 "fields.json",
+                "missing-reasons.json",
                 "securities.jsonl",
                 "index-summary.json",
                 "failures.jsonl",
                 "matrix.csv",
                 "overview.html",
-                "analysis.md",
+                "summary.md",
             )
         },
     }
@@ -323,6 +330,43 @@ def test_matrix_commands_project_versioned_documents(monkeypatch: pytest.MonkeyP
         "rows": [
             {"instrument_id": "XNAS:MSFT", "values": {"close": "100"}, "missing": {}},
             {"instrument_id": "XTKS:7203", "values": {"close": "200"}, "missing": {}},
+        ],
+    }
+    list_document: dict[str, object] = {
+        "schema": "market-matrix-list/v1",
+        "matrices": [
+            {
+                "matrix_id": matrix_id,
+                "created_at": "2026-08-07T00:00:00+00:00",
+                "row_count": 2,
+                "field_count": 2,
+                "coverage": {"overall": "1", "indices": {"sp500": "1"}},
+                "quality_status": "ready",
+            }
+        ],
+    }
+    query_document: dict[str, object] = {
+        "schema": "matrix-query-result/v1",
+        "matrix_id": matrix_id,
+        "matched_count": 1,
+        "fields": ["close"],
+        "filters": {
+            "classifications": {"market": ["us"]},
+            "minimums": {"close": "90"},
+            "maximums": {},
+            "present": [],
+            "missing": [],
+        },
+        "rows": [
+            {
+                "instrument_id": "XNAS:MSFT",
+                "instrument": row_document["instrument"],
+                "provider_symbol": "MSFT",
+                "memberships": ["sp500"],
+                "retrieved_at": "2026-08-07T00:00:00+00:00",
+                "values": {"close": "100"},
+                "missing": {},
+            }
         ],
     }
     cli_module = importlib.import_module("marketsieve_cli.interfaces.cli.main")
@@ -360,10 +404,42 @@ def test_matrix_commands_project_versioned_documents(monkeypatch: pytest.MonkeyP
             else {}
         ),
     )
+    monkeypatch.setattr(cli_module, "list_market_matrices", lambda config: list_document)
+    monkeypatch.setattr(
+        cli_module,
+        "query_market_matrix",
+        lambda config, selected, **kwargs: (
+            query_document
+            if config is None
+            and selected == matrix_id
+            and kwargs["filters"] == {"market": ("us",)}
+            and kwargs["minimums"] == {"close": Decimal("90")}
+            and kwargs["fields"] == ("close",)
+            else {}
+        ),
+    )
     runner = CliRunner()
     results = (
         runner.invoke(main, ["matrix", "refresh", "--resume", "fixture-run", "--output", "json"]),
         runner.invoke(main, ["matrix", "show", matrix_id, "--output", "json"]),
+        runner.invoke(main, ["matrix", "list", "--output", "json"]),
+        runner.invoke(
+            main,
+            [
+                "matrix",
+                "query",
+                "--matrix",
+                matrix_id,
+                "--market",
+                "us",
+                "--min",
+                "close=90",
+                "--fields",
+                "close",
+                "--output",
+                "json",
+            ],
+        ),
         runner.invoke(
             main,
             ["matrix", "row", "XNAS:MSFT", "--matrix", matrix_id, "--output", "json"],
@@ -387,10 +463,12 @@ def test_matrix_commands_project_versioned_documents(monkeypatch: pytest.MonkeyP
 
     assert all(result.exit_code == 0 for result in results)
     documents = [json.loads(result.stdout) for result in results]
-    validate("market-matrix", documents[0])
-    validate("market-matrix", documents[1])
-    validate("market-matrix-row", documents[2])
-    validate("market-matrix-comparison", documents[3])
+    validate("market-matrix", documents[0], major=2)
+    validate("market-matrix", documents[1], major=2)
+    validate("market-matrix-list", documents[2])
+    validate("matrix-query-result", documents[3])
+    validate("market-matrix-row", documents[4])
+    validate("market-matrix-comparison", documents[5])
 
 
 @pytest.mark.parametrize(
@@ -398,6 +476,8 @@ def test_matrix_commands_project_versioned_documents(monkeypatch: pytest.MonkeyP
     (
         ("refresh_market_matrix", ("matrix", "refresh"), "matrix_refresh_failed"),
         ("show_market_matrix", ("matrix", "show"), "matrix_show_failed"),
+        ("list_market_matrices", ("matrix", "list"), "matrix_list_failed"),
+        ("query_market_matrix", ("matrix", "query"), "matrix_query_failed"),
         ("read_market_matrix_row", ("matrix", "row", "XNAS:MSFT"), "matrix_row_failed"),
         (
             "compare_market_matrix_rows",
@@ -422,44 +502,6 @@ def test_matrix_commands_normalize_failures(
 
     assert result.exit_code == 1
     assert json.loads(result.stderr)["error"] == error_code
-
-
-def test_analysis_commands_project_matrix_context(monkeypatch: pytest.MonkeyPatch) -> None:
-    context: dict[str, object] = {
-        "context_id": "a" * 64,
-        "schema": "analysis-context/v2",
-        "as_of": "2026-08-07T00:00:00+00:00",
-        "matrix": {
-            "matrix_id": "b" * 64,
-            "created_at": "2026-08-07T00:00:00+00:00",
-            "row_count": 2,
-            "field_count": 100,
-            "quality_status": "ready",
-            "coverage": {"overall": "1", "indices": {"sp500": "1"}},
-            "manifest_path": "../matrices/manifest.json",
-            "fields_path": "../matrices/fields.json",
-            "index_summary_path": "../matrices/index-summary.json",
-            "securities_jsonl_path": "../matrices/securities.jsonl",
-            "failures_jsonl_path": "../matrices/failures.jsonl",
-        },
-        "constraints": ["Do not rank securities."],
-    }
-    cli_module = importlib.import_module("marketsieve_cli.interfaces.cli.main")
-    monkeypatch.setattr(
-        cli_module,
-        "create_analysis_workspace",
-        lambda matrix_id: context if matrix_id == "b" * 64 else {},
-    )
-    monkeypatch.setattr(cli_module, "read_analysis_workspace", lambda: (context, "# Analysis\n"))
-    runner = CliRunner()
-    built = runner.invoke(main, ["analysis", "build", "--matrix", "b" * 64, "--output", "json"])
-    shown = runner.invoke(main, ["analysis", "show", "--output", "json"])
-    markdown = runner.invoke(main, ["analysis", "show", "--output", "text"])
-
-    assert built.exit_code == shown.exit_code == markdown.exit_code == 0
-    validate("analysis-context", json.loads(built.stdout), major=2)
-    validate("analysis-context", json.loads(shown.stdout), major=2)
-    assert markdown.stdout == "# Analysis\n"
 
 
 def test_experiment_commands_project_service_documents(
@@ -644,7 +686,7 @@ def test_rakuten_empty_portfolio_import_is_offline_and_private() -> None:
         assert "watch_items" not in document
         assert document["source"] == "rakuten_assetbalance_empty"
         assert document["source_name"] == "rakuten"
-        assert document["source_version"] == "0.9.0"
+        assert document["source_version"] == "0.10.0"
         assert document["dataset"] == "assetbalance-all-empty/v1"
         assert document["diagnostics"] == ["empty_portfolio"]
         assert not any(

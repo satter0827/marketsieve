@@ -108,6 +108,8 @@ def test_equity_batch_contract_rejects_invalid_boundary_values() -> None:
         replace(item, provider_symbol="")
     with pytest.raises(ValueError, match="non-empty"):
         replace(item, memberships=())
+    with pytest.raises(TypeError, match="benchmark marker"):
+        replace(item, is_benchmark=cast(Any, 1))
     with pytest.raises(ValueError, match="source profile"):
         replace(request, source_profile="")
     with pytest.raises(ValueError, match="requires instruments"):

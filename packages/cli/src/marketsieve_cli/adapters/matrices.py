@@ -11,10 +11,52 @@ import shutil
 import tempfile
 from collections.abc import Iterable
 from contextlib import suppress
+from datetime import datetime
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
-from marketsieve.matrix import MatrixField, MatrixRow
+from marketsieve.matrix import INDEX_BENCHMARKS, MatrixField, MatrixRow
+
+ARTIFACT_ROLES = {
+    "README.md": "Self-contained description of the dataset and files.",
+    "manifest.json": "Acquisition, universe, benchmark, quality, and identity metadata.",
+    "fields.json": "Definitions, types, units, periods, and formulas for every matrix field.",
+    "missing-reasons.json": "Stable missing-value reason definitions and categories.",
+    "securities.jsonl": "Authoritative one-security-per-line matrix.",
+    "index-summary.json": "Deterministic aggregate statistics for all securities and indices.",
+    "failures.jsonl": "Observed source, history, and calculation failures.",
+    "matrix.csv": "Tabular projection of securities.jsonl.",
+    "overview.html": "Self-contained interactive browser projection.",
+    "summary.md": "Compact human-readable projection of index-summary.json.",
+}
+
+MISSING_REASONS = {
+    "benchmark_unavailable": ("source", "The configured benchmark has no usable history."),
+    "corporate_action_mismatch": (
+        "source",
+        "Adjusted prices are inconsistent with a reported stock split.",
+    ),
+    "currency_mismatch": ("calculation", "Required values use incompatible currencies."),
+    "field_absent": ("source", "The provider did not supply the field."),
+    "financials_unavailable": ("source", "Financial statements are unavailable."),
+    "history_empty": ("history", "No price observations were returned."),
+    "insufficient_history": ("history", "Too few observations exist for the calculation."),
+    "network_error": ("source", "The provider request failed at the network boundary."),
+    "not_applicable": ("expected", "The field does not apply to this security."),
+    "provider_error": ("source", "The provider returned an unclassified failure."),
+    "rate_limited": ("source", "The provider rate-limited the request."),
+    "stale_history": ("history", "The latest observation is older than the market reference."),
+    "symbol_not_found": ("source", "The provider symbol was not found."),
+    "zero_denominator": ("calculation", "The calculation denominator is zero."),
+}
+
+
+def _missing_reason_documents() -> list[dict[str, str]]:
+    return [
+        {"code": code, "category": category, "definition": definition}
+        for code, (category, definition) in sorted(MISSING_REASONS.items())
+    ]
 
 
 def _json_bytes(value: object) -> bytes:
@@ -174,16 +216,38 @@ class MatrixStore:
             raise ValueError("matrix manifest request does not match the persisted run")
         row_documents = tuple(_row_document(row) for row in rows)
         field_documents = tuple(_field_document(field) for field in fields)
+        missing_reason_documents = _missing_reason_documents()
+        unknown_reasons = {
+            reason
+            for row in row_documents
+            for reason in row["missing"].values()
+            if reason not in MISSING_REASONS
+        }
+        if unknown_reasons:
+            raise ValueError(
+                f"matrix rows contain unknown missing reasons: {sorted(unknown_reasons)}"
+            )
+        if any(failure.get("reason") == "not_applicable" for failure in failures):
+            raise ValueError("not_applicable must not be recorded as a matrix failure")
+        if manifest_body.get("failure_count") != len(failures):
+            raise ValueError("matrix failure count does not match failures.jsonl")
+        manifest_body = {
+            **manifest_body,
+            "artifacts": {
+                name: {"path": name, "role": role} for name, role in ARTIFACT_ROLES.items()
+            },
+        }
         semantic = {
             **manifest_body,
             "field_definitions": field_documents,
+            "missing_reasons": missing_reason_documents,
             "row_hashes": [hashlib.sha256(_json_bytes(row)).hexdigest() for row in row_documents],
             "summary": summary,
             "failures": failures,
         }
         matrix_id = hashlib.sha256(_json_bytes(semantic)).hexdigest()
         manifest = {
-            "schema": "market-matrix-manifest/v1",
+            "schema": "market-matrix-manifest/v2",
             "matrix_id": matrix_id,
             **manifest_body,
         }
@@ -197,6 +261,9 @@ class MatrixStore:
             try:
                 (pending / "manifest.json").write_bytes(_json_bytes(manifest))
                 (pending / "fields.json").write_bytes(_json_bytes(list(field_documents)))
+                (pending / "missing-reasons.json").write_bytes(
+                    _json_bytes(missing_reason_documents)
+                )
                 self._write_jsonl(pending / "securities.jsonl", row_documents)
                 (pending / "index-summary.json").write_bytes(_json_bytes(summary))
                 self._write_jsonl(pending / "failures.jsonl", failures)
@@ -204,8 +271,11 @@ class MatrixStore:
                 self._write_html(
                     pending / "overview.html", manifest, summary, fields, row_documents
                 )
-                (pending / "analysis.md").write_text(
-                    self._analysis_markdown(manifest, summary), encoding="utf-8"
+                (pending / "README.md").write_text(
+                    self._readme_markdown(manifest), encoding="utf-8"
+                )
+                (pending / "summary.md").write_text(
+                    self._summary_markdown(manifest, summary), encoding="utf-8"
                 )
                 pending.rename(destination)
             except BaseException:
@@ -301,8 +371,21 @@ class MatrixStore:
             cells = "".join(
                 f"<td>{html.escape(str(record.get(name, '')))}</td>" for name in columns
             )
-            row_memberships = html.escape(",".join(row["memberships"]))
-            table_rows.append(f'<tr data-memberships="{row_memberships}">{cells}</tr>')
+            attributes = {
+                "market": "jp" if row["instrument"]["mic"] == "XTKS" else "us",
+                "memberships": ",".join(row["memberships"]),
+                "mic": row["instrument"]["mic"],
+                "exchange": values.get("exchange", ""),
+                "country": values.get("country", ""),
+                "currency": values.get("currency", row["instrument"]["currency"]),
+                "sector": values.get("sector", ""),
+                "industry": values.get("industry", ""),
+            }
+            rendered_attributes = " ".join(
+                f'data-{name}="{html.escape(str(value), quote=True)}"'
+                for name, value in attributes.items()
+            )
+            table_rows.append(f"<tr {rendered_attributes}>{cells}</tr>")
         field_groups: dict[str, int] = {}
         for field in fields:
             field_groups[field.group] = field_groups.get(field.group, 0) + 1
@@ -324,6 +407,34 @@ class MatrixStore:
             f'<option value="{html.escape(value)}">{html.escape(value)}</option>'
             for value in index_memberships
         )
+        filter_names = ("market", "mic", "exchange", "country", "currency", "sector", "industry")
+        filter_options: dict[str, tuple[str, ...]] = {}
+        for name in filter_names:
+            values = set()
+            for row in rows:
+                row_values = row["values"]
+                if name == "market":
+                    value = "jp" if row["instrument"]["mic"] == "XTKS" else "us"
+                elif name == "mic":
+                    value = row["instrument"]["mic"]
+                elif name == "currency":
+                    value = row_values.get(name, row["instrument"]["currency"])
+                else:
+                    value = row_values.get(name)
+                if value:
+                    values.add(str(value))
+            filter_options[name] = tuple(sorted(values))
+
+        def select(name: str, label: str) -> str:
+            options = "".join(
+                f'<option value="{html.escape(value, quote=True)}">{html.escape(value)}</option>'
+                for value in filter_options[name]
+            )
+            return (
+                f'<label>{label} <select id="{name}"><option value="">すべて</option>'
+                f"{options}</select></label>"
+            )
+
         style = (
             "body{font:14px system-ui;margin:2rem;color:CanvasText;background:Canvas}"
             "h1{margin-bottom:.25rem}.meta{color:GrayText}"
@@ -340,11 +451,15 @@ class MatrixStore:
         )
         script = (
             "const q=document.querySelector('#filter'),idx=document.querySelector('#index');"
+            "const filters=['market','mic','exchange','country','currency','sector','industry']"
+            ".map(id=>document.querySelector('#'+id));"
             "const rows=[...document.querySelectorAll('#matrix tbody tr')];"
             "const apply=()=>{const value=q.value.toLowerCase(),index=idx.value;"
             "for(const row of rows){row.hidden=!row.textContent.toLowerCase().includes(value)"
-            "||(index&&!row.dataset.memberships.split(',').includes(index))}};"
+            "||(index&&!row.dataset.memberships.split(',').includes(index))"
+            "||filters.some(item=>item.value&&row.dataset[item.id]!==item.value)}};"
             "q.addEventListener('input',apply);idx.addEventListener('change',apply);"
+            "for(const item of filters)item.addEventListener('change',apply);"
             "for(const button of document.querySelectorAll('th button')){"
             "button.addEventListener('click',()=>{const column=Number(button.dataset.column);"
             "const direction=button.dataset.direction==='asc'?'desc':'asc';"
@@ -372,6 +487,10 @@ class MatrixStore:
             'placeholder="銘柄、指数、名称"></label>'
             f'<label>指数 <select id="index"><option value="">すべて</option>{index_options}'
             "</select></label>"
+            f"{select('market', '市場')}{select('mic', 'MIC')}"
+            f"{select('exchange', '取引所')}{select('country', '国')}"
+            f"{select('currency', '通貨')}{select('sector', 'セクター')}"
+            f"{select('industry', '業種')}"
             f'<div class="wrap"><table id="matrix"><thead><tr>{headers}</tr>'
             f"</thead><tbody>{body}</tbody></table></div>"
             f"<script>{script}</script></body></html>"
@@ -379,117 +498,71 @@ class MatrixStore:
         path.write_text(document, encoding="utf-8")
 
     @staticmethod
-    def _analysis_markdown(manifest: dict[str, Any], summary: dict[str, Any]) -> str:
+    def _readme_markdown(manifest: dict[str, Any]) -> str:
+        benchmarks = ", ".join(
+            f"{name}={value['benchmark_symbol']} ({value.get('benchmark_kind', 'index')})"
+            for name, value in sorted(manifest["universe_assets"].items())
+        )
         lines = [
-            "# MarketSieve 指数横断分析",
+            "# MarketSieve Market Matrix",
             "",
-            f"- マトリックスID: `{manifest['matrix_id']}`",
-            f"- 取得時刻: `{manifest['created_at']}`",
-            f"- 銘柄数: {manifest['row_count']}",
-            f"- 指標数: {manifest['field_count']}",
-            f"- 全体価格取得率: {summary['coverage']['overall']}",
-            f"- 品質状態: `{summary['quality_status']}`",
+            "This directory is one immutable, self-contained market-matrix dataset.",
             "",
-            "個別銘柄の順位付けや売買推奨は行わず、指数横断の分布と欠損を記述します。",
+            f"- Matrix ID: `{manifest['matrix_id']}`",
+            f"- Retrieved at: `{manifest['created_at']}`",
+            f"- Securities: {manifest['row_count']}",
+            f"- Fields: {manifest['field_count']}",
+            f"- Quality: `{manifest['quality_status']}`",
+            f"- Benchmarks: {benchmarks}",
             "",
+            "`securities.jsonl` is authoritative. One row represents one security. Every "
+            "defined field appears either in `values` or in `missing`.",
+            "",
+            "`fields.json` defines field meaning and units. `missing-reasons.json` defines "
+            "missing-value codes. `manifest.json` records acquisition and provenance. "
+            "`index-summary.json` contains aggregate statistics. `failures.jsonl` contains "
+            "observed failures. CSV, HTML, and Markdown files are deterministic views.",
+            "",
+            "Index memberships can overlap, so membership counts must not be summed as unique "
+            "security counts. Currency-denominated values must not be aggregated across currencies "
+            "without an explicit conversion outside this dataset.",
         ]
-        distribution_sections = (
-            ("リターン", ("return_20d", "return_60d", "return_252d")),
+        return "\n".join(lines).rstrip() + "\n"
+
+    @staticmethod
+    def _summary_markdown(manifest: dict[str, Any], summary: dict[str, Any]) -> str:
+        lines = [
+            "# MarketSieve Market Summary",
+            "",
+            f"- Matrix ID: `{manifest['matrix_id']}`",
+            f"- Retrieved at: `{manifest['created_at']}`",
+            f"- Securities: {manifest['row_count']}",
+            f"- Fields: {manifest['field_count']}",
+            f"- Overall price coverage: {summary['coverage']['overall']}",
+            f"- Quality: `{summary['quality_status']}`",
+            "",
+            "| Group | Securities | Price coverage | Advancing | Declining | "
+            "Above SMA20 | Above SMA200 |",
+            "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
+        ]
+        for name, group in sorted(summary["groups"].items()):
+            lines.append(
+                f"| {name} | {group['security_count']} | {group['price_coverage']} | "
+                f"{group['advancing_count']} | {group['declining_count']} | "
+                f"{group['above_sma_20_count']} | {group['above_sma_200_count']} |"
+            )
+        lines.extend(
             (
-                "リスク",
-                ("volatility_60d", "volatility_252d", "maximum_drawdown_252d"),
-            ),
-            ("バリュエーション", ("trailing_pe", "price_to_book")),
-            ("収益性", ("operating_margin", "return_on_equity")),
-            ("成長性", ("revenue_growth",)),
+                "",
+                "## Missing values",
+                "",
+                "| Group | Reason | Cells |",
+                "| --- | --- | ---: |",
+            )
         )
         for name, group in sorted(summary["groups"].items()):
-            display_name = (
-                "全体"
-                if name == "all"
-                else manifest["universe_assets"].get(name, {}).get("name", name)
-            )
-            lines.extend(
-                (
-                    f"## {display_name}",
-                    "",
-                    "### 市場幅とトレンド",
-                    "",
-                    f"- 銘柄数: {group['security_count']}",
-                    f"- 価格取得率: {group['price_coverage']}",
-                    f"- 上昇 / 下落 / 変わらず: {group['advancing_count']} / "
-                    f"{group['declining_count']} / {group['unchanged_count']}",
-                    f"- SMA20超: {group['above_sma_20_count']}",
-                    f"- SMA200超: {group['above_sma_200_count']}",
-                )
-            )
-            lines.extend(("", "### 規模", ""))
-            market_cap_distributions = group["currency_distributions"]["market_cap"]
-            if not market_cap_distributions:
-                lines.append("- 時価総額: 取得値なし")
-            for currency, distribution in sorted(market_cap_distributions.items()):
-                lines.append(
-                    f"- 時価総額 ({currency}): 件数={distribution['count']}, "
-                    f"第1四分位={distribution['p25']}, "
-                    f"中央値={distribution['median']}, "
-                    f"第3四分位={distribution['p75']}"
-                )
-            lines.extend(("", "### 流動性", ""))
-            traded_value_distributions = group["currency_distributions"]["median_traded_value_20d"]
-            if not traded_value_distributions:
-                lines.append("- median_traded_value_20d: 取得値なし")
-            for currency, distribution in sorted(traded_value_distributions.items()):
-                lines.append(
-                    f"- median_traded_value_20d ({currency}): 件数={distribution['count']}, "
-                    f"第1四分位={distribution['p25']}, "
-                    f"中央値={distribution['median']}, "
-                    f"第3四分位={distribution['p75']}"
-                )
-            for title, field_names in distribution_sections:
-                lines.extend(("", f"### {title}", ""))
-                for field in field_names:
-                    distribution = group["distributions"].get(field)
-                    if distribution is None:
-                        lines.append(f"- {field}: 取得値なし")
-                    else:
-                        lines.append(
-                            f"- {field}: 件数={distribution['count']}, "
-                            f"第1四分位={distribution['p25']}, "
-                            f"中央値={distribution['median']}, "
-                            f"第3四分位={distribution['p75']}"
-                        )
-            concentration = group["concentration"]
-            lines.extend(
-                (
-                    "",
-                    "### 集中度・セクター構成",
-                    "",
-                )
-            )
-            if not concentration["by_currency"]:
-                lines.append("- 時価総額上位10社構成比: 取得値なし")
-            for currency, value in sorted(concentration["by_currency"].items()):
-                lines.append(
-                    f"- 時価総額上位10社構成比 ({currency}): {value['top_10_market_cap_share']}"
-                )
-            for sector, value in sorted(group["sectors"].items()):
-                shares = ", ".join(
-                    f"{currency}={share}"
-                    for currency, share in sorted(value["market_cap_share_by_currency"].items())
-                )
-                lines.append(
-                    f"- {sector}: {value['security_count']}銘柄, "
-                    f"通貨別時価総額構成比={shares or '取得値なし'}"
-                )
-            lines.extend(("", "### 欠損傾向", ""))
             for reason, count in sorted(group["missing"]["reasons"].items()):
-                lines.append(f"- 理由 `{reason}`: {count}セル")
-            missing_fields = sorted(
-                group["missing"]["fields"].items(), key=lambda value: (-value[1], value[0])
-            )[:10]
-            for field, count in missing_fields:
-                lines.append(f"- 欠損フィールド `{field}`: {count}銘柄")
-            lines.append("")
+                lines.append(f"| {name} | {reason} | {count} |")
         return "\n".join(lines).rstrip() + "\n"
 
     def resolve_id(self, matrix_id: str) -> str:
@@ -523,21 +596,194 @@ class MatrixStore:
         summary = json.loads((path / "index-summary.json").read_text(encoding="utf-8"))
         return {
             **manifest,
-            "schema": "market-matrix/v1",
+            "schema": "market-matrix/v2",
             "summary": summary,
             "artifacts": {
                 name: str(path / name)
                 for name in (
+                    "README.md",
                     "manifest.json",
                     "fields.json",
+                    "missing-reasons.json",
                     "securities.jsonl",
                     "index-summary.json",
                     "failures.jsonl",
                     "matrix.csv",
                     "overview.html",
-                    "analysis.md",
+                    "summary.md",
                 )
             },
+        }
+
+    def list(self) -> dict[str, Any]:
+        if not self.objects.exists():
+            return {
+                "schema": "market-matrix-list/v1",
+                "matrices": [],
+            }
+        self._require_directory(self.objects)
+        matrices = []
+        for path in self.objects.iterdir():
+            if path.name.startswith("."):
+                continue
+            manifest_path = path / "manifest.json"
+            if (
+                not path.is_symlink()
+                and path.is_dir()
+                and not manifest_path.is_symlink()
+                and manifest_path.is_file()
+            ):
+                candidate = self._read_json(manifest_path)
+                if (
+                    isinstance(candidate, dict)
+                    and candidate.get("schema") != "market-matrix-manifest/v2"
+                ):
+                    continue
+            self._verify_object(path, path.name)
+            manifest = self._read_json(path / "manifest.json")
+            matrices.append(
+                {
+                    "matrix_id": path.name,
+                    "created_at": manifest["created_at"],
+                    "row_count": manifest["row_count"],
+                    "field_count": manifest["field_count"],
+                    "coverage": manifest["coverage"],
+                    "quality_status": manifest["quality_status"],
+                }
+            )
+        try:
+            ordered = sorted(
+                matrices,
+                key=lambda value: (
+                    datetime.fromisoformat(value["created_at"]),
+                    value["matrix_id"],
+                ),
+                reverse=True,
+            )
+        except (TypeError, ValueError) as error:
+            raise ValueError("market matrix creation time is invalid") from error
+        if any(
+            datetime.fromisoformat(value["created_at"]).utcoffset() is None for value in ordered
+        ):
+            raise ValueError("market matrix creation time must include a UTC offset")
+        return {
+            "schema": "market-matrix-list/v1",
+            "matrices": ordered,
+        }
+
+    def query(
+        self,
+        matrix_id: str,
+        *,
+        filters: dict[str, tuple[str, ...]],
+        minimums: dict[str, Decimal],
+        maximums: dict[str, Decimal],
+        present: tuple[str, ...],
+        missing: tuple[str, ...],
+        fields: tuple[str, ...],
+    ) -> dict[str, Any]:
+        self._require_directory(self.objects)
+        resolved = self.resolve_id(matrix_id)
+        self._verify_object(self.objects / resolved, resolved)
+        allowed_filters = {
+            "market",
+            "index",
+            "mic",
+            "exchange",
+            "country",
+            "currency",
+            "sector",
+            "industry",
+        }
+        if unknown_filters := set(filters) - allowed_filters:
+            raise ValueError(f"unknown matrix classification filters: {sorted(unknown_filters)}")
+        if any(not values for values in filters.values()):
+            raise ValueError("matrix classification filters cannot be empty")
+        if any(len(values) != len(set(values)) for values in filters.values()):
+            raise ValueError("matrix classification filter values must be unique")
+        if invalid_indices := set(filters.get("index", ())) - set(INDEX_BENCHMARKS):
+            raise ValueError(f"unknown matrix indices: {sorted(invalid_indices)}")
+        if any(len(values) != len(set(values)) for values in (present, missing, fields)):
+            raise ValueError("matrix query field selections must be unique")
+        definitions = self._read_json(self.objects / resolved / "fields.json")
+        field_types = {value["name"]: value["data_type"] for value in definitions}
+        known = set(field_types)
+        requested = set(fields) | set(minimums) | set(maximums) | set(present) | set(missing)
+        if unknown := requested - known:
+            raise ValueError(f"unknown matrix fields: {sorted(unknown)}")
+        numeric = {name for name, kind in field_types.items() if kind in {"decimal", "integer"}}
+        if invalid := (set(minimums) | set(maximums)) - numeric:
+            raise ValueError(f"matrix numeric filters require numeric fields: {sorted(invalid)}")
+        if set(present) & set(missing):
+            raise ValueError("matrix fields cannot be both present and missing")
+        if invalid_bounds := {
+            name for name in set(minimums) & set(maximums) if minimums[name] > maximums[name]
+        }:
+            raise ValueError(f"matrix minimum exceeds maximum: {sorted(invalid_bounds)}")
+        selected = tuple(sorted(fields or tuple(known)))
+
+        def matches(row: dict[str, Any]) -> bool:
+            values = row["values"]
+            classification = {
+                "market": "jp" if row["instrument"]["mic"] == "XTKS" else "us",
+                "index": tuple(row["memberships"]),
+                "mic": row["instrument"]["mic"],
+                "exchange": values.get("exchange"),
+                "country": values.get("country"),
+                "currency": values.get("currency", row["instrument"]["currency"]),
+                "sector": values.get("sector"),
+                "industry": values.get("industry"),
+            }
+            for name, accepted in filters.items():
+                actual = classification[name]
+                if name == "index":
+                    if not set(accepted) & set(actual):
+                        return False
+                elif actual not in accepted:
+                    return False
+            for name, threshold in minimums.items():
+                if name not in values or Decimal(values[name]) < threshold:
+                    return False
+            for name, threshold in maximums.items():
+                if name not in values or Decimal(values[name]) > threshold:
+                    return False
+            return all(name in values for name in present) and all(
+                name in row["missing"] for name in missing
+            )
+
+        rows = []
+        for row in self._rows(resolved):
+            if not matches(row):
+                continue
+            rows.append(
+                {
+                    "instrument_id": row["instrument_id"],
+                    "instrument": row["instrument"],
+                    "provider_symbol": row["provider_symbol"],
+                    "memberships": row["memberships"],
+                    "retrieved_at": row["retrieved_at"],
+                    "values": {
+                        name: row["values"][name] for name in selected if name in row["values"]
+                    },
+                    "missing": {
+                        name: row["missing"][name] for name in selected if name in row["missing"]
+                    },
+                }
+            )
+        rows.sort(key=lambda value: value["instrument_id"])
+        return {
+            "schema": "matrix-query-result/v1",
+            "matrix_id": resolved,
+            "matched_count": len(rows),
+            "fields": list(selected),
+            "filters": {
+                "classifications": {name: list(values) for name, values in sorted(filters.items())},
+                "minimums": {name: str(value) for name, value in sorted(minimums.items())},
+                "maximums": {name: str(value) for name, value in sorted(maximums.items())},
+                "present": list(sorted(present)),
+                "missing": list(sorted(missing)),
+            },
+            "rows": rows,
         }
 
     def row(self, matrix_id: str, instrument_id: str) -> dict[str, Any]:
@@ -607,14 +853,16 @@ class MatrixStore:
         if path.is_symlink() or not path.is_dir() or path.name != matrix_id:
             raise LookupError(f"market matrix does not exist: {matrix_id}")
         required = {
+            "README.md",
             "manifest.json",
             "fields.json",
+            "missing-reasons.json",
             "securities.jsonl",
             "index-summary.json",
             "failures.jsonl",
             "matrix.csv",
             "overview.html",
-            "analysis.md",
+            "summary.md",
         }
         artifacts = {value.name: value for value in path.iterdir()}
         if not required.issubset(artifacts) or any(
@@ -624,26 +872,32 @@ class MatrixStore:
         manifest = MatrixStore._read_json(path / "manifest.json")
         if (
             manifest.get("matrix_id") != matrix_id
-            or manifest.get("schema") != "market-matrix-manifest/v1"
+            or manifest.get("schema") != "market-matrix-manifest/v2"
         ):
             raise ValueError("market matrix manifest identity is invalid")
         fields = MatrixStore._read_json(path / "fields.json")
+        missing_reasons = MatrixStore._read_json(path / "missing-reasons.json")
         summary = MatrixStore._read_json(path / "index-summary.json")
         rows = tuple(MatrixStore._read_jsonl(path / "securities.jsonl"))
         failures = tuple(MatrixStore._read_jsonl(path / "failures.jsonl"))
         semantic = {
             **{key: value for key, value in manifest.items() if key not in {"schema", "matrix_id"}},
             "field_definitions": fields,
+            "missing_reasons": missing_reasons,
             "row_hashes": [hashlib.sha256(_json_bytes(row)).hexdigest() for row in rows],
             "summary": summary,
             "failures": failures,
         }
         if hashlib.sha256(_json_bytes(semantic)).hexdigest() != matrix_id:
             raise ValueError("market matrix content identity is invalid")
-        if (path / "analysis.md").read_text(encoding="utf-8") != MatrixStore._analysis_markdown(
+        if (path / "README.md").read_text(encoding="utf-8") != MatrixStore._readme_markdown(
+            manifest
+        ):
+            raise ValueError("market matrix README projection is invalid")
+        if (path / "summary.md").read_text(encoding="utf-8") != MatrixStore._summary_markdown(
             manifest, summary
         ):
-            raise ValueError("market matrix analysis projection is invalid")
+            raise ValueError("market matrix summary projection is invalid")
         field_values = tuple(MatrixField(**value) for value in fields)
         with tempfile.TemporaryDirectory(prefix="marketsieve-matrix-verify-") as directory:
             temporary = Path(directory)

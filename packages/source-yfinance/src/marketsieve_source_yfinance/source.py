@@ -50,6 +50,7 @@ EXCHANGE_CALENDAR_BY_MIC = {
     "XTKS": "XTKS",
 }
 MAX_MARKET_REFERENCE_LAG_DAYS = 7
+MAX_INSTRUMENT_REFERENCE_LAG_DAYS = 1
 PRICE_DATA_FIELDS = ("Open", "High", "Low", "Close")
 
 
@@ -68,6 +69,10 @@ class _BatchDownloadError(Exception):
 
 class _HistoryEmptyError(Exception):
     """Mark a symbol omitted from an otherwise successful yfinance response."""
+
+
+class _CorporateActionMismatchError(Exception):
+    """Reject an adjusted history that still contains a split-sized price discontinuity."""
 
 
 PROFILE_FIELDS = {
@@ -167,6 +172,8 @@ def _is_finite_number(value: object) -> bool:
 def _failure_reason(error: BaseException | str) -> str:
     if isinstance(error, _HistoryEmptyError):
         return "history_empty"
+    if isinstance(error, _CorporateActionMismatchError):
+        return "corporate_action_mismatch"
     message = str(error).lower()
     name = type(error).__name__.lower()
     if (
@@ -533,6 +540,11 @@ class YFinanceSource:
                     value.provider_symbol,
                     (None, batch_retrieved_at),
                 )
+                if not self._adjusted_prices_match_splits(symbol_frame, request.adjustment):
+                    symbol_errors[value.provider_symbol.upper()] = _CorporateActionMismatchError(
+                        value.provider_symbol
+                    )
+                    symbol_frame = None
                 item_bars = self._bars(
                     symbol_frame,
                     instrument=value.instrument,
@@ -667,7 +679,8 @@ class YFinanceSource:
             market_reference_is_stale = (
                 request.end - reference
             ).days > MAX_MARKET_REFERENCE_LAG_DAYS
-            if market_reference_is_stale or bars[-1].trading_date < reference:
+            instrument_lag_days = (reference - bars[-1].trading_date).days
+            if market_reference_is_stale or instrument_lag_days > MAX_INSTRUMENT_REFERENCE_LAG_DAYS:
                 output[identity] = ()
                 failures.append(
                     EquityAcquisitionFailure(
@@ -794,6 +807,45 @@ class YFinanceSource:
                 factor *= split
         return factors
 
+    @staticmethod
+    def _adjusted_prices_match_splits(frame: Any, adjustment: Adjustment) -> bool:
+        """Detect near-exact inverse split jumps while tolerating ordinary invalid rows."""
+
+        if frame is None or getattr(frame, "empty", True) or adjustment is not Adjustment.ADJUSTED:
+            return True
+        previous_close: Decimal | None = None
+        pending_split = Decimal(1)
+        for _, row in frame.iterrows():
+            try:
+                close = Decimal(str(row.get("Close")))
+                close_is_valid = close.is_finite() and close > 0
+            except (InvalidOperation, TypeError, ValueError):
+                close = Decimal("NaN")
+                close_is_valid = False
+            try:
+                split = Decimal(str(row.get("Stock Splits", 0)))
+            except (InvalidOperation, TypeError, ValueError):
+                return False
+            if split.is_nan() and not close_is_valid:
+                continue
+            if not split.is_finite() or split < 0:
+                return False
+            if split > 0:
+                pending_split *= split
+            if not close_is_valid:
+                continue
+            if previous_close is not None and pending_split != 1:
+                ratio = close / previous_close
+                split_scaled = ratio * pending_split
+                # Price returns alone cannot prove a corporate-action mismatch. Reject only a
+                # near-exact inverse of the provider's reported split; less exact moves remain
+                # valid market returns.
+                if abs(split_scaled - Decimal(1)) <= Decimal("0.005"):
+                    return False
+            previous_close = close
+            pending_split = Decimal(1)
+        return True
+
     def _profiles(
         self, request: EquityBatchRequest, session: Session[Response]
     ) -> tuple[
@@ -807,7 +859,7 @@ class YFinanceSource:
         cancelled = Event()
 
         def load(item: Any) -> ProfileLoadResult:
-            if item.provider_symbol.startswith("^"):
+            if item.is_benchmark:
                 return item, ({}, None, None, None, None)
             ticker = YFINANCE.Ticker(item.provider_symbol, session=session)
 
@@ -900,7 +952,7 @@ class YFinanceSource:
                             _failure_reason(statement),
                         )
                     )
-            if item.provider_symbol.startswith("^"):
+            if item.is_benchmark:
                 output[identity] = ((), ())
                 continue
             annual_income = None if isinstance(annual_income, BaseException) else annual_income

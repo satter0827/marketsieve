@@ -43,8 +43,7 @@ versioned constituent assets
     -> pure common-field calculation + benchmark-relative calculation
     -> canonical rows, definitions, summary, failures, and manifest
     -> immutable content-addressed matrix object
-    -> CSV / self-contained HTML / aggregate Markdown projections
-    -> analysis-context/v2 references for external agents
+    -> self-contained README / CSV / HTML / aggregate Markdown projections
 ```
 
 ## Constituent assets
@@ -54,8 +53,9 @@ provider. Each index records its name, benchmark symbol, as-of date, source URL,
 constituent count, exchange-qualified identifier, and yfinance symbol. Runtime loading validates the
 stored count and deduplicates overlapping constituents while retaining multiple memberships.
 
-The benchmark mapping is fixed: `^N225`, `^TOPX`, `^GSPC`, `^DJI`, and `^NDX`. A failed benchmark
-remains missing. No proxy index is allowed.
+The benchmark mapping is fixed: `^N225`, `1308.T`, `^GSPC`, `^DJI`, and `^NDX`. `1308.T` is a
+TOPIX-linked ETF proxy, not the TOPIX index itself. It replaces the unavailable yfinance `^TOPX`
+symbol by explicit asset definition, not runtime fallback. A failed benchmark remains missing.
 
 ## Acquisition boundary
 
@@ -70,10 +70,11 @@ the matrix configuration. A same-date daily row is excluded until the exchange c
 that exact date, including scheduled shortened sessions, so an in-progress session is never treated
 as a daily close. The calendar library supplies trading-session rules only; yfinance remains the
 sole runtime source of prices, company information, and financial statements.
-The latest accepted date for each security must reach the latest date observed for its JP or U.S.
-market in the same yfinance batch. A market-wide reference more than seven calendar days behind the
-request end is also stale. These histories receive `stale_history` and do not contribute to price
-coverage. Because yfinance converts an absent daily volume to zero before returning its frame, a
+The latest accepted date for each security may trail the latest date observed for its JP or U.S.
+market in the same yfinance batch by at most one calendar day, accommodating bounded provider
+publication lag. A larger instrument lag or a market-wide reference more than seven calendar days
+behind the request end is stale. These histories receive `stale_history` and do not contribute to
+price coverage. Because yfinance converts an absent daily volume to zero before returning its frame, a
 zero in a required 20- or 60-session window is conservatively treated as unavailable; affected
 liquidity cells receive `field_absent` instead of using the ambiguous zero.
 
@@ -93,7 +94,8 @@ Beta is common-date sample covariance divided by benchmark sample variance.
 All numeric serialization follows the existing Decimal policy. A field is valid only when its
 required history and denominator exist. Otherwise the row records one stable missing code such as
 `symbol_not_found`, `history_empty`, `stale_history`, `insufficient_history`, `zero_denominator`,
-`field_absent`, `financials_unavailable`, `rate_limited`, `network_error`, or `provider_error`.
+`field_absent`, `financials_unavailable`, `corporate_action_mismatch`, `rate_limited`,
+`network_error`, or `provider_error`.
 Values and missing codes are mutually exclusive and exhaustive for the field catalog.
 
 ## Persistence and identity
@@ -104,9 +106,9 @@ input snapshot ID, canonical row hashes, index summary, and failure records. An 
 verified before reuse and is never mutated.
 
 `securities.jsonl` contains authoritative `market-matrix-security/v1` rows. `fields.json`,
-`market-matrix-manifest/v1` `manifest.json`, `index-summary.json`, and
-`failures.jsonl` are canonical supporting evidence. `matrix.csv`, `overview.html`, and `analysis.md`
-are generated from those structures in the same write transaction. The HTML embeds its styles,
+`market-matrix-manifest/v2` `manifest.json`, `missing-reasons.json`, `index-summary.json`, and
+`failures.jsonl` are canonical supporting evidence. `README.md`, `matrix.csv`, `overview.html`, and
+`summary.md` are generated from those structures in the same write transaction. The HTML embeds its styles,
 script, and data; it performs no external request. CSV represents a missing value as an empty cell
 and preserves its code in `missing_fields_json`.
 
@@ -122,21 +124,17 @@ storage first commits and verifies that request evidence in the immutable object
 the latest reference while the run remains recoverable, and then removes the transient run. A run
 cleanup failure does not invalidate or hide an already published immutable object.
 
-## Offline views and analysis
+## Offline views and handoff
 
-`matrix show` verifies semantic identity and required projections. `matrix row` and
+`matrix show` verifies semantic identity and required projections. `matrix list`, `matrix query`, `matrix row`, and
 `matrix compare` load verified canonical rows only. They neither call a provider nor invoke a
 calculation function. Comparison is an explicit selection of already stored cells and missing codes.
 
 The matrix's `index-summary.json` aggregates overall and per-index coverage, market breadth,
-distributions, market-cap concentration, sector composition, and missingness. `analysis.md` renders
-that evidence in a stable macro-oriented narrative without security recommendations.
-
-`AnalysisWorkspace` writes `analysis-context/v2` below the isolated `.marketsieve/analysis/v2`
-root. It contains the chosen matrix ID, counts, coverage, quality status, and relative paths to
-canonical inputs, while deliberately excluding a second copy of the security rows. The workspace
-verifies its own content identity, Markdown projection, and matrix reference on read. Files directly
-below the legacy analysis root remain untouched and are never read by the v2 workspace.
+distributions, market-cap concentration, sector composition, and missingness. `summary.md` renders
+a compact tabular projection without commentary. `README.md` explains file roles, row granularity,
+time, currency, memberships, and missingness. It does not prescribe how an agent must reason or
+format a conclusion. The object has no references outside its own directory.
 
 ## Routine analysis and extension isolation
 

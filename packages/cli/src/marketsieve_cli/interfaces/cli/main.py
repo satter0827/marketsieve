@@ -6,6 +6,7 @@ import json
 import sys
 from collections.abc import Callable
 from datetime import datetime
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
@@ -20,11 +21,11 @@ from marketsieve_cli.bootstrap import (
     build_snapshot_service,
     build_weekly_brief_service,
     compare_market_matrix_rows,
-    create_analysis_workspace,
     import_portfolio,
     list_decision_reports,
+    list_market_matrices,
     project_decision_report,
-    read_analysis_workspace,
+    query_market_matrix,
     read_decision_report,
     read_market_matrix_row,
     read_portfolio,
@@ -37,10 +38,11 @@ from marketsieve_cli.bootstrap import (
 )
 
 OUTPUT_CHOICES = ("auto", "rich", "text", "json")
+MATRIX_INDEX_CHOICES = ("dow30", "nasdaq100", "nikkei225", "sp500", "topix500")
 CAPABILITIES_SCHEMA_VERSION = "3.0.0"
 COMMAND_METADATA: dict[str, dict[str, Any]] = {
     "matrix refresh": {
-        "output_schema": "urn:marketsieve:schema:market-matrix:1.0.0",
+        "output_schema": "urn:marketsieve:schema:market-matrix:2.0.0",
         "effects": {
             "network": True,
             "secrets": False,
@@ -48,7 +50,15 @@ COMMAND_METADATA: dict[str, dict[str, Any]] = {
         },
     },
     "matrix show": {
-        "output_schema": "urn:marketsieve:schema:market-matrix:1.0.0",
+        "output_schema": "urn:marketsieve:schema:market-matrix:2.0.0",
+        "effects": {"network": False, "secrets": False, "optional_writes": []},
+    },
+    "matrix list": {
+        "output_schema": "urn:marketsieve:schema:market-matrix-list:1.0.0",
+        "effects": {"network": False, "secrets": False, "optional_writes": []},
+    },
+    "matrix query": {
+        "output_schema": "urn:marketsieve:schema:matrix-query-result:1.0.0",
         "effects": {"network": False, "secrets": False, "optional_writes": []},
     },
     "matrix row": {
@@ -57,18 +67,6 @@ COMMAND_METADATA: dict[str, dict[str, Any]] = {
     },
     "matrix compare": {
         "output_schema": "urn:marketsieve:schema:market-matrix-comparison:1.0.0",
-        "effects": {"network": False, "secrets": False, "optional_writes": []},
-    },
-    "analysis build": {
-        "output_schema": "urn:marketsieve:schema:analysis-context:2.0.0",
-        "effects": {
-            "network": False,
-            "secrets": False,
-            "optional_writes": ["analysis_workspace"],
-        },
-    },
-    "analysis show": {
-        "output_schema": "urn:marketsieve:schema:analysis-context:2.0.0",
         "effects": {"network": False, "secrets": False, "optional_writes": []},
     },
     "watchlist add": {
@@ -284,6 +282,107 @@ def matrix_show(context: click.Context, matrix_id: str, output_mode: str) -> Non
     console.emit_document(document, title="Market matrix")
 
 
+@matrix.command("list")
+@output_option
+@click.pass_context
+def matrix_list(context: click.Context, output_mode: str) -> None:
+    """List verified persisted matrices, newest first."""
+
+    console = _console(context, output_mode)
+    try:
+        document = list_market_matrices(context.obj["config_path"])
+    except (LookupError, OSError, TypeError, ValueError) as error:
+        console.emit_error("matrix_list_failed", str(error))
+        raise click.exceptions.Exit(1) from None
+    console.emit_document(document, title="Market matrices")
+
+
+def _numeric_bounds(values: tuple[str, ...], option: str) -> dict[str, Decimal]:
+    bounds: dict[str, Decimal] = {}
+    for value in values:
+        field, separator, raw = value.partition("=")
+        if not separator or not field or not raw:
+            raise ValueError(f"{option} requires FIELD=VALUE")
+        if field in bounds:
+            raise ValueError(f"{option} contains a duplicate field: {field}")
+        try:
+            number = Decimal(raw)
+        except InvalidOperation as error:
+            raise ValueError(f"{option} requires a decimal value: {value}") from error
+        if not number.is_finite():
+            raise ValueError(f"{option} requires a finite decimal value: {value}")
+        bounds[field] = number
+    return bounds
+
+
+@matrix.command("query")
+@click.option("--matrix", "matrix_id", default="latest", show_default=True)
+@click.option("--market", multiple=True, type=click.Choice(("jp", "us")))
+@click.option("--index", "indices", multiple=True, type=click.Choice(MATRIX_INDEX_CHOICES))
+@click.option("--mic", multiple=True)
+@click.option("--exchange", multiple=True)
+@click.option("--country", multiple=True)
+@click.option("--currency", multiple=True)
+@click.option("--sector", multiple=True)
+@click.option("--industry", multiple=True)
+@click.option("--min", "minimum_values", multiple=True, metavar="FIELD=VALUE")
+@click.option("--max", "maximum_values", multiple=True, metavar="FIELD=VALUE")
+@click.option("--present", multiple=True)
+@click.option("--missing", multiple=True)
+@click.option("--fields", multiple=True)
+@output_option
+@click.pass_context
+def matrix_query(
+    context: click.Context,
+    matrix_id: str,
+    market: tuple[str, ...],
+    indices: tuple[str, ...],
+    mic: tuple[str, ...],
+    exchange: tuple[str, ...],
+    country: tuple[str, ...],
+    currency: tuple[str, ...],
+    sector: tuple[str, ...],
+    industry: tuple[str, ...],
+    minimum_values: tuple[str, ...],
+    maximum_values: tuple[str, ...],
+    present: tuple[str, ...],
+    missing: tuple[str, ...],
+    fields: tuple[str, ...],
+    output_mode: str,
+) -> None:
+    """Filter one persisted matrix without network access or recalculation."""
+
+    console = _console(context, output_mode)
+    try:
+        document = query_market_matrix(
+            context.obj["config_path"],
+            matrix_id,
+            filters={
+                name: values
+                for name, values in {
+                    "market": market,
+                    "index": indices,
+                    "mic": mic,
+                    "exchange": exchange,
+                    "country": country,
+                    "currency": currency,
+                    "sector": sector,
+                    "industry": industry,
+                }.items()
+                if values
+            },
+            minimums=_numeric_bounds(minimum_values, "--min"),
+            maximums=_numeric_bounds(maximum_values, "--max"),
+            present=present,
+            missing=missing,
+            fields=fields,
+        )
+    except (LookupError, OSError, TypeError, ValueError) as error:
+        console.emit_error("matrix_query_failed", str(error))
+        raise click.exceptions.Exit(1) from None
+    console.emit_document(document, title="Market matrix query")
+
+
 @matrix.command("row")
 @click.argument("instrument_id")
 @click.option("--matrix", "matrix_id", default="latest", show_default=True)
@@ -478,49 +577,6 @@ def weekly(context: click.Context, as_of: str | None, output_mode: str) -> None:
         console.emit_document(read_decision_report(report.report_id), title="Decision report")
     else:
         click.echo(project_decision_report(report.report_id), nl=False)
-
-
-@main.group()
-def analysis() -> None:
-    """Build and inspect the static workspace for external research."""
-
-
-@analysis.command("build")
-@click.option("--matrix", "matrix_id", default="latest", show_default=True)
-@output_option
-@click.pass_context
-def analysis_build(context: click.Context, matrix_id: str, output_mode: str) -> None:
-    """Build matrix-backed context.json and analysis.md files."""
-
-    console = _console(context, output_mode)
-    try:
-        document = create_analysis_workspace(matrix_id)
-        _, markdown = read_analysis_workspace()
-    except (LookupError, OSError, TypeError, ValueError) as error:
-        console.emit_error("analysis_build_failed", str(error))
-        raise click.exceptions.Exit(1) from None
-    if output_mode == "json":
-        console.emit_document(document, title="Analysis context")
-    else:
-        click.echo(markdown, nl=False)
-
-
-@analysis.command("show")
-@output_option
-@click.pass_context
-def analysis_show(context: click.Context, output_mode: str) -> None:
-    """Verify and show the current analysis workspace."""
-
-    console = _console(context, output_mode)
-    try:
-        document, markdown = read_analysis_workspace()
-    except (LookupError, OSError, TypeError, ValueError) as error:
-        console.emit_error("analysis_show_failed", str(error))
-        raise click.exceptions.Exit(1) from None
-    if output_mode == "json":
-        console.emit_document(document, title="Analysis context")
-    else:
-        click.echo(markdown, nl=False)
 
 
 @main.group()

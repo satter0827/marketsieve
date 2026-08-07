@@ -23,7 +23,7 @@ INDEX_BENCHMARKS = {
     "nasdaq100": "^NDX",
     "nikkei225": "^N225",
     "sp500": "^GSPC",
-    "topix500": "^TOPX",
+    "topix500": "1308.T",
 }
 PERIODS = (1, 5, 20, 60, 120, 252)
 RELATIVE_PERIODS = (20, 60, 120, 252)
@@ -41,7 +41,7 @@ class MatrixField:
     definition: str
     formula: str | None
     period: str | None
-    definition_version: str = "market-matrix-fields/v1"
+    definition_version: str = "market-matrix-fields/v2"
 
 
 @dataclass(frozen=True, slots=True)
@@ -467,13 +467,16 @@ def field_definitions() -> tuple[MatrixField, ...]:
         )
     )
     for index in sorted(INDEX_BENCHMARKS):
+        benchmark_label = (
+            "TOPIX-linked ETF proxy 1308.T" if index == "topix500" else f"{index} benchmark"
+        )
         fields.extend(
             _field(
                 f"relative_return_{index}_{period}d",
                 "relative",
                 unit="ratio",
                 definition=(
-                    f"Security {period}-day return minus {index} benchmark return "
+                    f"Security {period}-day return minus {benchmark_label} return "
                     "on aligned closes."
                 ),
                 formula="security_simple_return - benchmark_simple_return",
@@ -487,7 +490,8 @@ def field_definitions() -> tuple[MatrixField, ...]:
                 "relative",
                 unit="ratio",
                 definition=(
-                    f"Covariance of aligned security and {index} simple daily returns divided "
+                    f"Covariance of aligned security and {benchmark_label} simple daily "
+                    "returns divided "
                     "by benchmark variance over 252 intervals."
                 ),
                 formula="sample_covariance(security_return, benchmark_return) / benchmark_variance",

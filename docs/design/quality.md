@@ -17,8 +17,10 @@ Integration tests verify:
 - JSONL and CSV row and value agreement;
 - empty CSV cells plus `missing_fields_json` reason preservation;
 - self-contained HTML with all fields and no external resource;
+- a self-contained artifact catalog, missing-reason classifications, and neutral Markdown summary;
 - stable missing codes, resume fingerprint enforcement, and schema validation;
-- offline row and comparison reads with no calculation or provider access;
+- deterministic history listing and offline query, row, and comparison reads;
+- TOPIX ETF proxy identity and adjusted-price stock-split consistency checks;
 - absence of removed screen, inspect, indicator-analysis, and old comparison commands;
 - absence of `.xlsx` and other Excel outputs.
 
@@ -28,8 +30,8 @@ Readiness is a quality observation, not a license to discard rows. All constitue
 partial matrix. Overall and per-index price coverage are calculated from explicit price success,
 while field- and reason-level missing counts expose financial and classification limitations.
 
-The index summary reports only reproducible aggregate statistics. Analyses distinguish observed
-facts from interpretation and do not turn missingness or outliers into unrecorded corrections.
+The index summary and Markdown projection report only reproducible aggregate statistics. External
+interpretation does not become matrix state, and missingness or outliers are never silently corrected.
 
 ## Repository acceptance
 

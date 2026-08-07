@@ -16,5 +16,5 @@ and release history.
 - Add scheduling only after one-shot commands and local recovery have proved reliable.
 
 External research, discussion, messaging, and model execution are outside the MarketSieve product
-roadmap. They may consume the static analysis workspace without becoming canonical MarketSieve
+roadmap. They may consume a self-contained matrix object without becoming canonical MarketSieve
 state.
