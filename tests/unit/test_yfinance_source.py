@@ -209,7 +209,7 @@ def test_yfinance_source_records_empty_partial_and_retry_failures(
     imported = YFinanceSource().fetch(_request())
     reasons = {(failure.stage, failure.reason) for failure in imported.failures}
 
-    assert attempts == 2
+    assert attempts == 6
     assert imported.observations[0].bars == ()
     assert imported.observations[0].profile == ()
     assert imported.observations[0].financials
@@ -420,6 +420,122 @@ def test_yfinance_source_preserves_best_partial_batch_when_retries_get_worse(
         failure.instrument.symbol == "AAA" and failure.stage == "price"
         for failure in imported.failures
     )
+
+
+def test_yfinance_source_recovers_a_silently_empty_mixed_market_batch(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    calls: list[tuple[str, ...]] = []
+    instruments = (
+        EquityBatchInstrument(_instrument("AAA"), "AAA", ("sp500",)),
+        EquityBatchInstrument(_instrument("BBB"), "BBB", ("sp500",)),
+        EquityBatchInstrument(
+            Instrument.create(
+                symbol="CCC",
+                mic="XTKS",
+                currency="JPY",
+                exchange_timezone="Asia/Tokyo",
+            ),
+            "CCC",
+            ("topix500",),
+        ),
+        EquityBatchInstrument(
+            Instrument.create(
+                symbol="DDD",
+                mic="XTKS",
+                currency="JPY",
+                exchange_timezone="Asia/Tokyo",
+            ),
+            "DDD",
+            ("topix500",),
+        ),
+    )
+
+    def download(symbols: tuple[str, ...], **kwargs: Any) -> pd.DataFrame:
+        del kwargs
+        calls.append(symbols)
+        if any(symbol in {"AAA", "BBB"} for symbol in symbols) and any(
+            symbol in {"CCC", "DDD"} for symbol in symbols
+        ):
+            return pd.DataFrame()
+        return _history(symbols)
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(source_module.YFINANCE, "download", download)
+    monkeypatch.setattr(source_module.YFINANCE, "Ticker", _Ticker)
+    monkeypatch.setattr(source_module.YFINANCE, "set_tz_cache_location", lambda value: None)
+
+    imported = YFinanceSource().fetch(_request(*instruments))
+
+    assert calls == [
+        ("AAA", "BBB", "CCC", "DDD"),
+        ("AAA", "BBB", "CCC", "DDD"),
+        ("AAA", "BBB", "CCC", "DDD"),
+        ("CCC", "DDD"),
+        ("AAA", "BBB"),
+    ]
+    assert all(observation.bars for observation in imported.observations)
+    assert not any(failure.stage == "price" for failure in imported.failures)
+
+
+def test_yfinance_source_caps_persistent_empty_batch_recovery(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    calls = 0
+    instruments = tuple(
+        EquityBatchInstrument(_instrument(symbol), symbol, ("sp500",))
+        for symbol in ("AAA", "BBB", "CCC", "DDD")
+    )
+
+    def download(symbols: tuple[str, ...], **kwargs: Any) -> pd.DataFrame:
+        nonlocal calls
+        del symbols, kwargs
+        calls += 1
+        return pd.DataFrame()
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(source_module.YFINANCE, "download", download)
+    monkeypatch.setattr(source_module.YFINANCE, "Ticker", _Ticker)
+    monkeypatch.setattr(source_module.YFINANCE, "set_tz_cache_location", lambda value: None)
+
+    imported = YFinanceSource().fetch(_request(*instruments))
+
+    assert calls == 6
+    assert all(observation.bars == () for observation in imported.observations)
+    assert {failure.reason for failure in imported.failures if failure.stage == "price"} == {
+        "history_empty"
+    }
+
+
+def test_yfinance_source_recovers_only_a_silently_omitted_symbol(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    calls: list[tuple[str, ...]] = []
+    instruments = (
+        EquityBatchInstrument(_instrument("AAA"), "AAA", ("sp500",)),
+        EquityBatchInstrument(_instrument("ZZZ"), "ZZZ", ("sp500",)),
+    )
+
+    def download(symbols: tuple[str, ...], **kwargs: Any) -> pd.DataFrame:
+        del kwargs
+        calls.append(symbols)
+        if symbols == ("ZZZ",):
+            return _history(symbols)
+        frame = _history(symbols)
+        for column in frame["ZZZ"].columns:
+            frame[("ZZZ", column)] = float("nan")
+        return frame
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(source_module.YFINANCE, "download", download)
+    monkeypatch.setattr(source_module.YFINANCE, "Ticker", _Ticker)
+    monkeypatch.setattr(source_module.YFINANCE, "set_tz_cache_location", lambda value: None)
+
+    imported = YFinanceSource().fetch(_request(*instruments))
+
+    assert calls == [("AAA", "ZZZ"), ("AAA", "ZZZ"), ("AAA", "ZZZ"), ("ZZZ",)]
+    assert all(observation.bars for observation in imported.observations)
+    assert not any(failure.stage == "price" for failure in imported.failures)
 
 
 def test_download_batch_exposes_yfinance_per_symbol_error_context(
@@ -672,6 +788,47 @@ def test_yfinance_source_split_adjusts_volume_with_adjusted_prices() -> None:
 
     assert [bar.volume for bar in bars] == [200, 200, 210]
     assert bars[0].close * bars[0].volume == bars[1].close * bars[1].volume
+
+
+def test_yfinance_source_ignores_cross_market_alignment_gaps() -> None:
+    frame = _history(("MSFT",))["MSFT"]
+    frame.loc[pd.Timestamp("2026-08-06")] = [float("nan")] * len(frame.columns)
+    frame.loc[pd.Timestamp("2026-08-06"), "Volume"] = 0
+
+    bars = YFinanceSource._bars(
+        frame,
+        instrument=_instrument(),
+        adjustment=Adjustment.ADJUSTED,
+        retrieved_at=datetime(2026, 8, 7, 12, tzinfo=UTC),
+        version="1.5.2",
+    )
+
+    assert len(bars) == 3
+    assert bars[-1].trading_date == date(2026, 8, 5)
+
+
+def test_yfinance_source_preserves_split_on_a_price_less_event_row() -> None:
+    frame = pd.DataFrame(
+        {
+            "Open": [50.0, float("nan"), 51.0],
+            "High": [51.0, float("nan"), 52.0],
+            "Low": [49.0, float("nan"), 50.0],
+            "Close": [50.0, float("nan"), 51.0],
+            "Volume": [100, 0, 210],
+            "Stock Splits": [0.0, 2.0, 0.0],
+        },
+        index=pd.to_datetime(["2026-08-03", "2026-08-04", "2026-08-05"]),
+    )
+
+    bars = YFinanceSource._bars(
+        frame,
+        instrument=_instrument(),
+        adjustment=Adjustment.ADJUSTED,
+        retrieved_at=datetime(2026, 8, 7, tzinfo=UTC),
+        version="1.5.2",
+    )
+
+    assert [bar.volume for bar in bars] == [200, 210]
 
 
 def test_yfinance_source_does_not_treat_zero_filled_volume_as_observed(
@@ -1072,13 +1229,14 @@ def test_yfinance_live_smoke_jp_us_and_five_benchmarks(tmp_path: Path) -> None:
     observations = {
         observation.requested.provider_symbol: observation for observation in imported.observations
     }
+    bar_counts = {symbol: len(observation.bars) for symbol, observation in observations.items()}
     assert all(
         observations[symbol].bars for symbol in ("7203.T", "MSFT", "^DJI", "^GSPC", "^NDX", "^N225")
-    )
+    ), bar_counts
     if not observations["^TOPX"].bars:
         assert any(
             failure.instrument.symbol == "TOPX"
             and failure.stage == "price"
-            and failure.reason == "history_empty"
+            and failure.reason in {"history_empty", "symbol_not_found"}
             for failure in imported.failures
         )
