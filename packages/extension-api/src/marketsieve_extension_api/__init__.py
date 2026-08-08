@@ -9,6 +9,15 @@ from marketsieve_extension_api.equity import (
     ImportedEquityBatch,
     SourceDiagnostic,
 )
+from marketsieve_extension_api.market_indicators import (
+    ImportedMarketIndicators,
+    MarketIndicatorFailure,
+    MarketIndicatorFetcher,
+    MarketIndicatorKind,
+    MarketIndicatorObservation,
+    MarketIndicatorRequest,
+    MarketIndicatorSpec,
+)
 from marketsieve_extension_api.research import (
     ImportedSecurityResearch,
     ResearchEvent,
@@ -24,7 +33,14 @@ __all__ = [
     "EquityBatchObservation",
     "EquityBatchRequest",
     "ImportedEquityBatch",
+    "ImportedMarketIndicators",
     "ImportedSecurityResearch",
+    "MarketIndicatorFailure",
+    "MarketIndicatorFetcher",
+    "MarketIndicatorKind",
+    "MarketIndicatorObservation",
+    "MarketIndicatorRequest",
+    "MarketIndicatorSpec",
     "ResearchEvent",
     "ResearchFinancialFact",
     "SecurityResearchFetcher",

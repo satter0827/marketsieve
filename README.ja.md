@@ -21,14 +21,17 @@ make research-build INSTRUMENTS='XTKS:7203 XNAS:MSFT'
 Snapshotは`.marketsieve/market-snapshots/objects/SNAPSHOT_ID/`へ保存されます。JSON・JSONLを
 正本とし、`explorer-data.json`を正本ファイル参照付きの決定的な画面契約、`summary.md`と
 `explorer.html`を人間向け投影とします。Explorerは単一ファイルではなく成果物フォルダ
-全体で自己完結し、`market serve`または`research serve`で閲覧します。個別調査は
+全体で自己完結し、`marketsieve preview`で閲覧します。個別調査は
 `.marketsieve/research/objects/RESEARCH_ID/`へ保存し、元Snapshotとの対応を保持します。
-Research Explorerは`research serve`経由で正本ファイルを直接読み、3か月から全期間までを
+Research Explorerは`preview`経由で正本ファイルを直接読み、3か月から全期間までを
 再取得なしで切り替えます。価格、会社、財務、決算、配当、分割、ベンチマークの取得状態は
 独立しており、一部取得失敗が取得済み証拠を隠しません。
 ExcelとCSVは生成しません。
 
-公開CLIは`market`、`research`、`doctor`、`capabilities`だけです。Portfolio、Watchlist、定期
+生成処理は`.marketsieve/operations/runs/`へ構造化履歴を残します。`artifacts doctor`では
+現行、非互換、破損、孤立した成果物を分離し、1件の異常で一覧全体を失敗させません。
+
+公開CLIは`market`、`research`、`preview`、`artifacts`、`run`、`doctor`、`capabilities`です。Portfolio、Watchlist、定期
 レポート、汎用Source／Snapshot、Experimentは提供しません。
 
 詳細は[設計索引](docs/design/README.md)と[開発手順](CONTRIBUTING.md)を参照してください。

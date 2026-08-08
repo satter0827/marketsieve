@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.19.0] - 2026-08-09
+
+- Added a small stable SDK surface for models, deterministic indicators, and field definitions.
+- Added Research line and short-period candlestick views plus unit-separated financial charts and
+  structured evidence presentation.
+- Refined Snapshot breadth cards, coordinated filters, explicit chart metadata, and quality views.
+
+## [0.18.0] - 2026-08-09
+
+- Isolated current, incompatible, corrupt, and orphan artifacts so legacy Research cannot break
+  normal inventory operations.
+- Separated market-indicator acquisition from equities with explicit kinds, units, and
+  non-applicable equity domains.
+- Split quality summary, detail, outlier, and failure evidence; renamed the price-only gate.
+- Added locale-independent machine output, unified preview, structured operation runs, query
+  funnels, and explicit Snapshot FX conversion.
+
 ## [0.17.0] - 2026-08-09
 
 - Replaced the embedded Research Explorer projection with a reference-only v2 contract that reads

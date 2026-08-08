@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:marketsieve:schema:security-research:8.0.0",
+  "type": "object",
+  "required": ["schema", "research_id", "snapshot_id", "instrument_id", "provider_symbol", "created_at", "source", "inputs", "runtime_settings", "runtime_settings_hash", "price_coverage_gate_passed", "temporal", "quality_summary", "artifacts"],
+  "properties": {
+    "schema": {"const": "security-research/v8"},
+    "research_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "snapshot_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "instrument_id": {"type": "string", "pattern": "^[A-Z0-9]+:.+$"},
+    "provider_symbol": {"type": "string", "minLength": 1},
+    "created_at": {"type": "string", "format": "date-time"},
+    "source": {"type": "object"},
+    "inputs": {"type": "object"},
+    "runtime_settings": {"type": "object"},
+    "runtime_settings_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "price_coverage_gate_passed": {"type": "boolean"},
+    "temporal": {"type": "object"},
+    "quality_summary": {"type": "object", "required": ["schema", "evidence_statuses"], "properties": {"schema": {"const": "security-research-quality-summary/v4"}, "evidence_statuses": {"type": "object", "additionalProperties": {"enum": ["available", "partial", "none_observed", "not_requested", "acquisition_failed", "not_applicable", "temporally_misaligned"]}}}},
+    "artifacts": {"type": "object", "minProperties": 15, "additionalProperties": {"type": "string"}}
+  },
+  "additionalProperties": false
+}

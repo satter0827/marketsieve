@@ -33,7 +33,11 @@ from marketsieve_extension_api import (
     EquityBatchObservation,
     EquityBatchRequest,
     ImportedEquityBatch,
+    ImportedMarketIndicators,
     ImportedSecurityResearch,
+    MarketIndicatorFailure,
+    MarketIndicatorObservation,
+    MarketIndicatorRequest,
     ResearchEvent,
     ResearchFinancialFact,
     SecurityResearchRequest,
@@ -543,6 +547,89 @@ class YFinanceSource:
             observations=tuple(observations),
             failures=failures,
             response_hash=_digest(response_document),
+        )
+
+    def fetch_market_indicators(self, request: MarketIndicatorRequest) -> ImportedMarketIndicators:
+        """Fetch price-only macro series without applying equity-specific checks."""
+
+        requested = tuple(
+            EquityBatchInstrument(
+                Instrument.create(
+                    symbol=item.indicator_id.upper().replace("_", "")[:12],
+                    mic="XNAS",
+                    currency=("JPY" if item.unit == "JPY_per_USD" else "USD"),
+                    exchange_timezone="America/New_York",
+                ),
+                item.provider_symbol,
+                (f"indicator:{item.indicator_id}",),
+                True,
+            )
+            for item in request.indicators
+        )
+        batch = self.fetch(
+            EquityBatchRequest(
+                source_profile=request.source_profile,
+                instruments=requested,
+                start=request.start,
+                end=request.end,
+                adjustment=Adjustment.ADJUSTED,
+                batch_size=len(requested),
+                profile_workers=1,
+                timeout_seconds=request.timeout_seconds,
+                max_retries=request.max_retries,
+                retry_base_seconds=request.retry_base_seconds,
+                settings=request.settings,
+                evidence=("price",),
+            )
+        )
+        by_id = {
+            item.requested.memberships[0].removeprefix("indicator:"): item
+            for item in batch.observations
+        }
+        observations = tuple(
+            MarketIndicatorObservation(
+                requested=item,
+                retrieved_at=by_id[item.indicator_id].retrieved_at,
+                bars=by_id[item.indicator_id].bars,
+                source_hash=by_id[item.indicator_id].source_hash,
+            )
+            for item in request.indicators
+        )
+        indicator_id_by_instrument = {
+            (
+                item.requested.instrument.mic,
+                item.requested.instrument.symbol,
+            ): item.requested.memberships[0].removeprefix("indicator:")
+            for item in batch.observations
+        }
+        failures = tuple(
+            MarketIndicatorFailure(
+                indicator_id=indicator_id_by_instrument[
+                    (failure.instrument.mic, failure.instrument.symbol)
+                ],
+                stage=failure.stage,
+                field=failure.field,
+                reason=failure.reason,
+            )
+            for failure in batch.failures
+            if failure.field not in {"volume_20d", "volume_60d"}
+        )
+        return ImportedMarketIndicators(
+            request=request,
+            source_name=batch.source_name,
+            source_version=batch.source_version,
+            retrieved_at=batch.retrieved_at,
+            observations=observations,
+            failures=failures,
+            response_hash=_digest(
+                {
+                    "observations": [item.source_hash for item in observations],
+                    "failures": [
+                        [item.indicator_id, item.stage, item.field, item.reason]
+                        for item in failures
+                    ],
+                }
+            ),
         )
 
     def fetch_research(self, request: SecurityResearchRequest) -> ImportedSecurityResearch:

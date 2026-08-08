@@ -96,19 +96,19 @@ def test_research_pack_is_self_contained_and_charted(tmp_path: Path) -> None:
     )
     root = Path(document["artifacts"]["manifest.json"]).parent
 
-    assert document["schema"] == "security-research/v6"
-    assert document["price_requirements_met"] is True
+    assert document["schema"] == "security-research/v8"
+    assert document["price_coverage_gate_passed"] is True
     assert not list(root.glob("*.csv")) and not list(root.glob("*.xlsx"))
     html = (root / "explorer.html").read_text()
     assert "<svg" in html and "https://" not in html
     assert "Microsoft" not in html and 'id="explorer-data"' not in html
     explorer = json.loads((root / "explorer-data.json").read_text())
-    assert explorer["schema"] == "explorer-data/v2"
-    assert explorer["metadata"]["object_contract"] == "security-research/v6"
+    assert explorer["schema"] == "explorer-data/v4"
+    assert explorer["metadata"]["object_contract"] == "security-research/v8"
     assert explorer["sources"]["prices"]["path"] == "prices.jsonl"
     assert "prices" not in explorer
     explorer_schema = json.loads(
-        (Path(__file__).parents[2] / "schemas/explorer-data/v2/schema.json").read_text()
+        (Path(__file__).parents[2] / "schemas/explorer-data/v4/schema.json").read_text()
     )
     Draft202012Validator(explorer_schema).validate(explorer)
     incomplete_manifest = json.loads((root / "manifest.json").read_text())
@@ -116,7 +116,7 @@ def test_research_pack_is_self_contained_and_charted(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="not registered"):
         build_research_explorer_data(incomplete_manifest, {})
     schema = json.loads(
-        (Path(__file__).parents[2] / "schemas/security-research/v6/schema.json").read_text()
+        (Path(__file__).parents[2] / "schemas/security-research/v8/schema.json").read_text()
     )
     Draft202012Validator(schema).validate(document)
     assert (
@@ -171,7 +171,7 @@ def test_research_quality_preserves_independent_event_success(tmp_path: Path) ->
         benchmarks=None,
     )
 
-    assert document["quality"]["evidence_statuses"] == {
+    assert document["quality_summary"]["evidence_statuses"] == {
         "price": "not_requested",
         "company": "not_requested",
         "annual_financials": "not_requested",
@@ -222,8 +222,8 @@ def test_benchmark_failure_does_not_mark_security_price_failed(tmp_path: Path) -
         benchmarks=benchmark,
     )
 
-    assert document["quality"]["evidence_statuses"]["price"] == "none_observed"
-    assert document["quality"]["evidence_statuses"]["benchmarks"] == "acquisition_failed"
+    assert document["quality_summary"]["evidence_statuses"]["price"] == "none_observed"
+    assert document["quality_summary"]["evidence_statuses"]["benchmarks"] == "acquisition_failed"
 
 
 class _Market:
@@ -287,7 +287,7 @@ class _Repository:
             "instrument_id": (
                 f"{imported.request.instrument.mic}:{imported.request.instrument.symbol}"
             ),
-            "price_requirements_met": True,
+            "price_coverage_gate_passed": True,
         }
 
     def show(self, research_id: str) -> dict[str, object]:

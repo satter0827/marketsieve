@@ -12,7 +12,6 @@ from marketsieve_cli.contracts import (
     MarketCompareInputs,
     MarketDiffInputs,
     MarketQueryInputs,
-    PreviewInputs,
     ResearchBuildInputs,
 )
 
@@ -97,10 +96,9 @@ def test_query_contract_rejects_invalid_combinations(changes: dict[str, Any]) ->
         _query(**changes)
 
 
-def test_compare_diff_and_preview_contracts_validate_at_boundary() -> None:
+def test_compare_and_diff_contracts_validate_at_boundary() -> None:
     MarketCompareInputs("latest", ("XNAS:A", "XNAS:B"), ())
     MarketDiffInputs("left", "right", ())
-    PreviewInputs("latest", 0)
     with pytest.raises(ValueError, match="at least two"):
         MarketCompareInputs("latest", ("XNAS:A",), ())
     with pytest.raises(ValueError, match="unique"):
@@ -109,7 +107,3 @@ def test_compare_diff_and_preview_contracts_validate_at_boundary() -> None:
         MarketCompareInputs("", ("XNAS:A", "XNAS:B"), ())
     with pytest.raises(ValueError, match="required"):
         MarketDiffInputs("", "right", ())
-    with pytest.raises(ValueError, match="object"):
-        PreviewInputs("")
-    with pytest.raises(ValueError, match="port"):
-        PreviewInputs("latest", 65536)

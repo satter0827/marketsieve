@@ -21,12 +21,15 @@ def test_public_cli_is_small_and_explicit() -> None:
     assert "market build --all" in landing.stdout
     assert version.output == f"marketsieve, version {__version__}\n"
     document = json.loads(capabilities.stdout)
-    assert document["schema"] == "capabilities-result/v8"
+    assert document["schema"] == "capabilities-result/v10"
     assert {item["name"].split()[0] for item in document["commands"]} == {
         "market",
         "research",
         "doctor",
         "capabilities",
+        "preview",
+        "artifacts",
+        "run",
     }
     for removed in ("portfolio", "watchlist", "daily", "weekly", "source", "snapshot"):
         assert runner.invoke(main, [removed]).exit_code == 2

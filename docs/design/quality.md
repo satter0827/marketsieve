@@ -9,8 +9,8 @@ Storage tests verify content identity, canonical JSON/JSONL, complete inventorie
 Explorer references, absent spreadsheet artifacts, deterministic query order, compatible diff
 fields, resume fingerprints, and tamper detection. Preview tests verify that only
 manifest-registered files are served. Research quality reports independent evidence-domain states:
-`available`, `none_observed`,
-`not_requested`, or `acquisition_failed`. A failure is assigned only to its affected domain; for
+`available`, `partial`, `none_observed`, `not_requested`, `acquisition_failed`, `not_applicable`,
+or `temporally_misaligned`. A failure is assigned only to its affected domain; for
 example, an earnings endpoint failure does not invalidate acquired dividend or split events.
 Live smoke tests are explicit and separate from the default offline suite.
 
@@ -26,3 +26,8 @@ denominator, and erases prior data before measurement. The floors are 85 percent
 review, governance, and gate modules. Evidence records the commit, configuration hash, and measured
 targets. A reviewed commit is immutable evidence; proven descendant changes use a delta semantic
 review, while discontinuous history requires a new full review.
+
+Snapshot and Research objects separate `quality-summary.json`, `quality-details.jsonl`,
+`quality-outliers.jsonl`, and `failures.jsonl`. Normal missing values and `not_applicable` remain
+with their security row; outlier candidates retain rule, population, threshold, severity, and value
+origin without modifying the authoritative value.
