@@ -155,7 +155,7 @@ class MarketService:
             _benchmark_seeds(inputs.indices) if "benchmarks" in inputs.evidence else ()
         )
         indicator_seeds = _market_indicator_seeds() if "price" in inputs.evidence else ()
-        requested = tuple(sorted((*universe, *benchmark_seeds, *indicator_seeds), key=_seed_key))
+        requested = _merge_batch_instruments((*universe, *benchmark_seeds, *indicator_seeds))
         acquisition_date = self._today()
         end_date = inputs.as_of or acquisition_date
         if end_date > acquisition_date:
@@ -656,6 +656,34 @@ def _merge_missing_overrides(
 def _seed_key(value: Any) -> tuple[str, str]:
     instrument = value.instrument
     return instrument.mic, instrument.symbol
+
+
+def _merge_batch_instruments(
+    values: tuple[EquityBatchInstrument, ...],
+) -> tuple[EquityBatchInstrument, ...]:
+    """Merge roles that resolve to the same exchange-qualified instrument."""
+
+    grouped: dict[tuple[str, str], EquityBatchInstrument] = {}
+    for value in values:
+        identity = _seed_key(value)
+        current = grouped.get(identity)
+        if current is None:
+            grouped[identity] = value
+            continue
+        if (
+            current.instrument != value.instrument
+            or current.provider_symbol != value.provider_symbol
+        ):
+            raise ValueError(
+                f"conflicting market acquisition identity: {identity[0]}:{identity[1]}"
+            )
+        grouped[identity] = EquityBatchInstrument(
+            current.instrument,
+            current.provider_symbol,
+            tuple(sorted(set(current.memberships) | set(value.memberships))),
+            current.is_benchmark or value.is_benchmark,
+        )
+    return tuple(sorted(grouped.values(), key=_seed_key))
 
 
 def _load_universe(
