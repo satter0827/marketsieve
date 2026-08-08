@@ -270,6 +270,38 @@ def test_historical_reconstruction_is_price_only_and_deduplicated(tmp_path: Path
     assert duplicate["run"]["status"] == "duplicate"
 
 
+def test_all_market_build_merges_overlapping_benchmark_and_indicator(tmp_path: Path) -> None:
+    registry = _Registry()
+    service = MarketService(
+        registry,
+        MarketSnapshotStore(tmp_path / "market-snapshots"),
+        Settings(None),
+        today=lambda: date(2026, 8, 8),
+    )
+
+    document = service.build(
+        MarketBuildInputs(
+            ("dow30", "nasdaq100", "nikkei225", "sp500", "topix500"),
+            ("benchmarks", "price"),
+            365,
+        )
+    )
+
+    assert document["row_count"] == 1021
+    request = registry.fetcher.request
+    assert request is not None
+    identities = tuple(
+        (item.instrument.mic, item.instrument.symbol) for item in request.instruments
+    )
+    assert identities == tuple(sorted(set(identities)))
+    ndx = next(
+        item
+        for item in request.instruments
+        if (item.instrument.mic, item.instrument.symbol) == ("XNAS", "NDX")
+    )
+    assert ndx.memberships == ("indicator:major_index_nasdaq100", "nasdaq100")
+
+
 def test_historical_reconstruction_rejects_future_and_pre_universe_dates(tmp_path: Path) -> None:
     service = MarketService(
         _Registry(),
@@ -324,10 +356,14 @@ def test_snapshot_diff_is_deterministic_and_definition_safe(tmp_path: Path) -> N
 
 
 class _BatchFetcher:
+    def __init__(self) -> None:
+        self.request: EquityBatchRequest | None = None
+
     def doctor(self) -> SourceDiagnostic:
         return SourceDiagnostic(True, "ready", "ready")
 
     def fetch(self, request: EquityBatchRequest) -> ImportedEquityBatch:
+        self.request = request
         retrieved_at = datetime(2026, 8, 8, tzinfo=UTC)
         observations = tuple(
             EquityBatchObservation(item, retrieved_at, (), (), (), "d" * 64)
@@ -346,9 +382,12 @@ class _BatchFetcher:
 
 
 class _Registry:
+    def __init__(self) -> None:
+        self.fetcher = _BatchFetcher()
+
     def load_equity_batch_fetcher(self, name: str) -> _BatchFetcher:
         assert name == "yfinance"
-        return _BatchFetcher()
+        return self.fetcher
 
 
 def test_market_service_builds_explicit_company_only_scope(tmp_path: Path) -> None:
