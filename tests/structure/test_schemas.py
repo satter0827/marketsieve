@@ -26,13 +26,16 @@ def test_schemas_are_draft_2020_12_and_semantically_versioned() -> None:
         "log-record",
         "report-list",
         "review-report",
-        "market-matrix",
-        "market-matrix-comparison",
-        "market-matrix-manifest",
-        "market-matrix-row",
-        "market-matrix-security",
-        "market-matrix-list",
-        "matrix-query-result",
+        "market-snapshot",
+        "market-snapshot-comparison",
+        "market-snapshot-list",
+        "market-snapshot-manifest",
+        "market-snapshot-query-result",
+        "market-snapshot-security",
+        "market-snapshot-security-result",
+        "security-research",
+        "security-research-list",
+        "security-research-manifest",
         "snapshot-result",
         "source-result",
         "watchlist-result",
@@ -84,11 +87,11 @@ def test_schemas_reject_unknown_major_versions() -> None:
             },
         ),
         (
-            "market-matrix-row",
+            "market-snapshot-security-result",
             1,
             {
-                "schema": "market-matrix-row/v1",
-                "matrix_id": "a" * 64,
+                "schema": "market-snapshot-security-result/v1",
+                "snapshot_id": "a" * 64,
                 "instrument_id": "XNAS:MSFT",
                 "instrument": {},
                 "provider_symbol": "MSFT",
@@ -100,11 +103,11 @@ def test_schemas_reject_unknown_major_versions() -> None:
             },
         ),
         (
-            "market-matrix-comparison",
+            "market-snapshot-comparison",
             1,
             {
-                "schema": "market-matrix-comparison/v1",
-                "matrix_id": "a" * 64,
+                "schema": "market-snapshot-comparison/v1",
+                "snapshot_id": "a" * 64,
                 "fields": ["close"],
                 "rows": [
                     {"instrument_id": "XNAS:MSFT", "values": {}, "missing": {}},
@@ -127,14 +130,16 @@ def test_replacement_schemas_reject_empty_nested_contracts(
         )
 
 
-@pytest.mark.parametrize(("schema_name", "major"), (("market-matrix-row", 1),))
-def test_matrix_row_schemas_accept_corporate_action_mismatch(schema_name: str, major: int) -> None:
+@pytest.mark.parametrize(("schema_name", "major"), (("market-snapshot-security-result", 1),))
+def test_market_snapshot_row_schemas_accept_corporate_action_mismatch(
+    schema_name: str, major: int
+) -> None:
     schema = json.loads(
         (SCHEMAS / schema_name / f"v{major}" / "schema.json").read_text(encoding="utf-8")
     )
     document = {
-        "schema": "market-matrix-row/v1",
-        "matrix_id": "a" * 64,
+        "schema": "market-snapshot-security-result/v1",
+        "snapshot_id": "a" * 64,
         "instrument_id": "XNAS:MSFT",
         "instrument": {
             "mic": "XNAS",
@@ -156,13 +161,13 @@ def test_matrix_row_schemas_accept_corporate_action_mismatch(schema_name: str, m
     )
 
 
-def test_matrix_comparison_schema_accepts_corporate_action_mismatch() -> None:
+def test_market_snapshot_comparison_schema_accepts_corporate_action_mismatch() -> None:
     schema = json.loads(
-        (SCHEMAS / "market-matrix-comparison/v1/schema.json").read_text(encoding="utf-8")
+        (SCHEMAS / "market-snapshot-comparison/v1/schema.json").read_text(encoding="utf-8")
     )
     document = {
-        "schema": "market-matrix-comparison/v1",
-        "matrix_id": "a" * 64,
+        "schema": "market-snapshot-comparison/v1",
+        "snapshot_id": "a" * 64,
         "fields": ["close"],
         "rows": [
             {
@@ -175,3 +180,35 @@ def test_matrix_comparison_schema_accepts_corporate_action_mismatch() -> None:
     }
 
     Draft202012Validator(schema).validate(document)
+
+
+def test_security_research_manifest_rejects_malformed_nested_metadata() -> None:
+    schema = json.loads(
+        (SCHEMAS / "security-research-manifest/v1/schema.json").read_text(encoding="utf-8")
+    )
+    document = {
+        "schema": "security-research-manifest/v1",
+        "research_id": "a" * 64,
+        "snapshot_id": "b" * 64,
+        "instrument_id": "XNAS:MSFT",
+        "provider_symbol": "MSFT",
+        "created_at": "2026-08-08T00:00:00+00:00",
+        "source": {"name": None, "version": [], "response_hash": "invalid"},
+        "request": {
+            "source_profile": None,
+            "start": 1,
+            "end": {},
+            "adjustment": "raw",
+            "minimum_price_observations": 0,
+            "timeout_seconds": 0,
+            "max_retries": 0,
+            "retry_base_seconds": -1,
+        },
+        "price_requirements_met": True,
+        "artifacts": {str(index): "unexpected" for index in range(12)},
+    }
+
+    with pytest.raises(ValidationError):
+        Draft202012Validator(schema, format_checker=Draft202012Validator.FORMAT_CHECKER).validate(
+            document
+        )

@@ -3,18 +3,18 @@
 Public command-line workbench for reproducible Japanese and U.S. equity analysis.
 
 ```shell
-marketsieve matrix refresh
-marketsieve matrix show latest
-marketsieve matrix row XTKS:7203
-marketsieve matrix compare XTKS:7203 XNAS:MSFT --fields return_252d
-marketsieve matrix list
-marketsieve matrix query --market jp --present close --fields close
+marketsieve market refresh
+marketsieve market show latest
+marketsieve market query --market jp --present close --fields close
+marketsieve market security XTKS:7203
+marketsieve research build XTKS:7203
+marketsieve research show latest --security XTKS:7203
 ```
 
-The CLI owns configuration, explicit source selection, local persistence, static projections, and
-console output. The broad matrix uses yfinance without registration or an API key. JSONL is
-authoritative; CSV and self-contained HTML are views; Excel output is unsupported.
+The CLI owns configuration, source selection, local persistence, static projections, and console
+output. Market Snapshot and Security Research acquisition use yfinance without registration or an
+API key. JSONL is authoritative; CSV and self-contained HTML are views; Excel is unsupported.
 
-The CLI composes the public SDK and extension packages without moving I/O concerns into the SDK. It
-does not execute a model, send messages, rank securities, make trading recommendations, or place
-orders.
+Application services use typed protocols independent from Click and transport details, so a future
+MCP adapter can reuse the same behavior. The CLI does not execute a model, send messages, rank
+securities, make trading recommendations, or place orders.

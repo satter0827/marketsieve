@@ -36,3 +36,11 @@ for understanding the system contract.
 Keep local caches, coverage, logs, and generated evidence under `.marketsieve`. The executable
 dependency rules live in `pyproject.toml`; document ownership and composition rules that cannot be
 tested in `docs/design/architecture.md`.
+
+For market-analysis requests, start with `make market-show` and use the returned exact Snapshot
+paths. If no current Snapshot exists or the user asks to refresh it, run `make market-snapshot`.
+Use `market query`, `market security`, and `market compare` for offline narrowing; do not parse CSV
+when canonical JSON or JSONL is available. After selecting a Snapshot security, use
+`make security-research INSTRUMENT=MIC:SYMBOL SNAPSHOT=SNAPSHOT_ID` for deeper yfinance evidence.
+Read `quality.json` and `failures.jsonl` before drawing conclusions. Keep agent interpretations
+outside immutable Snapshot and Research Pack directories.

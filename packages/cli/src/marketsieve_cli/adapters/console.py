@@ -136,12 +136,12 @@ class ConsoleOutput:
         if self._locale == "ja":
             description = "再現可能な日本株・米国株分析\n取得済みデータだけを使用します。"
             quick_start = (
-                "marketsieve doctor\nmarketsieve matrix refresh\nmarketsieve matrix show latest"
+                "marketsieve doctor\nmarketsieve market refresh\nmarketsieve market show latest"
             )
         else:
             description = "Reproducible Japanese and U.S. equity analysis\nOffline by default."
             quick_start = (
-                "marketsieve doctor\nmarketsieve matrix refresh\nmarketsieve matrix show latest"
+                "marketsieve doctor\nmarketsieve market refresh\nmarketsieve market show latest"
             )
         if self._mode is OutputMode.RICH:
             body = Text(f"{description}\n\n{quick_start}")

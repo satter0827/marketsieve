@@ -1,58 +1,65 @@
 # MarketSieve
 
-MarketSieve is a reproducible analysis workbench for Japanese and U.S. equities. Its primary market
-view is one broad matrix: one security per row and one stable field per column across the Nikkei
-225, TOPIX 500, S&P 500, Dow 30, and Nasdaq-100.
+MarketSieve is a reproducible analysis workbench for Japanese and U.S. equities. A Market Snapshot
+captures the Nikkei 225, TOPIX 500, S&P 500, Dow 30, and Nasdaq-100 as one broad, immutable market
+cross-section. A Security Research Pack adds deeper evidence for one Snapshot security when needed.
 
-Runtime matrix data comes only from yfinance. It requires no account, API key, or environment
+Runtime market and research data comes only from yfinance. It requires no account, API key, or environment
 variable. MarketSieve never fills a missing value from another source: every absent cell retains a
 stable reason code. It produces no score, ranking, trade recommendation, order, message, or Excel
 file.
 
-## Market matrix
+## Market Snapshot and security research
 
 ```shell
 make sync
-make market-matrix
-uv run marketsieve matrix show latest
-uv run marketsieve matrix list
-uv run marketsieve matrix query --market jp --present close --fields close --fields return_252d
-uv run marketsieve matrix row XTKS:7203
-uv run marketsieve matrix compare XTKS:7203 XNAS:MSFT --fields return_252d --fields volatility_252d
+make market-snapshot
+uv run marketsieve market show latest
+uv run marketsieve market list
+uv run marketsieve market query --market jp --present close --fields close --fields return_252d
+uv run marketsieve market security XTKS:7203
+make security-research INSTRUMENT=XTKS:7203
+uv run marketsieve research show latest --security XTKS:7203
 ```
 
-`make market-matrix` downloads three years of adjusted daily prices in batches and collects company
+`make market-snapshot` downloads three years of adjusted daily prices in batches and collects company
 and financial data with bounded concurrency. The built-in index assets define membership and
 provenance; they are not a second runtime market-data source.
 
-Each immutable object is stored below `.marketsieve/matrices/objects/MATRIX_ID/`:
+Each immutable Snapshot is stored below
+`.marketsieve/market-snapshots/objects/SNAPSHOT_ID/`:
 
 - `README.md` explains the dataset without requiring outside context.
 - `securities.jsonl` is the authoritative one-row-per-security dataset.
-- `fields.json` defines every field, formula, unit, period, source, and definition version.
-- `missing-reasons.json` classifies stable missing-value codes.
-- `manifest.json`, `index-summary.json`, and `failures.jsonl` preserve provenance and quality.
-- `matrix.csv`, self-contained `overview.html`, and `summary.md` are deterministic views.
+- `definitions.json` defines every field and stable missing-value code.
+- `market.json`, `segments.jsonl`, `quality.json`, and `failures.jsonl` preserve market context and quality.
+- `securities.csv`, self-contained `explorer.html`, and `summary.md` are deterministic views.
 
-`matrix list`, `matrix query`, `matrix row`, and `matrix compare` read only saved objects. They do
-not use the network, recalculate indicators, or create subsets. A historical cross-section is selected
-by its matrix ID. External analysis remains outside the immutable matrix directory.
+`market list`, `market query`, `market security`, and `market compare` read only saved objects. They
+do not use the network, recalculate indicators, or create subsets. A historical cross-section is
+selected by its Snapshot ID.
+
+`research build` accepts only a security present in the selected Snapshot. It stores up to ten years
+of adjusted daily history, retrieval-time company facts, annual and quarterly statements, dividends,
+splits, earnings events, exact failures, and the matching market, index, sector, and industry context
+below `.marketsieve/research/objects/RESEARCH_ID/`. The pack contains no score, recommendation, AI
+prompt, or prescribed analysis order. Its versioned JSON/JSONL boundary can later be exposed through
+MCP without changing acquisition or persistence.
 
 ## Other supported workflows
 
+Use `make daily-status` to validate configuration and local routine-analysis readiness.
+
 | Use | Terminal | VS Code launch | Network | Result |
 | --- | --- | --- | --- | --- |
-| Create configuration | `make setup-config` | `01 First Run: Create Configuration` | No | `marketsieve.toml` |
-| Import Rakuten portfolio | `make portfolio-import BROKER=rakuten PORTFOLIO=/absolute/path.csv` | `02 First Run: Import Rakuten Portfolio` | No | immutable holdings state |
-| Check readiness | `make daily-status` | `03 Daily Use: Check Readiness` | No | next-action diagnostics |
-| Refresh broad matrix | `make market-matrix` | `10 Market Matrix: Refresh All Indices (Network)` | Yes | self-contained immutable matrix |
-| Add an instrument | `make watchlist-add INSTRUMENT=XTKS:7203` | `30 Watchlist: Add Instrument` | No | immutable watchlist revision |
-| Analyze JP instruments | `make daily-jp` | `40 Daily Use: Analyze JP Watchlist (Network)` | Yes | static daily report |
-| Analyze US instruments | `make daily-us` | `50 Daily Use: Analyze US Watchlist (Network)` | Yes | static daily report |
-| Build weekly brief | `make weekly` | `60 Weekly Use: Build Brief` | No | static weekly report |
+| Show latest market | `make market-show` | `01 Market: Show Latest Snapshot` | No | verified Snapshot paths |
+| Refresh broad market | `make market-snapshot` | `02 Market: Refresh Snapshot (Network)` | Yes | immutable Market Snapshot |
+| Query one market | `make market-query MARKET=jp` | `03 Market: Query Snapshot` | No | filtered JSON result |
+| Research one security | `make security-research INSTRUMENT=XTKS:7203` | `04 Research: Build Security Pack (Network)` | Yes | immutable Research Pack |
+| Show latest research | `make research-show INSTRUMENT=XTKS:7203` | `05 Research: Show Latest Security Pack` | No | verified Research Pack paths |
 
 The generic source, snapshot, portfolio, watchlist, daily/weekly, and experiment capabilities remain
-available because they serve reproducible workflows outside broad-universe matrix generation.
+available because they serve reproducible workflows outside broad-market Snapshot generation.
 
 ## Scope and data use
 

@@ -2,148 +2,102 @@
 
 ## Purpose
 
-The architecture makes a broad equity matrix reproducible, inspectable, and safe for AI-assisted
-analysis. Pure market calculations remain independent from provider I/O. The application composes
-one explicit yfinance adapter with immutable local storage and deterministic projections.
+MarketSieve produces reproducible broad-market Snapshots and focused Security Research Packs. Pure
+market calculations remain independent from provider I/O. The application composes one explicit
+yfinance adapter with immutable local storage and deterministic projections.
 
 ## Package boundaries
 
-`marketsieve` is the public SDK. It owns exchange-qualified instruments, market observations,
-Decimal-based calculations, matrix field definitions, and pure daily or weekly decision policies.
-It does not import the CLI, extension API, configuration, logging, network clients, databases,
-delivery providers, or model providers.
+`marketsieve` is the public SDK. It owns instruments, observations, Decimal-based calculations,
+field definitions, and pure decision policies. It does not import the CLI, extension API,
+configuration, logging, network, storage, delivery, or model providers.
 
-`marketsieve-extension-api` owns small provider-facing contracts. The matrix contract consists of
-`EquityBatchRequest`, `EquityBatchObservation`, `EquityAcquisitionFailure`, `ImportedEquityBatch`,
-and `EquityBatchFetcher`. Requests and responses use SDK values and preserve exact requested
-instruments. The existing single-instrument and generic-universe contracts remain separate because
-they serve non-matrix workflows.
+`marketsieve-extension-api` owns provider-facing contracts. `EquityBatchRequest` and
+`ImportedEquityBatch` preserve every requested security and exact partial failures for broad
+acquisition. `SecurityResearchRequest`, `ImportedSecurityResearch`, financial facts, events, and
+`SecurityResearchFetcher` define focused acquisition without depending on a CLI or transport.
 
-`marketsieve-source-yfinance` is the sole runtime matrix adapter. It translates one batch request
-into multi-symbol adjusted daily prices and bounded per-symbol profile and statement requests. It
-normalizes provider exceptions into stable failure codes and never selects another source.
+`marketsieve-source-yfinance` is the sole runtime market and research adapter. It translates typed
+requests into yfinance calls, normalizes results and failures, and never selects another source.
 
 `marketsieve-cli` owns configuration, entry-point discovery, orchestration, persistence, schemas,
-console output, and generated projections. Application modules depend on protocols, not concrete
-output adapters. The composition root supplies the yfinance registry, configuration reader, and
-matrix repository.
+console output, and generated projections. Application modules depend on protocols. The composition
+root supplies registries, configuration readers, and repositories.
 
-Other source packages, portfolio importers, snapshots, routine reports, and experiments remain
-independent capabilities. The matrix application does not consult them during acquisition or
-recovery.
+Portfolio, watchlist, routine report, generic snapshot, and experiment capabilities remain
+independent. Market and research applications do not consult them during acquisition or recovery.
 
-## End-to-end matrix flow
+## Market Snapshot flow
 
 ```text
 versioned constituent assets
-    -> deduplicate by MIC:SYMBOL identity and retain index memberships
+    -> deduplicate MIC:SYMBOL and retain all index memberships
     -> EquityBatchRequest (three years, daily, adjusted)
-    -> yfinance price batches + bounded profile/financial acquisition
+    -> yfinance price batches + bounded profile and statement acquisition
     -> ImportedEquityBatch with observations and exact failures
-    -> pure common-field calculation + benchmark-relative calculation
-    -> canonical rows, definitions, summary, failures, and manifest
-    -> immutable content-addressed matrix object
-    -> self-contained README / CSV / HTML / aggregate Markdown projections
+    -> pure common-field and benchmark-relative calculations
+    -> canonical securities, definitions, market, segments, quality, failures, manifest
+    -> immutable content-addressed Market Snapshot
+    -> verified README, CSV, HTML, and aggregate Markdown projections
 ```
 
-## Constituent assets
+`marketsieve_cli.resources/index_universe.json` is a versioned product asset, not a runtime
+market-data source. It records each index, as-of date, source URL, hash, constituent identity, and
+yfinance symbol. The fixed benchmarks are `^N225`, `1308.T`, `^GSPC`, `^DJI`, and `^NDX`.
+`1308.T` is a TOPIX-linked ETF proxy rather than the TOPIX index. A failed benchmark remains missing.
 
-`marketsieve_cli.resources/index_universe.json` is a versioned product asset, not a market-data
-provider. Each index records its name, benchmark symbol, as-of date, source URL, source hash,
-constituent count, exchange-qualified identifier, and yfinance symbol. Runtime loading validates the
-stored count and deduplicates overlapping constituents while retaining multiple memberships.
+Prices explicitly use `interval=1d`, `auto_adjust=True`, and `actions=True`. Split events adjust
+volume onto the adjusted-price basis; inconsistent history is rejected as
+`corporate_action_mismatch`. Exchange calendars determine whether a daily session has closed but do
+not supply market values. Invalid, empty, stale, or partial results are recorded rather than repaired.
 
-The benchmark mapping is fixed: `^N225`, `1308.T`, `^GSPC`, `^DJI`, and `^NDX`. `1308.T` is a
-TOPIX-linked ETF proxy, not the TOPIX index itself. It replaces the unavailable yfinance `^TOPX`
-symbol by explicit asset definition, not runtime fallback. A failed benchmark remains missing.
+The common field catalog defines name, group, type, unit, source, definition, formula, period, and
+definition version. Returns are simple returns. Volatility is the sample deviation of log returns
+annualized by 252. Relative return is security return minus benchmark return. Beta is common-date
+sample covariance divided by benchmark variance. Values and stable missing codes are mutually
+exclusive and exhaustive for every field.
 
-## Acquisition boundary
+## Market Snapshot persistence
 
-Prices use `interval=1d`, `auto_adjust=True`, and `actions=True` explicitly. Symbols are grouped by
-the configured batch size. For an adjusted series, each stock-split ratio is applied to volumes
-before that split date and the split-equivalent result is rounded half-even to the integer-share
-daily-bar contract. This preserves adjusted-close traded value across splits; an invalid split
-action rejects the history instead of silently using incompatible price and volume bases. Invalid
-or empty provider rows are rejected; they are not repaired. Company and
-financial requests use bounded concurrency, timeout, retry count, and exponential base wait from
-the matrix configuration. A same-date daily row is excluded until the exchange calendar's close for
-that exact date, including scheduled shortened sessions, so an in-progress session is never treated
-as a daily close. The calendar library supplies trading-session rules only; yfinance remains the
-sole runtime source of prices, company information, and financial statements.
-The latest accepted date for each security may trail the latest date observed for its JP or U.S.
-market in the same yfinance batch by at most one calendar day, accommodating bounded provider
-publication lag. A larger instrument lag or a market-wide reference more than seven calendar days
-behind the request end is stale. These histories receive `stale_history` and do not contribute to
-price coverage. Because yfinance converts an absent daily volume to zero before returning its frame, a
-zero in a required 20- or 60-session window is conservatively treated as unavailable; affected
-liquidity cells receive `field_absent` instead of using the ambiguous zero.
+Completed objects live below `.marketsieve/market-snapshots/objects/SNAPSHOT_ID`. Their SHA-256
+identity covers assets, configuration, definitions, source evidence, row hashes, market and segment
+summaries, quality, failures, and artifact inventory. Existing objects are verified and never mutated.
 
-An observation preserves the original requested instrument, provider symbol, memberships,
-retrieval time, normalized bars, profile values, financial values, and source evidence hash. The
-imported batch covers every requested instrument, including benchmarks. Request-level and
-field-level failures retain stage, field, and normalized reason.
+`securities.jsonl` is the one-row-per-security authority. `manifest.json`, `definitions.json`,
+`market.json`, `segments.jsonl`, `quality.json`, and `failures.jsonl` are canonical supporting
+evidence. `README.md`, `securities.csv`, `explorer.html`, and `summary.md` are generated in one
+transaction and verified on read. HTML has no CDN or runtime request. CSV preserves missing codes in
+`missing_fields_json`.
 
-## Calculation boundary
+Runs live below `.marketsieve/market-snapshots/runs`. `--resume` accepts only the original request
+fingerprint and local acquisition date. Completed storage verifies the object, atomically publishes
+`latest.json`, and then removes the run. A cleanup failure cannot hide a published object.
 
-The SDK field catalog is common to every row. It describes each name, group, type, unit, source,
-definition, formula, period, and definition version. Price-derived calculations align observations
-by trading date. Returns are simple returns. Volatility uses sample standard deviation of log
-returns annualized by 252. Relative return is the security return minus the matching index return.
-Beta is common-date sample covariance divided by benchmark sample variance.
+`market list`, `market show`, `market query`, `market security`, and `market compare` load verified
+saved evidence only. They do not fetch, recalculate, or persist subsets. `market.json` provides all,
+JP, and U.S. aggregates. `segments.jsonl` provides index, sector, and industry aggregates. README and
+summary explain the contract without prescribing an agent's reasoning or conclusion format.
 
-All numeric serialization follows the existing Decimal policy. A field is valid only when its
-required history and denominator exist. Otherwise the row records one stable missing code such as
-`symbol_not_found`, `history_empty`, `stale_history`, `insufficient_history`, `zero_denominator`,
-`field_absent`, `financials_unavailable`, `corporate_action_mismatch`, `rate_limited`,
-`network_error`, or `provider_error`.
-Values and missing codes are mutually exclusive and exhaustive for the field catalog.
+## Security Research boundary
 
-## Persistence and identity
+Research begins with a security resolved from a verified Market Snapshot. The application requests
+up to ten years of adjusted daily prices, retrieval-time company facts, annual and quarterly
+statements, dividends, splits, and earnings events. Missing values are not imputed; another provider
+is never selected.
 
-Completed objects live below `.marketsieve/matrices/objects/MATRIX_ID`. The semantic identity is a
-SHA-256 over the constituent asset definitions, configuration, field definitions, source version,
-input snapshot ID, canonical row hashes, index summary, and failure records. An existing object is
-verified before reuse and is never mutated.
+Each result lives below `.marketsieve/research/objects/RESEARCH_ID`. `prices.jsonl`,
+`financials.jsonl`, and `events.jsonl` are authoritative time-series evidence. `company.json`,
+`market-context.json`, `definitions.json`, `quality.json`, and `failures.jsonl` describe scope,
+availability, comparison context, and limitations. README, summary, and self-contained HTML are
+verified projections. Publication time is never invented: facts without it are explicitly known
+only at retrieval.
 
-`securities.jsonl` contains authoritative `market-matrix-security/v1` rows. `fields.json`,
-`market-matrix-manifest/v2` `manifest.json`, `missing-reasons.json`, `index-summary.json`, and
-`failures.jsonl` are canonical supporting evidence. `README.md`, `matrix.csv`, `overview.html`, and
-`summary.md` are generated from those structures in the same write transaction. The HTML embeds its styles,
-script, and data; it performs no external request. CSV represents a missing value as an empty cell
-and preserves its code in `missing_fields_json`.
+The pack contains no prompt, reasoning template, score, ranking, recommendation, or agent output.
+External interpretations do not write into immutable evidence. A future MCP adapter is a transport
+over the same application protocols and schemas, not a new domain, source, or persistence path.
 
-The completed manifest retains the exact request fingerprint, acquisition window, selected assets,
-settings, adjustment policy, and source profile before the transient run is removed.
+## Extension isolation
 
-Runs live below `.marketsieve/matrices/runs`. Run initialization atomically exposes a canonical
-request fingerprint before network work. `--resume` accepts only that fingerprint, reuses its
-original date window, and is limited to the original local acquisition date. Every refresh also
-rechecks the local date after acquisition and rejects a run that crossed midnight, so current
-profile and statement values cannot be combined with a price window from another date. Completed
-storage first commits and verifies that request evidence in the immutable object, atomically updates
-the latest reference while the run remains recoverable, and then removes the transient run. A run
-cleanup failure does not invalidate or hide an already published immutable object.
-
-## Offline views and handoff
-
-`matrix show` verifies semantic identity and required projections. `matrix list`, `matrix query`, `matrix row`, and
-`matrix compare` load verified canonical rows only. They neither call a provider nor invoke a
-calculation function. Comparison is an explicit selection of already stored cells and missing codes.
-
-The matrix's `index-summary.json` aggregates overall and per-index coverage, market breadth,
-distributions, market-cap concentration, sector composition, and missingness. `summary.md` renders
-a compact tabular projection without commentary. `README.md` explains file roles, row granularity,
-time, currency, memberships, and missingness. It does not prescribe how an agent must reason or
-format a conclusion. The object has no references outside its own directory.
-
-## Routine analysis and extension isolation
-
-Portfolio, watchlist, daily, weekly, generic snapshot, and experiment services keep their own
-stores and schemas. Routine indicator calculators may reuse SDK primitives, but removed screen,
-single-security inspection, public indicator calculation, and legacy equity comparison entry points
-have no composition-root registration. Existing files from those removed paths are not deleted and
-cannot influence matrix identity or current routine results.
-
-Source plugins are discovered through package metadata. Metadata inspection does not import plugin
-code. A plugin is loaded only for an explicit working capability. The CLI validates imported
-responses against the exact request before persisting any normalized snapshot.
+Plugins are discovered through package metadata and loaded only for an explicit capability. The CLI
+validates imported responses against the exact request before persistence. Removed public analysis
+and screening paths have no composition-root registration and cannot influence current identities.

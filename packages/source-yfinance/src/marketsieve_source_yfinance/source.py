@@ -11,7 +11,7 @@ from collections.abc import Callable, Mapping
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from datetime import UTC, date, datetime, timedelta
 from decimal import ROUND_HALF_EVEN, Decimal, InvalidOperation, localcontext
-from functools import lru_cache
+from functools import lru_cache, partial
 from importlib import metadata
 from itertools import pairwise
 from pathlib import Path
@@ -33,6 +33,10 @@ from marketsieve_extension_api import (
     EquityBatchObservation,
     EquityBatchRequest,
     ImportedEquityBatch,
+    ImportedSecurityResearch,
+    ResearchEvent,
+    ResearchFinancialFact,
+    SecurityResearchRequest,
     SourceDiagnostic,
 )
 
@@ -55,7 +59,7 @@ PRICE_DATA_FIELDS = ("Open", "High", "Low", "Close")
 
 
 class _ProfileAcquisitionCancelled(Exception):
-    """Stop profile work cooperatively after the owning matrix run is interrupted."""
+    """Stop profile work cooperatively after the owning Snapshot run is interrupted."""
 
 
 class _BatchDownloadError(Exception):
@@ -123,6 +127,38 @@ FINANCIAL_FIELDS = {
     "payoutRatio": "payout_ratio",
 }
 PERCENT_POINT_FIELDS = {"debtToEquity"}
+
+RESEARCH_STATEMENT_FIELDS = {
+    "income": {
+        "Total Revenue": "revenue",
+        "Gross Profit": "gross_profit",
+        "Operating Income": "operating_income",
+        "EBITDA": "ebitda",
+        "Pretax Income": "pretax_income",
+        "Net Income": "net_income",
+        "Diluted EPS": "diluted_eps",
+    },
+    "balance_sheet": {
+        "Total Assets": "total_assets",
+        "Current Assets": "current_assets",
+        "Cash Cash Equivalents And Short Term Investments": "cash_and_short_term_investments",
+        "Inventory": "inventory",
+        "Accounts Receivable": "accounts_receivable",
+        "Current Liabilities": "current_liabilities",
+        "Total Debt": "total_debt",
+        "Stockholders Equity": "stockholders_equity",
+    },
+    "cash_flow": {
+        "Operating Cash Flow": "operating_cash_flow",
+        "Capital Expenditure": "capital_expenditure",
+        "Free Cash Flow": "free_cash_flow",
+        "Cash Dividends Paid": "dividends_paid",
+        "Repurchase Of Capital Stock": "share_repurchases",
+        "Issuance Of Capital Stock": "share_issuance",
+        "Issuance Of Debt": "debt_issuance",
+        "Repayment Of Debt": "debt_repayment",
+    },
+}
 
 
 def _canonical_json(value: object) -> bytes:
@@ -476,6 +512,309 @@ class YFinanceSource:
             failures=failures,
             response_hash=_digest(response_document),
         )
+
+    def fetch_research(self, request: SecurityResearchRequest) -> ImportedSecurityResearch:
+        """Fetch one detailed security evidence bundle without provider fallback."""
+
+        item = EquityBatchInstrument(
+            request.instrument,
+            request.provider_symbol,
+            ("research",),
+        )
+        batch_request = EquityBatchRequest(
+            request.source_profile,
+            (item,),
+            request.start,
+            request.end,
+            request.adjustment,
+            1,
+            1,
+            request.timeout_seconds,
+            request.max_retries,
+            request.retry_base_seconds,
+            request.settings,
+        )
+        with _YFINANCE_RUNTIME_LOCK:
+            cache = Path(request.settings.get("cache_dir", ".marketsieve/cache/yfinance"))
+            cache.mkdir(parents=True, exist_ok=True)
+            YFINANCE.set_tz_cache_location(str(cache))
+            version = metadata.version("yfinance")
+            session = _BoundedSession(request.timeout_seconds)
+            hide_exceptions = YFINANCE.config.debug.hide_exceptions
+            YFINANCE.config.debug.hide_exceptions = False
+            failures: list[EquityAcquisitionFailure] = []
+            try:
+                prices, price_failures = self._prices(batch_request, version, session)
+                failures.extend(price_failures)
+                ticker = YFINANCE.Ticker(request.provider_symbol, session=session)
+                info = self._research_attempt(
+                    ticker.get_info, batch_request, failures, request, "company"
+                )
+                frames = {
+                    ("income", period): self._research_attempt(
+                        partial(ticker.get_income_stmt, freq=period),
+                        batch_request,
+                        failures,
+                        request,
+                        f"income_{period}",
+                    )
+                    for period in ("yearly", "quarterly")
+                }
+                frames.update(
+                    {
+                        ("balance_sheet", period): self._research_attempt(
+                            partial(ticker.get_balance_sheet, freq=period),
+                            batch_request,
+                            failures,
+                            request,
+                            f"balance_sheet_{period}",
+                        )
+                        for period in ("yearly", "quarterly")
+                    }
+                )
+                frames.update(
+                    {
+                        ("cash_flow", period): self._research_attempt(
+                            partial(ticker.get_cash_flow, freq=period),
+                            batch_request,
+                            failures,
+                            request,
+                            f"cash_flow_{period}",
+                        )
+                        for period in ("yearly", "quarterly")
+                    }
+                )
+                for (statement, period), frame in frames.items():
+                    if frame is not None and getattr(frame, "empty", True):
+                        failures.append(
+                            EquityAcquisitionFailure(
+                                request.instrument,
+                                "research",
+                                f"{statement}_{period}",
+                                "financials_unavailable",
+                            )
+                        )
+                actions = self._research_attempt(
+                    lambda: ticker.get_actions(period="10y"),
+                    batch_request,
+                    failures,
+                    request,
+                    "actions",
+                )
+                earnings = self._research_attempt(
+                    lambda: ticker.get_earnings_dates(limit=100),
+                    batch_request,
+                    failures,
+                    request,
+                    "earnings",
+                )
+                if earnings is None and not any(
+                    failure.stage == "research" and failure.field == "earnings"
+                    for failure in failures
+                ):
+                    failures.append(
+                        EquityAcquisitionFailure(
+                            request.instrument,
+                            "research",
+                            "earnings",
+                            "field_absent",
+                        )
+                    )
+            finally:
+                YFINANCE.config.debug.hide_exceptions = hide_exceptions
+                session.close()
+        retrieved_at = self._retrieved_at()
+        company_source = info if isinstance(info, Mapping) else {}
+        if not company_source and not any(
+            failure.stage == "research" and failure.field == "company" for failure in failures
+        ):
+            failures.append(
+                EquityAcquisitionFailure(
+                    request.instrument,
+                    "research",
+                    "company",
+                    "provider_error",
+                )
+            )
+        company = tuple(
+            sorted(
+                (
+                    *(
+                        (target, rendered)
+                        for source, target in PROFILE_FIELDS.items()
+                        if (rendered := _text(company_source.get(source))) is not None
+                    ),
+                    *(
+                        (target, rendered)
+                        for source, target in FINANCIAL_FIELDS.items()
+                        if (rendered := _financial_text(source, company_source.get(source)))
+                        is not None
+                    ),
+                )
+            )
+        )
+        financial_currency = _text(company_source.get("financialCurrency"))
+        if financial_currency is None and any(
+            frame is not None and not getattr(frame, "empty", True) for frame in frames.values()
+        ):
+            failures.append(
+                EquityAcquisitionFailure(
+                    request.instrument,
+                    "research",
+                    "financial_currency",
+                    "field_absent",
+                )
+            )
+        financials = (
+            self._research_financials(frames, financial_currency)
+            if financial_currency is not None
+            else ()
+        )
+        events = self._research_events(actions, earnings, request.start, request.end)
+        bars = prices.get((request.instrument.mic, request.instrument.symbol), ())
+        semantic = {
+            "instrument": [request.instrument.mic, request.instrument.symbol],
+            "bars": [
+                [
+                    bar.trading_date.isoformat(),
+                    str(bar.open),
+                    str(bar.high),
+                    str(bar.low),
+                    str(bar.close),
+                    bar.volume,
+                    bar.adjustment.value,
+                ]
+                for bar in bars
+            ],
+            "company": company,
+            "financials": [
+                [
+                    fact.concept,
+                    fact.statement,
+                    fact.period,
+                    fact.fiscal_period_end.isoformat(),
+                    fact.currency,
+                    str(fact.value),
+                ]
+                for fact in financials
+            ],
+            "events": [
+                [event.event_type, event.effective_date.isoformat(), event.values]
+                for event in events
+            ],
+            "failures": [[value.stage, value.field, value.reason] for value in failures],
+        }
+        return ImportedSecurityResearch(
+            request,
+            "yfinance",
+            version,
+            retrieved_at,
+            bars,
+            company,
+            financials,
+            events,
+            tuple(sorted(failures, key=lambda value: (value.stage, value.field, value.reason))),
+            _digest(semantic),
+        )
+
+    def _research_attempt(
+        self,
+        function: Callable[[], Any],
+        batch_request: EquityBatchRequest,
+        failures: list[EquityAcquisitionFailure],
+        request: SecurityResearchRequest,
+        field: str,
+    ) -> Any:
+        try:
+            return self._retry(function, batch_request)
+        except Exception as error:
+            failures.append(
+                EquityAcquisitionFailure(
+                    request.instrument,
+                    "research",
+                    field,
+                    _failure_reason(error),
+                )
+            )
+            return None
+
+    @staticmethod
+    def _research_financials(
+        frames: Mapping[tuple[str, str], Any], currency: str
+    ) -> tuple[ResearchFinancialFact, ...]:
+        facts: list[ResearchFinancialFact] = []
+        for (statement, provider_period), frame in frames.items():
+            if frame is None or getattr(frame, "empty", True):
+                continue
+            period = "annual" if provider_period == "yearly" else "quarterly"
+            for provider_name, concept in RESEARCH_STATEMENT_FIELDS[statement].items():
+                for fiscal_end, value in _statement_series(frame, (provider_name,)):
+                    if value is not None:
+                        facts.append(
+                            ResearchFinancialFact(
+                                concept,
+                                statement,
+                                period,
+                                fiscal_end,
+                                currency,
+                                value,
+                            )
+                        )
+        return tuple(
+            sorted(
+                facts,
+                key=lambda value: (
+                    value.fiscal_period_end,
+                    value.period,
+                    value.statement,
+                    value.concept,
+                ),
+            )
+        )
+
+    @staticmethod
+    def _research_events(
+        actions: Any, earnings: Any, start: date, end: date
+    ) -> tuple[ResearchEvent, ...]:
+        events: list[ResearchEvent] = []
+        if actions is not None and not getattr(actions, "empty", True):
+            for index, row in actions.iterrows():
+                effective = (
+                    index.date() if hasattr(index, "date") else date.fromisoformat(str(index)[:10])
+                )
+                if not start <= effective <= end:
+                    continue
+                dividend = _text(row.get("Dividends"))
+                if dividend is not None and dividend != "0":
+                    dividend_values = [("amount", dividend)]
+                    if (currency := _text(row.get("Dividends FX"))) is not None:
+                        dividend_values.append(("currency", currency))
+                    events.append(
+                        ResearchEvent("dividend", effective, tuple(sorted(dividend_values)))
+                    )
+                split = _text(row.get("Stock Splits"))
+                if split is not None and split != "0":
+                    events.append(ResearchEvent("split", effective, (("ratio", split),)))
+        if earnings is not None and not getattr(earnings, "empty", True):
+            for index, row in earnings.iterrows():
+                effective = (
+                    index.date() if hasattr(index, "date") else date.fromisoformat(str(index)[:10])
+                )
+                if not start <= effective <= end:
+                    continue
+                values = tuple(
+                    sorted(
+                        (target, rendered)
+                        for source, target in (
+                            ("EPS Estimate", "estimated_eps"),
+                            ("Reported EPS", "reported_eps"),
+                            ("Surprise(%)", "surprise_percent"),
+                        )
+                        if (rendered := _text(row.get(source))) is not None
+                    )
+                )
+                events.append(ResearchEvent("earnings", effective, values))
+        return tuple(sorted(events, key=lambda value: (value.effective_date, value.event_type)))
 
     def _prices(
         self, request: EquityBatchRequest, version: str, session: Session[Response]

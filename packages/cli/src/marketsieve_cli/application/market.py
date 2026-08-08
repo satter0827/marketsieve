@@ -1,4 +1,4 @@
-"""Broad yfinance market-matrix orchestration."""
+"""Broad yfinance Market Snapshot orchestration."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ from marketsieve.matrix import (
     build_matrix_row,
     field_definitions,
 )
-from marketsieve_cli.contracts import MatrixConfiguration
+from marketsieve_cli.contracts import MarketConfiguration
 from marketsieve_extension_api import (
     EquityAcquisitionFailure,
     EquityBatchFetcher,
@@ -31,15 +31,15 @@ from marketsieve_extension_api import (
 
 
 class ConfigurationReader(Protocol):
-    def matrix_configuration(self) -> MatrixConfiguration: ...
+    def market_configuration(self) -> MarketConfiguration: ...
 
 
 class BatchRegistry(Protocol):
     def load_equity_batch_fetcher(self, name: str) -> EquityBatchFetcher: ...
 
 
-class MatrixRepository(Protocol):
-    """Persistence boundary required by the matrix application service."""
+class MarketSnapshotRepository(Protocol):
+    """Persistence boundary required by the Market Snapshot service."""
 
     def run_request(self, run_id: str) -> dict[str, Any]: ...
 
@@ -62,19 +62,19 @@ class MatrixRepository(Protocol):
         failures: tuple[dict[str, str], ...],
     ) -> dict[str, Any]: ...
 
-    def show(self, matrix_id: str) -> dict[str, Any]: ...
+    def show(self, snapshot_id: str) -> dict[str, Any]: ...
 
     def list(self) -> dict[str, Any]: ...
 
-    def row(self, matrix_id: str, instrument_id: str) -> dict[str, Any]: ...
+    def row(self, snapshot_id: str, instrument_id: str) -> dict[str, Any]: ...
 
     def compare(
-        self, matrix_id: str, instrument_ids: tuple[str, ...], fields: tuple[str, ...]
+        self, snapshot_id: str, instrument_ids: tuple[str, ...], fields: tuple[str, ...]
     ) -> dict[str, Any]: ...
 
     def query(
         self,
-        matrix_id: str,
+        snapshot_id: str,
         *,
         filters: dict[str, tuple[str, ...]],
         minimums: dict[str, Decimal],
@@ -84,14 +84,16 @@ class MatrixRepository(Protocol):
         fields: tuple[str, ...],
     ) -> dict[str, Any]: ...
 
+    def research_context(self, snapshot_id: str, instrument_id: str) -> dict[str, Any]: ...
 
-class MatrixService:
-    """Acquire one complete fixed universe and persist its derived matrix."""
+
+class MarketService:
+    """Acquire one complete fixed universe and persist a Market Snapshot."""
 
     def __init__(
         self,
         registry: BatchRegistry,
-        store: MatrixRepository,
+        store: MarketSnapshotRepository,
         configuration: ConfigurationReader,
         *,
         today: Callable[[], date] = date.today,
@@ -102,7 +104,7 @@ class MatrixService:
         self._today = today
 
     def refresh(self, *, resume: str | None = None) -> dict[str, Any]:
-        configuration = self._configuration.matrix_configuration()
+        configuration = self._configuration.market_configuration()
         universe, assets = _load_universe(configuration.indices)
         benchmark_seeds = _benchmark_seeds(configuration.indices)
         requested = tuple(sorted((*universe, *benchmark_seeds), key=_seed_key))
@@ -116,21 +118,21 @@ class MatrixService:
                 start = date.fromisoformat(str(stored_request["start"]))
                 end = date.fromisoformat(str(stored_request["end"]))
             except (KeyError, TypeError, ValueError) as error:
-                raise ValueError("stored matrix run has an invalid date window") from error
+                raise ValueError("stored market snapshot run has an invalid date window") from error
             if end != acquisition_date:
                 raise ValueError(
-                    "matrix runs can be resumed only on their original acquisition date; "
+                    "market snapshot runs can be resumed only on their original acquisition date; "
                     "start a new refresh"
                 )
         fingerprint_document = {
-            "schema": "market-matrix-request/v1",
+            "schema": "market-snapshot-request/v1",
             "indices": list(configuration.indices),
             "assets": assets,
             "start": start.isoformat(),
             "end": end.isoformat(),
             "adjustment": Adjustment.ADJUSTED.value,
             "settings": _configuration_document(configuration),
-            "source": {"name": "yfinance", "profile": "matrix-yfinance"},
+            "source": {"name": "yfinance", "profile": "market-yfinance"},
         }
         fingerprint = hashlib.sha256(_json_bytes(fingerprint_document)).hexdigest()
         run_id = self._store.begin_run(
@@ -139,7 +141,7 @@ class MatrixService:
             resume=resume,
         )
         request = EquityBatchRequest(
-            source_profile="matrix-yfinance",
+            source_profile="market-yfinance",
             instruments=requested,
             start=start,
             end=end,
@@ -157,10 +159,10 @@ class MatrixService:
             raise RuntimeError(diagnostic.message)
         imported = fetcher.fetch(request)
         if imported.request != request:
-            raise ValueError("source fetch result must preserve the exact matrix request")
+            raise ValueError("source fetch result must preserve the exact market request")
         if self._today() != acquisition_date:
             raise ValueError(
-                "matrix acquisition crossed the local date boundary; start a new refresh"
+                "market acquisition crossed the local date boundary; start a new refresh"
             )
         benchmark_ids = {
             seed.provider_symbol: (seed.instrument.mic, seed.instrument.symbol)
@@ -250,7 +252,7 @@ class MatrixService:
             "field_count": len(field_definitions()),
             "failure_count": len(failures),
             "coverage": summary["coverage"],
-            "quality_status": summary["quality_status"],
+            "price_requirements_met": summary["price_requirements_met"],
         }
         return self._store.put(
             run_id=run_id,
@@ -261,27 +263,27 @@ class MatrixService:
             failures=failures,
         )
 
-    def show(self, matrix_id: str) -> dict[str, Any]:
-        return self._store.show(matrix_id)
+    def show(self, snapshot_id: str) -> dict[str, Any]:
+        return self._store.show(snapshot_id)
 
     def list(self) -> dict[str, Any]:
         return self._store.list()
 
-    def row(self, matrix_id: str, instrument_id: str) -> dict[str, Any]:
-        return self._store.row(matrix_id, instrument_id)
+    def row(self, snapshot_id: str, instrument_id: str) -> dict[str, Any]:
+        return self._store.row(snapshot_id, instrument_id)
 
     def compare(
-        self, matrix_id: str, instrument_ids: tuple[str, ...], fields: tuple[str, ...]
+        self, snapshot_id: str, instrument_ids: tuple[str, ...], fields: tuple[str, ...]
     ) -> dict[str, Any]:
         if len(instrument_ids) < 2:
-            raise ValueError("matrix compare requires at least two instruments")
+            raise ValueError("market snapshot compare requires at least two instruments")
         if len(instrument_ids) != len(set(instrument_ids)):
-            raise ValueError("matrix compare instruments must be unique")
-        return self._store.compare(matrix_id, instrument_ids, fields)
+            raise ValueError("market snapshot compare instruments must be unique")
+        return self._store.compare(snapshot_id, instrument_ids, fields)
 
     def query(
         self,
-        matrix_id: str,
+        snapshot_id: str,
         *,
         filters: dict[str, tuple[str, ...]],
         minimums: dict[str, Decimal],
@@ -291,7 +293,7 @@ class MatrixService:
         fields: tuple[str, ...],
     ) -> dict[str, Any]:
         return self._store.query(
-            matrix_id,
+            snapshot_id,
             filters=filters,
             minimums=minimums,
             maximums=maximums,
@@ -299,6 +301,9 @@ class MatrixService:
             missing=missing,
             fields=fields,
         )
+
+    def research_context(self, snapshot_id: str, instrument_id: str) -> dict[str, Any]:
+        return self._store.research_context(snapshot_id, instrument_id)
 
 
 def _json_bytes(value: object) -> bytes:
@@ -561,7 +566,7 @@ def _benchmark_seeds(indices: tuple[str, ...]) -> tuple[EquityBatchInstrument, .
     )
 
 
-def _configuration_document(configuration: MatrixConfiguration) -> dict[str, Any]:
+def _configuration_document(configuration: MarketConfiguration) -> dict[str, Any]:
     return {
         "indices": list(configuration.indices),
         "history_days": configuration.history_days,
@@ -622,7 +627,7 @@ def _ratio_text(numerator: Decimal, denominator: Decimal) -> str | None:
 
 def _summary(
     rows: tuple[MatrixRow, ...],
-    configuration: MatrixConfiguration,
+    configuration: MarketConfiguration,
     retrieved_at: datetime,
 ) -> dict[str, Any]:
     with localcontext(CONTEXT):
@@ -631,16 +636,32 @@ def _summary(
 
 def _build_summary(
     rows: tuple[MatrixRow, ...],
-    configuration: MatrixConfiguration,
+    configuration: MarketConfiguration,
     retrieved_at: datetime,
 ) -> dict[str, Any]:
     groups: dict[str, tuple[MatrixRow, ...]] = {
         "all": rows,
         **{
-            index: tuple(row for row in rows if index in row.security.memberships)
+            f"index:{index}": tuple(row for row in rows if index in row.security.memberships)
             for index in configuration.indices
         },
     }
+    groups["market:jp"] = tuple(row for row in rows if row.security.instrument.mic == "XTKS")
+    groups["market:us"] = tuple(row for row in rows if row.security.instrument.mic != "XTKS")
+    for classification_field, prefix in (("sector", "sector"), ("industry", "industry")):
+        classification_values = sorted(
+            {
+                classification_value
+                for row in rows
+                if (classification_value := dict(row.values).get(classification_field)) is not None
+            }
+        )
+        for classification_value in classification_values:
+            groups[f"{prefix}:{classification_value}"] = tuple(
+                row
+                for row in rows
+                if dict(row.values).get(classification_field) == classification_value
+            )
     documents: dict[str, Any] = {}
     for name, selected in groups.items():
         present = [row for row in selected if "close" in dict(row.values)]
@@ -685,12 +706,12 @@ def _build_summary(
             for currency, values in market_caps_by_currency.items()
         }
         concentration_by_currency = {}
-        for currency, values in sorted(market_caps_by_currency.items()):
+        for currency, market_caps in sorted(market_caps_by_currency.items()):
             total = currency_totals[currency]
             concentration_by_currency[currency] = {
-                "market_cap_observation_count": len(values),
+                "market_cap_observation_count": len(market_caps),
                 "top_10_market_cap_share": _ratio_text(
-                    sum(sorted(values, reverse=True)[:10], start=Decimal(0)), total
+                    sum(sorted(market_caps, reverse=True)[:10], start=Decimal(0)), total
                 )
                 if total > 0
                 else None,
@@ -717,6 +738,14 @@ def _build_summary(
         documents[name] = {
             "security_count": len(selected),
             "price_count": len(present),
+            "latest_price_date": max(
+                (
+                    latest_price_date
+                    for row in present
+                    if (latest_price_date := dict(row.values).get("price_as_of")) is not None
+                ),
+                default=None,
+            ),
             "price_coverage": _ratio_text(Decimal(len(present)), Decimal(len(selected)))
             if selected
             else "0",
@@ -796,13 +825,14 @@ def _build_summary(
         }
     overall = Decimal(documents["all"]["price_coverage"])
     index_coverages = {
-        index: Decimal(documents[index]["price_coverage"]) for index in configuration.indices
+        index: Decimal(documents[f"index:{index}"]["price_coverage"])
+        for index in configuration.indices
     }
     meets = overall >= configuration.minimum_overall_price_coverage and all(
         value >= configuration.minimum_index_price_coverage for value in index_coverages.values()
     )
     return {
-        "schema": "market-matrix-summary/v1",
+        "schema": "market-snapshot-summary/v1",
         "generated_at": retrieved_at.isoformat(),
         "coverage": {
             "overall": canonical_decimal(overall),
@@ -810,7 +840,7 @@ def _build_summary(
                 key: canonical_decimal(value) for key, value in sorted(index_coverages.items())
             },
         },
-        "quality_status": "ready" if meets else "partial",
+        "price_requirements_met": meets,
         "groups": documents,
     }
 
@@ -832,7 +862,12 @@ def _failures(
     for row in rows:
         instrument_id = f"{row.security.instrument.mic}:{row.security.instrument.symbol}"
         output.extend(
-            {"instrument_id": instrument_id, "stage": "matrix", "field": field, "reason": reason}
+            {
+                "instrument_id": instrument_id,
+                "stage": "calculation",
+                "field": field,
+                "reason": reason,
+            }
             for field, reason in row.missing
             if reason != "not_applicable"
         )

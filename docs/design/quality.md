@@ -1,41 +1,36 @@
 # Quality
 
-## Matrix acceptance
+## Market Snapshot acceptance
 
-Synthetic calculation tests cover minimum observations, boundary windows, zero denominators, date
-alignment, missing benchmarks, overlapping memberships, and deterministic content identity. Every
-defined field must be present in exactly one of a row's value or missing maps.
+Synthetic tests cover observation windows, zero denominators, date alignment, missing benchmarks,
+overlapping memberships, and deterministic identity. Every defined field exists in exactly one of a
+security's value or missing maps.
 
-Adapter contract tests mock multi-symbol price DataFrames, company information, financial
-statements, empty responses, rate limits, retries, and partial failures. A separately marked live
-smoke selects Japanese and U.S. securities plus all five benchmarks and runs only when explicitly
-enabled.
+Adapter tests mock multi-symbol prices, company information, statements, empty responses, rate
+limits, retries, and partial failures. Explicit live smoke tests cover Japanese and U.S. securities
+plus fixed benchmarks only when enabled.
 
-Integration tests verify:
+Integration tests verify one row per constituent, JSONL/CSV agreement, missing-code preservation,
+self-contained HTML, separated definitions and quality, neutral summaries, resume enforcement,
+history and offline filters, TOPIX proxy identity, split consistency, schemas, removed command
+absence, and no Excel output.
 
-- one row per unique constituent and one common field catalog;
-- JSONL and CSV row and value agreement;
-- empty CSV cells plus `missing_fields_json` reason preservation;
-- self-contained HTML with all fields and no external resource;
-- a self-contained artifact catalog, missing-reason classifications, and neutral Markdown summary;
-- stable missing codes, resume fingerprint enforcement, and schema validation;
-- deterministic history listing and offline query, row, and comparison reads;
-- TOPIX ETF proxy identity and adjusted-price stock-split consistency checks;
-- absence of removed screen, inspect, indicator-analysis, and old comparison commands;
-- absence of `.xlsx` and other Excel outputs.
+## Security Research acceptance
+
+Contract tests cover request bounds, normalized company values, annual and quarterly facts, price
+history, events, partial failures, and response identity. Repository tests verify complete artifact
+inventory, canonical JSON/JSONL, Snapshot context, deterministic identity, projection tamper
+detection, offline history, exact latest selection, schemas, and no Excel output.
 
 ## Data quality
 
-Readiness is a quality observation, not a license to discard rows. All constituent rows remain in a
-partial matrix. Overall and per-index price coverage are calculated from explicit price success,
-while field- and reason-level missing counts expose financial and classification limitations.
-
-The index summary and Markdown projection report only reproducible aggregate statistics. External
-interpretation does not become matrix state, and missingness or outliers are never silently corrected.
+Readiness does not discard rows. Overall and per-index coverage come from explicit price success.
+Field-group coverage and reason counts expose limitations. Retrieval-time facts are not presented as
+historical knowledge. External interpretation never becomes evidence state, and missing values or
+outliers are never silently corrected.
 
 ## Repository acceptance
 
-The complete gate runs formatter check, lint, strict type checking, import-boundary validation,
-structure tests, the full test suite with at least 90% line coverage, schema validation, reproducible
-offline smoke checks, secret scanning, package builds, isolated installation, and external plugin
-compatibility checks.
+The complete gate runs formatting, lint, strict type checks, import-boundary validation, structure
+tests, at least 90% line coverage, schemas, reproducible offline smoke checks, secret scanning,
+package builds, isolated installation, and external plugin compatibility checks.

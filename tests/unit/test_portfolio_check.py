@@ -18,7 +18,7 @@ def test_portfolio_readiness_accepts_an_empty_portfolio_and_watchlist() -> None:
     assert supported_markets({"holdings": []}, {"items": []}) == frozenset()
 
 
-def test_empty_portfolio_guidance_uses_current_matrix_and_watchlist_launches(
+def test_empty_portfolio_guidance_uses_current_market_and_watchlist_tasks(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     monkeypatch.setattr(portfolio_check, "read_portfolio", lambda: {"holdings": []})
@@ -28,8 +28,8 @@ def test_empty_portfolio_guidance_uses_current_matrix_and_watchlist_launches(
 
     assert portfolio_check.main() == 0
     output = capsys.readouterr().out
-    assert "10 Market Matrix: Refresh All Indices (Network)" in output
-    assert "30 Watchlist: Add Instrument" in output
+    assert "Market: Refresh Snapshot (Network)" in output
+    assert "Watchlist: Add" in output
     assert "Discovery" not in output
 
 

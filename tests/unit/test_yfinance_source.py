@@ -15,7 +15,11 @@ from curl_cffi.requests import Session
 
 from marketsieve.data.daily import Adjustment
 from marketsieve.domain import Instrument
-from marketsieve_extension_api import EquityBatchInstrument, EquityBatchRequest
+from marketsieve_extension_api import (
+    EquityBatchInstrument,
+    EquityBatchRequest,
+    SecurityResearchRequest,
+)
 from marketsieve_source_yfinance import YFinanceSource
 from marketsieve_source_yfinance import source as source_module
 
@@ -38,7 +42,7 @@ def _instrument(
 def _request(*items: EquityBatchInstrument) -> EquityBatchRequest:
     instruments = items or (EquityBatchInstrument(_instrument(), "MSFT", ("sp500",)),)
     return EquityBatchRequest(
-        "matrix-yfinance",
+        "market-yfinance",
         tuple(
             sorted(instruments, key=lambda value: (value.instrument.mic, value.instrument.symbol))
         ),
@@ -113,25 +117,43 @@ class _Ticker:
         )
 
     def get_balance_sheet(self, *, freq: str) -> pd.DataFrame:
-        assert freq == "quarterly"
+        assert freq in {"yearly", "quarterly"}
         return _statement(
             {
                 "TotalAssets": [500, 480, 460, 440],
                 "StockholdersEquity": [300, 280, 260, 240],
                 "TotalDebt": [50, 55, 60, 65],
             },
-            quarterly=True,
+            quarterly=freq == "quarterly",
         )
 
     def get_cash_flow(self, *, freq: str) -> pd.DataFrame:
-        assert freq == "quarterly"
+        assert freq in {"yearly", "quarterly"}
         return _statement(
             {
                 "OperatingCashFlow": [45, 40, 35, 30],
                 "CapitalExpenditure": [-10, -9, -8, -7],
                 "FreeCashFlow": [35, 31, 27, 23],
             },
-            quarterly=True,
+            quarterly=freq == "quarterly",
+        )
+
+    def get_actions(self, *, period: str) -> pd.DataFrame:
+        assert period == "10y"
+        return pd.DataFrame(
+            {"Dividends": [Decimal("0.75")], "Stock Splits": [0]},
+            index=pd.to_datetime(["2026-08-04"]),
+        )
+
+    def get_earnings_dates(self, *, limit: int) -> pd.DataFrame:
+        assert limit == 100
+        return pd.DataFrame(
+            {
+                "EPS Estimate": [Decimal("2.9")],
+                "Reported EPS": [Decimal("3.1")],
+                "Surprise(%)": [Decimal("6.9")],
+            },
+            index=pd.to_datetime(["2026-08-05"]),
         )
 
 
@@ -170,6 +192,224 @@ def test_yfinance_source_fetches_adjusted_batches_profiles_and_statements(
     assert financials["dividend_yield"] == "0.0075"
     assert financials["revenue_ttm"] == "520"
     assert float(financials["revenue_cagr_3y"]) == pytest.approx(0.169607, rel=1e-5)
+
+
+def test_yfinance_source_fetches_detailed_security_research(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        source_module.YFINANCE,
+        "download",
+        lambda symbols, **kwargs: _history(tuple(symbols)),
+    )
+    monkeypatch.setattr(source_module.YFINANCE, "Ticker", _Ticker)
+    monkeypatch.setattr(source_module.YFINANCE, "set_tz_cache_location", lambda value: None)
+    request = SecurityResearchRequest(
+        "market-yfinance",
+        _instrument(),
+        "MSFT",
+        date(2023, 8, 8),
+        date(2026, 8, 7),
+        Adjustment.ADJUSTED,
+        30,
+        3,
+        0.0,
+        {"cache_dir": str(tmp_path / "cache")},
+    )
+
+    imported = YFinanceSource().fetch_research(request)
+
+    assert imported.request == request
+    assert len(imported.bars) == 3
+    assert dict(imported.company)["name"] == "Microsoft"
+    assert dict(imported.company)["debt_to_equity"] == "0.29118"
+    assert {fact.period for fact in imported.financials} == {"annual", "quarterly"}
+    assert {fact.concept for fact in imported.financials} >= {
+        "revenue",
+        "total_assets",
+        "free_cash_flow",
+    }
+    assert {(event.event_type, event.effective_date) for event in imported.events} == {
+        ("dividend", date(2026, 8, 4)),
+        ("earnings", date(2026, 8, 5)),
+    }
+    assert imported.failures == ()
+
+
+def test_yfinance_research_preserves_financial_and_dividend_currencies(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    class CrossCurrencyTicker(_Ticker):
+        def get_info(self) -> dict[str, Any]:
+            info = super().get_info()
+            info["financialCurrency"] = "EUR"
+            return info
+
+        def get_actions(self, *, period: str) -> pd.DataFrame:
+            assert period == "10y"
+            return pd.DataFrame(
+                {
+                    "Dividends": [Decimal("0.75")],
+                    "Dividends FX": ["GBP"],
+                    "Stock Splits": [0],
+                },
+                index=pd.to_datetime(["2026-08-04"]),
+            )
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        source_module.YFINANCE,
+        "download",
+        lambda symbols, **kwargs: _history(tuple(symbols)),
+    )
+    monkeypatch.setattr(source_module.YFINANCE, "Ticker", CrossCurrencyTicker)
+    monkeypatch.setattr(source_module.YFINANCE, "set_tz_cache_location", lambda value: None)
+    request = SecurityResearchRequest(
+        "market-yfinance",
+        _instrument(),
+        "MSFT",
+        date(2023, 8, 8),
+        date(2026, 8, 7),
+        Adjustment.ADJUSTED,
+        30,
+        3,
+        0.0,
+        {"cache_dir": str(tmp_path / "cache")},
+    )
+
+    imported = YFinanceSource().fetch_research(request)
+
+    assert {fact.currency for fact in imported.financials} == {"EUR"}
+    dividend = next(event for event in imported.events if event.event_type == "dividend")
+    assert dict(dividend.values) == {"amount": "0.75", "currency": "GBP"}
+
+
+def test_yfinance_research_records_an_empty_company_response(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    class EmptyInfoTicker(_Ticker):
+        def get_info(self) -> dict[str, Any]:
+            return {}
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        source_module.YFINANCE,
+        "download",
+        lambda symbols, **kwargs: _history(tuple(symbols)),
+    )
+    monkeypatch.setattr(source_module.YFINANCE, "Ticker", EmptyInfoTicker)
+    monkeypatch.setattr(source_module.YFINANCE, "set_tz_cache_location", lambda value: None)
+    request = SecurityResearchRequest(
+        "market-yfinance",
+        _instrument(),
+        "MSFT",
+        date(2023, 8, 8),
+        date(2026, 8, 7),
+        Adjustment.ADJUSTED,
+        30,
+        3,
+        0.0,
+        {"cache_dir": str(tmp_path / "cache")},
+    )
+
+    imported = YFinanceSource().fetch_research(request)
+
+    assert imported.company == ()
+    assert any(
+        failure.stage == "research"
+        and failure.field == "company"
+        and failure.reason == "provider_error"
+        for failure in imported.failures
+    )
+    assert imported.financials == ()
+    assert any(
+        failure.stage == "research"
+        and failure.field == "financial_currency"
+        and failure.reason == "field_absent"
+        for failure in imported.failures
+    )
+
+
+def test_yfinance_research_does_not_duplicate_a_failed_company_request(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    class BrokenInfoTicker(_Ticker):
+        def get_info(self) -> dict[str, Any]:
+            raise TimeoutError("connection timed out")
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        source_module.YFINANCE,
+        "download",
+        lambda symbols, **kwargs: _history(tuple(symbols)),
+    )
+    monkeypatch.setattr(source_module.YFINANCE, "Ticker", BrokenInfoTicker)
+    monkeypatch.setattr(source_module.YFINANCE, "set_tz_cache_location", lambda value: None)
+    request = SecurityResearchRequest(
+        "market-yfinance",
+        _instrument(),
+        "MSFT",
+        date(2023, 8, 8),
+        date(2026, 8, 7),
+        Adjustment.ADJUSTED,
+        30,
+        1,
+        0.0,
+        {"cache_dir": str(tmp_path / "cache")},
+    )
+
+    imported = YFinanceSource().fetch_research(request)
+    company_failures = [failure for failure in imported.failures if failure.field == "company"]
+
+    assert len(company_failures) == 1
+    assert company_failures[0].reason == "network_error"
+
+
+def test_yfinance_research_records_unavailable_earnings(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    class NoEarningsTicker(_Ticker):
+        def get_earnings_dates(self, *, limit: int) -> Any:
+            assert limit == 100
+            return None
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        source_module.YFINANCE,
+        "download",
+        lambda symbols, **kwargs: _history(tuple(symbols)),
+    )
+    monkeypatch.setattr(source_module.YFINANCE, "Ticker", NoEarningsTicker)
+    monkeypatch.setattr(source_module.YFINANCE, "set_tz_cache_location", lambda value: None)
+    request = SecurityResearchRequest(
+        "market-yfinance",
+        _instrument(),
+        "MSFT",
+        date(2023, 8, 8),
+        date(2026, 8, 7),
+        Adjustment.ADJUSTED,
+        30,
+        1,
+        0.0,
+        {"cache_dir": str(tmp_path / "cache")},
+    )
+
+    imported = YFinanceSource().fetch_research(request)
+
+    assert any(
+        failure.field == "earnings" and failure.reason == "field_absent"
+        for failure in imported.failures
+    )
+    assert not any(event.event_type == "earnings" for event in imported.events)
+
+
+def test_yfinance_research_does_not_label_share_counts_as_currency() -> None:
+    frame = _statement({"Ordinary Shares Number": [100, 90, 80, 70]})
+
+    facts = YFinanceSource._research_financials({("balance_sheet", "yearly"): frame}, "USD")
+
+    assert not any(fact.concept == "shares_outstanding" for fact in facts)
 
 
 @pytest.mark.parametrize(
