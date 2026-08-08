@@ -35,22 +35,27 @@ QUERY_DOMAINS = (
     "quality",
 )
 COMMAND_CAPABILITIES = (
-    ("market build", "market-snapshot/v7", True, ("market_snapshot",)),
-    ("market capture", "market-snapshot/v7", True, ("market_snapshot", "capture_run")),
-    ("market reconstruct", "market-snapshot/v7", True, ("market_snapshot", "capture_run")),
-    ("market list", "market-snapshot-list/v2", False, ()),
-    ("market show", "market-snapshot/v7", False, ()),
-    ("market query", "market-snapshot-query-result/v2", False, ()),
+    ("market build", "market-snapshot/v8", True, ("market_snapshot", "operation_run")),
+    ("market capture", "market-snapshot/v8", True, ("market_snapshot", "operation_run")),
+    ("market reconstruct", "market-snapshot/v8", True, ("market_snapshot", "operation_run")),
+    ("market list", "market-snapshot-list/v3", False, ()),
+    ("market show", "market-snapshot/v8", False, ()),
+    ("market query", "market-snapshot-query-result/v3", False, ()),
     ("market security", "market-snapshot-security-result/v1", False, ()),
-    ("market compare", "market-snapshot-comparison/v2", False, ()),
+    ("market compare", "market-snapshot-comparison/v3", False, ()),
     ("market diff", "market-snapshot-diff/v1", False, ()),
-    ("market serve", "interactive-preview/v1", False, ()),
-    ("research build", "security-research-batch/v1", True, ("security_research",)),
-    ("research list", "security-research-list/v2", False, ()),
-    ("research show", "security-research/v6", False, ()),
-    ("research serve", "interactive-preview/v1", False, ()),
+    ("research build", "security-research-batch/v1", True, ("security_research", "operation_run")),
+    ("research list", "security-research-list/v3", False, ()),
+    ("research show", "security-research/v8", False, ()),
+    ("preview", "interactive-preview/v2", False, ()),
+    ("artifacts list", "artifact-list/v1", False, ()),
+    ("artifacts doctor", "artifact-doctor/v1", False, ()),
+    ("run list", "operation-run-list/v1", False, ()),
+    ("run show", "operation-run/v1", False, ()),
+    ("run events", "operation-events/v1", False, ()),
+    ("run prune", "operation-prune/v1", False, ("operation_run",)),
     ("doctor", "doctor-result/v1", False, ("log_file",)),
-    ("capabilities", "capabilities-result/v8", False, ()),
+    ("capabilities", "capabilities-result/v10", False, ()),
 )
 
 
@@ -58,7 +63,7 @@ def capabilities_document(version: str) -> dict[str, object]:
     """Return the transport-independent public operation contract."""
 
     return {
-        "schema": "capabilities-result/v8",
+        "schema": "capabilities-result/v10",
         "version": version,
         "commands": [
             {
@@ -178,6 +183,7 @@ class MarketQueryInputs:
     budget: Decimal | None = None
     budget_currency: str | None = None
     trading_unit: int | None = None
+    use_snapshot_fx: bool = False
 
     def __post_init__(self) -> None:
         if not self.snapshot_id:
@@ -196,6 +202,8 @@ class MarketQueryInputs:
             raise ValueError("market query budget and currency must be provided together")
         if self.trading_unit is not None and self.trading_unit <= 0:
             raise ValueError("market query trading unit must be positive")
+        if self.use_snapshot_fx and self.budget is None:
+            raise ValueError("snapshot FX requires a budget")
 
 
 @dataclass(frozen=True, slots=True)
@@ -222,15 +230,3 @@ class MarketDiffInputs:
     def __post_init__(self) -> None:
         if not self.left_snapshot_id or not self.right_snapshot_id:
             raise ValueError("market diff snapshot IDs are required")
-
-
-@dataclass(frozen=True, slots=True)
-class PreviewInputs:
-    object_id: str
-    port: int = 0
-
-    def __post_init__(self) -> None:
-        if not self.object_id:
-            raise ValueError("preview object ID is required")
-        if not 0 <= self.port <= 65535:
-            raise ValueError("preview port must be from 0 through 65535")

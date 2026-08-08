@@ -21,13 +21,18 @@ Every network run receives its analytical scope through CLI arguments. Optional
 Snapshots are stored under `.marketsieve/market-snapshots/objects/SNAPSHOT_ID/`. The authoritative
 files are JSON and JSONL. `explorer-data.json` is the deterministic view contract;
 `summary.md` and `explorer.html` are human views. The Explorer is self-contained at the object-folder
-level and reads the same canonical files through the loopback-only `serve` command.
+level and reads the same canonical files through the loopback-only `marketsieve preview` command.
 Research packs are stored under `.marketsieve/research/objects/RESEARCH_ID/` and remain tied to the
-source Snapshot. Research Explorer reads the pack's authoritative files over `research serve`,
+source Snapshot. Research Explorer reads the pack's authoritative files over `preview`,
 offers 3-month through full-history views, and preserves independent acquisition states for each
 evidence domain. No Excel or CSV artifact is generated.
 
-The public CLI is intentionally small: `market`, `research`, `doctor`, and `capabilities`. Portfolio,
+Generation creates structured history under `.marketsieve/operations/runs/`. Use
+`marketsieve artifacts doctor --output json` to distinguish current, incompatible, corrupt, and
+orphan objects without allowing one damaged object to break the inventory.
+
+The public CLI is intentionally small: `market`, `research`, `preview`, `artifacts`, `run`,
+`doctor`, and `capabilities`. Portfolio,
 watchlist, routine report, generic source, generic snapshot, and experiment workflows are not part
 of the product.
 

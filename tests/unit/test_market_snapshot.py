@@ -30,6 +30,8 @@ from marketsieve_extension_api import (
     EquityBatchObservation,
     EquityBatchRequest,
     ImportedEquityBatch,
+    ImportedMarketIndicators,
+    MarketIndicatorObservation,
     SourceDiagnostic,
 )
 
@@ -142,12 +144,26 @@ def _store(tmp_path: Path, offset: int = 0) -> tuple[MarketSnapshotStore, dict[s
             "field_count": len(field_definitions()),
             "failure_count": len(failures),
             "coverage": summary["coverage"],
-            "price_requirements_met": summary["price_requirements_met"],
+            "price_coverage_gate_passed": summary["price_requirements_met"],
         },
         fields=field_definitions(),
         rows=rows,
         summary=summary,
         failures=failures,
+        market_indicators=(
+            {
+                "schema": "market-indicator/v2",
+                "indicator_id": "usd_jpy",
+                "provider_symbol": "JPY=X",
+                "name": "USD/JPY",
+                "kind": "fx_rate",
+                "unit": "JPY_per_USD",
+                "retrieved_at": "2026-08-08T00:00:00+00:00",
+                "observations": [{"date": "2026-08-08", "value": "150"}],
+                "missing_reason": None,
+                "not_applicable": ["volume_metrics"],
+            },
+        ),
     )
     return store, document
 
@@ -156,7 +172,7 @@ def test_snapshot_is_self_contained_without_spreadsheets(tmp_path: Path) -> None
     store, document = _store(tmp_path)
     root = Path(document["artifacts"]["manifest.json"]).parent
 
-    assert document["schema"] == "market-snapshot/v7"
+    assert document["schema"] == "market-snapshot/v8"
     assert set(path.name for path in root.iterdir()) == set(document["artifacts"])
     assert (root / "aggregates.jsonl").is_file()
     assert not list(root.glob("*.csv"))
@@ -170,7 +186,7 @@ def test_snapshot_is_self_contained_without_spreadsheets(tmp_path: Path) -> None
     assert "Math.floor(i/2)" not in html
     assert 'return`<span class="meta"' not in html
     explorer_data = json.loads((root / "explorer-data.json").read_text())
-    assert explorer_data["schema"] == "explorer-data/v2"
+    assert explorer_data["schema"] == "explorer-data/v4"
     assert "securities" not in explorer_data
     assert {view["section"] for view in explorer_data["views"]} >= {
         "overview",
@@ -184,18 +200,18 @@ def test_snapshot_is_self_contained_without_spreadsheets(tmp_path: Path) -> None
     assert len((root / "explorer-data.json").read_bytes()) < 100_000
     assert len((root / "explorer.html").read_bytes()) < 100_000
     explorer_schema = json.loads(
-        (Path(__file__).parents[2] / "schemas/explorer-data/v2/schema.json").read_text()
+        (Path(__file__).parents[2] / "schemas/explorer-data/v4/schema.json").read_text()
     )
     Draft202012Validator(explorer_schema).validate(explorer_data)
-    quality = json.loads((root / "quality.json").read_text())
-    assert quality["schema"] == "market-snapshot-quality/v3"
+    quality = json.loads((root / "quality-summary.json").read_text())
+    assert quality["schema"] == "market-snapshot-quality-summary/v4"
     assert quality["failures"]["record_count"] == document["failure_count"]
     assert quality["freshness"]["price_age_days"]["observation_count"] == 2
     definitions = json.loads((root / "definitions.json").read_text())
     units = {field["name"]: field["unit"] for field in definitions["fields"]}
     assert units["position_52w"] == "bounded_ratio"
     assert units["trailing_pe"] == "multiple"
-    assert store.list()["schema"] == "market-snapshot-list/v2"
+    assert store.list()["schema"] == "market-snapshot-list/v3"
     assert (
         store.query(
             "latest",
@@ -209,7 +225,7 @@ def test_snapshot_is_self_contained_without_spreadsheets(tmp_path: Path) -> None
         == 1
     )
     comparison = store.compare("latest", ("XNAS:MSFT",), ("close", "return_20d"))
-    assert comparison["schema"] == "market-snapshot-comparison/v2"
+    assert comparison["schema"] == "market-snapshot-comparison/v3"
     assert comparison["rows"][0]["instrument_id"] == "XNAS:MSFT"
     context = store.research_context("latest", "XNAS:MSFT")
     assert context["market"]["markets"].keys() == {"us"}
@@ -249,11 +265,30 @@ def test_snapshot_query_supports_profile_order_limit_and_transient_budget(tmp_pa
         trading_unit=100,
     )
 
-    assert result["schema"] == "market-snapshot-query-result/v2"
+    assert result["schema"] == "market-snapshot-query-result/v3"
     assert result["total_matched_count"] == 2
     assert result["matched_count"] == 1
     assert all("252d" not in field for field in result["fields"])
     assert result["rows"][0]["purchase_projection"]["trading_unit"] == 100
+    assert result["input_count"] == 2
+    assert result["filter_funnel"][0]["condition"] == "input"
+
+    converted = store.query(
+        "latest",
+        filters={"market": ("us",)},
+        minimums={},
+        maximums={},
+        present=("close",),
+        missing=(),
+        fields=("close",),
+        budget=Decimal("50000"),
+        budget_currency="JPY",
+        trading_unit=1,
+        use_snapshot_fx=True,
+    )
+    projection = converted["rows"][0]["purchase_projection"]
+    assert projection["fx"]["value"] == "150"
+    assert projection["reason"] is None
 
 
 def test_snapshot_query_rejects_invalid_order_domain_and_limit(tmp_path: Path) -> None:
@@ -356,7 +391,7 @@ def test_overlapping_market_build_merges_benchmark_and_indicator(tmp_path: Path)
         for item in request.instruments
         if (item.instrument.mic, item.instrument.symbol) == ("XNAS", "NDX")
     )
-    assert ndx.memberships == ("indicator:major_index_nasdaq100", "nasdaq100")
+    assert ndx.memberships == ("nasdaq100",)
 
 
 def test_complete_builtin_universe_is_unique_and_stable() -> None:
@@ -459,6 +494,27 @@ class _Registry:
         assert name == "yfinance"
         return self.fetcher
 
+    def load_market_indicator_fetcher(self, name: str) -> Any:
+        assert name == "yfinance"
+
+        class Fetcher:
+            def fetch_market_indicators(self, request: Any) -> ImportedMarketIndicators:
+                retrieved_at = datetime(2026, 8, 8, tzinfo=UTC)
+                return ImportedMarketIndicators(
+                    request,
+                    "yfinance",
+                    "1.5.2",
+                    retrieved_at,
+                    tuple(
+                        MarketIndicatorObservation(item, retrieved_at, (), "f" * 64)
+                        for item in request.indicators
+                    ),
+                    (),
+                    "1" * 64,
+                )
+
+        return Fetcher()
+
 
 def test_market_service_builds_explicit_company_only_scope(tmp_path: Path) -> None:
     service = MarketService(
@@ -481,11 +537,11 @@ def test_market_service_builds_explicit_company_only_scope(tmp_path: Path) -> No
     assert document["request"]["producer"] == {
         "name": "marketsieve-cli",
         "version": __version__,
-        "snapshot_schema": "market-snapshot/v7",
-        "explorer_schema": "explorer-data/v2",
+        "snapshot_schema": "market-snapshot/v8",
+        "explorer_schema": "explorer-data/v4",
     }
     assert document["row_count"] == 30
-    assert document["price_requirements_met"] is True
+    assert document["price_coverage_gate_passed"] is True
     row = service.row(document["snapshot_id"], "XNAS:AAPL")
     assert row["missing"]["close"] == "not_requested"
     assert row["missing"]["trailing_pe"] == "not_requested"
@@ -494,12 +550,12 @@ def test_market_service_builds_explicit_company_only_scope(tmp_path: Path) -> No
         for line in Path(document["artifacts"]["failures.jsonl"]).read_text().splitlines()
     ]
     assert not any(failure["field"] == "close" for failure in failures)
-    quality = json.loads(Path(document["artifacts"]["quality.json"]).read_text())
+    quality = json.loads(Path(document["artifacts"]["quality-summary.json"]).read_text())
     assert quality["failures"]["affected_security_count"] == 0
     assert quality["failures"]["complete_failure_security_count"] == 0
     assert service.show("latest")["snapshot_id"] == document["snapshot_id"]
     schema = json.loads(
-        (Path(__file__).parents[2] / "schemas/market-snapshot/v7/schema.json").read_text()
+        (Path(__file__).parents[2] / "schemas/market-snapshot/v8/schema.json").read_text()
     )
     Draft202012Validator(schema).validate(document)
 

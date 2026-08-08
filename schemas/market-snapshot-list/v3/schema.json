@@ -1,0 +1,1 @@
+{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"urn:marketsieve:schema:market-snapshot-list:3.0.0","type":"object","required":["schema","snapshots","inventory_counts"],"properties":{"schema":{"const":"market-snapshot-list/v3"},"snapshots":{"type":"array"},"inventory_counts":{"type":"object"}},"additionalProperties":false}

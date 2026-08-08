@@ -19,19 +19,21 @@ Constituents are deduplicated by `MIC:SYMBOL` while retaining overlapping member
 evidence domains are acquired in batches and normalized without imputation. `1308.T` is the fixed
 TOPIX-linked ETF proxy; it is not the TOPIX index and is never replaced at runtime.
 
-Each content-addressed object contains `manifest.json`, `definitions.json`, `quality.json`,
+Each content-addressed object contains `manifest.json`, `definitions.json`,
+`quality-summary.json`, `quality-details.jsonl`, `quality-outliers.jsonl`,
 `aggregates.jsonl`, `securities.jsonl`, `failures.jsonl`, `market-indicators.jsonl`, `README.md`,
 `summary.md`, `explorer-data.json`, and `explorer.html`. `securities.jsonl` is the
 one-security-per-line authority. JSONL and JSON are data; Markdown and HTML are deterministic
 projections. No file references outside its object directory.
 
 Storage owns canonical writing, hashing, and integrity verification. The Snapshot projection
-builder creates reference-only `explorer-data/v2`. It declares sections, sources, views, filters,
+builder creates reference-only `explorer-data/v4`. It declares sections, sources, views, filters,
 column sets, fields, and saved-data actions while referring to canonical JSON and JSONL in the same
 object. The shared renderer loads only those registered relative artifacts through the loopback
-preview server. It supports line, horizontal bar, histogram, scatter, and heatmap views with table
-fallbacks and uses no external CDN. Research retains its v1 projection until the 0.17 contract
-change.
+preview server. It supports line, horizontal bar, histogram, scatter, heatmap, and candlestick
+views with table fallbacks and uses no external CDN. Market indicators use a separate extension
+contract with explicit kind and unit; equity-only company, financial, market-cap, and volume checks
+do not apply.
 
 The object identity covers exact inputs, effective runtime settings, universe assets, definitions,
 source evidence, rows, aggregates, failures, and artifact inventory. Interrupted runs can resume
@@ -43,7 +45,7 @@ Research resolves explicit instrument IDs from an explicit Snapshot, then reques
 company, financial, event, and benchmark evidence. Multiple instruments are independent: one
 failure does not erase successful packs. Each immutable pack includes its source Snapshot context,
 definitions, quality, failures, neutral summary, and object-folder-contained chart-led Explorer.
-Research Explorer v2 stores only view metadata and relative references. The renderer loads the
+Research Explorer v4 stores only view metadata and relative references. The renderer loads the
 authoritative object-local files through the restricted preview server and derives moving averages,
 rolling risk, drawdown, and benchmark rebasing in the browser without acquisition or persistence.
 Price, company, annual financial, quarterly financial, earnings, dividend, split, and benchmark
@@ -52,6 +54,10 @@ evidence have independent states so one failed provider endpoint cannot hide evi
 Provider publication time is never invented. Retrieval-only facts state that availability basis.
 Missing evidence remains missing. External AI interpretation cannot write back into evidence
 objects.
+
+The stable SDK is deliberately narrow: `marketsieve.model`, `marketsieve.indicators`, and
+`marketsieve.fields`. The package root does not re-export all domain types, and the SDK does not
+depend on provider, CLI, state, logging, or transport packages.
 
 ## Future transport
 

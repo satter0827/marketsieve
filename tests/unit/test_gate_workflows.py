@@ -330,7 +330,7 @@ def test_develop_gate_smoke_and_package_workflows(
     root = tmp_path / "root"
     evidence = root / ".marketsieve" / "evidence"
     evidence.mkdir(parents=True)
-    for name in ("doctor-result/v1", "capabilities-result/v8", "log-record/v1"):
+    for name in ("doctor-result/v1", "capabilities-result/v10", "log-record/v1"):
         directory = root / "schemas" / name
         directory.mkdir(parents=True)
         (directory / "schema.json").write_text(
@@ -348,7 +348,7 @@ def test_develop_gate_smoke_and_package_workflows(
             )
         if "capabilities" in command:
             return subprocess.CompletedProcess(
-                command, 0, stdout='{"schema":"capabilities-result/v8"}\n', stderr=""
+                command, 0, stdout='{"schema":"capabilities-result/v10"}\n', stderr=""
             )
         return subprocess.CompletedProcess(command, 0, stdout="help\n", stderr="")
 

@@ -126,7 +126,7 @@ class ConsoleOutput:
     def _resolve(mode: OutputMode, stream: TextIO) -> OutputMode:
         if mode is not OutputMode.AUTO:
             return mode
-        return OutputMode.RICH if stream.isatty() else OutputMode.TEXT
+        return OutputMode.RICH if stream.isatty() else OutputMode.JSON
 
     @property
     def mode(self) -> OutputMode:

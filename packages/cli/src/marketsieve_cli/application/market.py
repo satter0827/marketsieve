@@ -34,6 +34,10 @@ from marketsieve_extension_api import (
     EquityBatchFetcher,
     EquityBatchInstrument,
     EquityBatchRequest,
+    MarketIndicatorFetcher,
+    MarketIndicatorKind,
+    MarketIndicatorRequest,
+    MarketIndicatorSpec,
 )
 
 
@@ -47,6 +51,8 @@ class SettingsReader(Protocol):
 
 class BatchRegistry(Protocol):
     def load_equity_batch_fetcher(self, name: str) -> EquityBatchFetcher: ...
+
+    def load_market_indicator_fetcher(self, name: str) -> MarketIndicatorFetcher: ...
 
 
 class MarketSnapshotRepository(Protocol):
@@ -103,6 +109,7 @@ class MarketSnapshotRepository(Protocol):
         budget: Decimal | None = None,
         budget_currency: str | None = None,
         trading_unit: int | None = None,
+        use_snapshot_fx: bool = False,
     ) -> dict[str, Any]: ...
 
     def research_context(self, snapshot_id: str, instrument_id: str) -> dict[str, Any]: ...
@@ -155,8 +162,8 @@ class MarketService:
         benchmark_seeds = (
             _benchmark_seeds(inputs.indices) if "benchmarks" in inputs.evidence else ()
         )
-        indicator_seeds = _market_indicator_seeds() if "price" in inputs.evidence else ()
-        requested = _merge_batch_instruments((*universe, *benchmark_seeds, *indicator_seeds))
+        indicator_specs = _market_indicator_specs() if "price" in inputs.evidence else ()
+        requested = _merge_batch_instruments((*universe, *benchmark_seeds))
         acquisition_date = self._today()
         end_date = inputs.as_of or acquisition_date
         if end_date > acquisition_date:
@@ -202,8 +209,8 @@ class MarketService:
             "producer": {
                 "name": "marketsieve-cli",
                 "version": __version__,
-                "snapshot_schema": "market-snapshot/v7",
-                "explorer_schema": "explorer-data/v2",
+                "snapshot_schema": "market-snapshot/v8",
+                "explorer_schema": "explorer-data/v4",
             },
         }
         fingerprint = hashlib.sha256(_json_bytes(fingerprint_document)).hexdigest()
@@ -249,6 +256,22 @@ class MarketService:
             raise ValueError(
                 "market acquisition crossed the local date boundary; start a new build"
             )
+        indicator_import = None
+        if indicator_specs:
+            indicator_fetcher = self._registry.load_market_indicator_fetcher("yfinance")
+            indicator_request = MarketIndicatorRequest(
+                source_profile="market-indicators-yfinance",
+                indicators=indicator_specs,
+                start=start,
+                end=end,
+                timeout_seconds=runtime.yfinance.timeout_seconds,
+                max_retries=runtime.yfinance.max_retries,
+                retry_base_seconds=runtime.yfinance.retry_base_seconds,
+                settings={"cache_dir": ".marketsieve/cache/yfinance"},
+            )
+            indicator_import = indicator_fetcher.fetch_market_indicators(indicator_request)
+            if indicator_import.request != indicator_request:
+                raise ValueError("source must preserve the exact market indicator request")
         benchmark_ids = {
             seed.provider_symbol: (seed.instrument.mic, seed.instrument.symbol)
             for seed in benchmark_seeds
@@ -331,37 +354,59 @@ class MarketService:
             price_requested="price" in inputs.evidence,
         )
         failures = _failures(ordered_rows, imported.failures)
-        indicator_keys = {_seed_key(seed) for seed in indicator_seeds}
-        indicator_failure_reasons: dict[tuple[str, str], str] = {}
-        for failure in imported.failures:
-            key = _seed_key(failure)
-            if key not in indicator_keys:
-                continue
-            current = indicator_failure_reasons.get(key)
-            failure_priority = _failure_reason_priority(failure.reason)
-            current_priority = _failure_reason_priority(current) if current is not None else None
-            if current_priority is None or failure_priority > current_priority:
-                indicator_failure_reasons[key] = failure.reason
+        indicator_failure_reasons: dict[str, str] = {}
+        if indicator_import is not None:
+            for failure in indicator_import.failures:
+                current = indicator_failure_reasons.get(failure.indicator_id)
+                if current is None or _failure_reason_priority(
+                    failure.reason
+                ) > _failure_reason_priority(current):
+                    indicator_failure_reasons[failure.indicator_id] = failure.reason
+            failures = (
+                *failures,
+                *(
+                    {
+                        "schema": "market-snapshot-failure/v2",
+                        "instrument_id": f"market_indicator:{failure.indicator_id}",
+                        "indicator_id": failure.indicator_id,
+                        "stage": failure.stage,
+                        "field": failure.field,
+                        "reason": failure.reason,
+                    }
+                    for failure in indicator_import.failures
+                ),
+            )
+        indicator_observations = {
+            item.requested.indicator_id: item
+            for item in (() if indicator_import is None else indicator_import.observations)
+        }
         market_indicators = tuple(
             {
-                "schema": "market-indicator/v1",
-                "indicator_id": indicator_id,
-                "provider_symbol": seed.provider_symbol,
-                "name": MARKET_INDICATORS[indicator_id][3],
-                "unit": MARKET_INDICATORS[indicator_id][2],
-                "retrieved_at": observations[_seed_key(seed)].retrieved_at.isoformat(),
+                "schema": "market-indicator/v2",
+                "indicator_id": spec.indicator_id,
+                "provider_symbol": spec.provider_symbol,
+                "name": spec.name,
+                "kind": spec.kind.value,
+                "unit": spec.unit,
+                "retrieved_at": indicator_observations[spec.indicator_id].retrieved_at.isoformat(),
                 "observations": [
                     {"date": bar.trading_date.isoformat(), "value": str(bar.close)}
-                    for bar in observations[_seed_key(seed)].bars
+                    for bar in indicator_observations[spec.indicator_id].bars
                 ],
                 "missing_reason": (
                     None
-                    if observations[_seed_key(seed)].bars
-                    else indicator_failure_reasons.get(_seed_key(seed), "history_empty")
+                    if indicator_observations[spec.indicator_id].bars
+                    else indicator_failure_reasons.get(spec.indicator_id, "history_empty")
                 ),
+                "not_applicable": [
+                    "company_information",
+                    "financials",
+                    "market_cap",
+                    "shares_outstanding",
+                    "volume_metrics",
+                ],
             }
-            for seed in indicator_seeds
-            for indicator_id in (seed.memberships[0].removeprefix("indicator:"),)
+            for spec in indicator_specs
         )
         manifest_body = {
             "created_at": imported.retrieved_at.isoformat(),
@@ -382,7 +427,7 @@ class MarketService:
             "field_count": len(field_definitions()),
             "failure_count": len(failures),
             "coverage": summary["coverage"],
-            "price_requirements_met": summary["price_requirements_met"],
+            "price_coverage_gate_passed": summary["price_requirements_met"],
         }
         document = self._store.put(
             run_id=run_id,
@@ -435,6 +480,7 @@ class MarketService:
             budget=request.budget,
             budget_currency=request.budget_currency,
             trading_unit=request.trading_unit,
+            use_snapshot_fx=request.use_snapshot_fx,
         )
 
     def research_context(self, snapshot_id: str, instrument_id: str) -> dict[str, Any]:
@@ -519,16 +565,41 @@ _VOLUME_FAILURE_FIELDS = {
 }
 
 MARKET_INDICATORS = {
-    "gold": ("GOLD", "GC=F", "USD", "Gold futures proxy"),
-    "major_index_dow": ("DJI", "^DJI", "USD", "Dow Jones Industrial Average"),
-    "major_index_nasdaq100": ("NDX", "^NDX", "USD", "Nasdaq-100 index"),
-    "major_index_nikkei225": ("N225", "^N225", "JPY", "Nikkei 225 index"),
-    "major_index_sp500": ("GSPC", "^GSPC", "USD", "S&P 500 index"),
-    "oil_wti": ("WTI", "CL=F", "USD", "WTI crude-oil futures proxy"),
-    "usd_jpy": ("USDJPY", "JPY=X", "JPY_per_USD", "U.S. dollar to Japanese yen"),
-    "us_rate_10y": ("US10Y", "^TNX", "percent", "U.S. 10-year Treasury yield"),
-    "us_rate_3m": ("US3M", "^IRX", "percent", "U.S. 13-week Treasury yield"),
-    "vix": ("VIX", "^VIX", "index_points", "CBOE Volatility Index"),
+    "gold": ("GC=F", MarketIndicatorKind.COMMODITY, "USD_per_troy_ounce", "Gold futures proxy"),
+    "major_index_dow": (
+        "^DJI",
+        MarketIndicatorKind.EQUITY_INDEX,
+        "index_points",
+        "Dow Jones Industrial Average",
+    ),
+    "major_index_nasdaq100": (
+        "^NDX",
+        MarketIndicatorKind.EQUITY_INDEX,
+        "index_points",
+        "Nasdaq-100 index",
+    ),
+    "major_index_nikkei225": (
+        "^N225",
+        MarketIndicatorKind.EQUITY_INDEX,
+        "index_points",
+        "Nikkei 225 index",
+    ),
+    "major_index_sp500": (
+        "^GSPC",
+        MarketIndicatorKind.EQUITY_INDEX,
+        "index_points",
+        "S&P 500 index",
+    ),
+    "oil_wti": (
+        "CL=F",
+        MarketIndicatorKind.COMMODITY,
+        "USD_per_barrel",
+        "WTI crude-oil futures proxy",
+    ),
+    "usd_jpy": ("JPY=X", MarketIndicatorKind.FX_RATE, "JPY_per_USD", "U.S. dollar to Japanese yen"),
+    "us_rate_10y": ("^TNX", MarketIndicatorKind.YIELD, "percent", "U.S. 10-year Treasury yield"),
+    "us_rate_3m": ("^IRX", MarketIndicatorKind.YIELD, "percent", "U.S. 13-week Treasury yield"),
+    "vix": ("^VIX", MarketIndicatorKind.VOLATILITY_INDEX, "index_points", "CBOE Volatility Index"),
 }
 
 
@@ -777,20 +848,16 @@ def _benchmark_seeds(indices: tuple[str, ...]) -> tuple[EquityBatchInstrument, .
     )
 
 
-def _market_indicator_seeds() -> tuple[EquityBatchInstrument, ...]:
+def _market_indicator_specs() -> tuple[MarketIndicatorSpec, ...]:
     return tuple(
-        EquityBatchInstrument(
-            Instrument.create(
-                symbol=symbol,
-                mic="XNAS",
-                currency="JPY" if unit == "JPY_per_USD" else "USD",
-                exchange_timezone="America/New_York",
-            ),
-            provider_symbol,
-            (f"indicator:{indicator_id}",),
-            True,
+        MarketIndicatorSpec(
+            indicator_id=indicator_id,
+            provider_symbol=provider_symbol,
+            name=name,
+            kind=kind,
+            unit=unit,
         )
-        for indicator_id, (symbol, provider_symbol, unit, _) in sorted(MARKET_INDICATORS.items())
+        for indicator_id, (provider_symbol, kind, unit, name) in sorted(MARKET_INDICATORS.items())
     )
 
 

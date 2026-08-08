@@ -42,5 +42,5 @@ paths. If no current Snapshot exists or the user asks to refresh it, run `make m
 Use `market query`, `market security`, and `market compare` for offline narrowing; do not parse CSV
 when canonical JSON or JSONL is available. After selecting a Snapshot security, use
 `make research-build INSTRUMENTS='MIC:SYMBOL' SNAPSHOT=SNAPSHOT_ID` for deeper yfinance evidence.
-Read `quality.json` and `failures.jsonl` before drawing conclusions. Keep agent interpretations
+Read `quality-summary.json`, relevant quality detail JSONL, and `failures.jsonl` before drawing conclusions. Keep agent interpretations
 outside immutable Snapshot and Research Pack directories.

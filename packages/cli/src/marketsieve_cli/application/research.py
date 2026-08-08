@@ -101,7 +101,7 @@ class ResearchService:
             "research": results,
             "failures": failures,
             "requirements_met": bool(results)
-            and all(item["price_requirements_met"] for item in results),
+            and all(item["price_coverage_gate_passed"] for item in results),
         }
 
     def _build_one(self, inputs: ResearchBuildInputs, instrument_id: str) -> dict[str, Any]:

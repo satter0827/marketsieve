@@ -17,6 +17,8 @@ def test_public_schemas_are_current_and_valid() -> None:
     names = {path.parent.parent.name for path in paths}
 
     assert names == {
+        "artifact-doctor",
+        "artifact-list",
         "capabilities-result",
         "capture-run",
         "cli-error",
@@ -31,6 +33,10 @@ def test_public_schemas_are_current_and_valid() -> None:
         "market-snapshot-query-result",
         "market-snapshot-security",
         "market-snapshot-security-result",
+        "operation-events",
+        "operation-prune",
+        "operation-run",
+        "operation-run-list",
         "review-report",
         "security-research",
         "security-research-batch",
@@ -62,27 +68,27 @@ def test_removed_feature_schemas_do_not_exist() -> None:
 @pytest.mark.parametrize(
     ("name", "version", "document"),
     (
-        ("market-snapshot", "v7", {"schema": "market-snapshot/v7", "market": {}}),
+        ("market-snapshot", "v8", {"schema": "market-snapshot/v8", "market": {}}),
         (
             "market-snapshot-manifest",
-            "v7",
-            {"schema": "market-snapshot-manifest/v7", "artifacts": {}},
+            "v8",
+            {"schema": "market-snapshot-manifest/v8", "artifacts": {}},
         ),
-        ("market-snapshot-list", "v2", {"schema": "market-snapshot-list/v2", "snapshots": [{}]}),
+        ("market-snapshot-list", "v3", {"schema": "market-snapshot-list/v3", "snapshots": [{}]}),
         (
             "security-research",
-            "v6",
-            {"schema": "security-research/v6", "quality": {}, "artifacts": {}},
+            "v8",
+            {"schema": "security-research/v8", "quality_summary": {}, "artifacts": {}},
         ),
         (
             "security-research-manifest",
-            "v6",
-            {"schema": "security-research-manifest/v6", "artifacts": {}},
+            "v8",
+            {"schema": "security-research-manifest/v8", "artifacts": {}},
         ),
         (
             "security-research-list",
-            "v2",
-            {"schema": "security-research-list/v2", "research": [{}]},
+            "v3",
+            {"schema": "security-research-list/v3", "research": [{}]},
         ),
     ),
 )

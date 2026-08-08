@@ -1,6 +1,6 @@
 [project]
 name = "marketsieve-source-yfinance"
-version = "0.17.0"
+version = "0.19.0"
 description = "No-key yfinance equity batch source for MarketSieve."
 readme = "README.md"
 requires-python = ">=3.12,<3.15"
@@ -10,8 +10,8 @@ authors = [{ name = "MarketSieve contributors" }]
 dependencies = [
     "curl-cffi>=0.15,<1",
     "exchange-calendars>=4.11,<5",
-    "marketsieve>=0.17,<0.18",
-    "marketsieve-extension-api>=0.17,<0.18",
+    "marketsieve>=0.19,<0.20",
+    "marketsieve-extension-api>=0.19,<0.20",
     "yfinance>=1.5.2,<2",
 ]
 
@@ -19,6 +19,9 @@ dependencies = [
 yfinance = "marketsieve_source_yfinance:YFinanceSource"
 
 [project.entry-points."marketsieve.sources.security_research.fetchers"]
+yfinance = "marketsieve_source_yfinance:YFinanceSource"
+
+[project.entry-points."marketsieve.sources.market_indicators.fetchers"]
 yfinance = "marketsieve_source_yfinance:YFinanceSource"
 
 [build-system]

@@ -23,7 +23,7 @@ def test_workspace_contains_only_the_supported_public_packages() -> None:
     assert set(workspace["tool"]["uv"]["workspace"]["members"]) == {
         spec.path.relative_to(ROOT).as_posix() for spec in specs
     }
-    assert all(spec.project_version == "0.17.0" for spec in specs)
+    assert all(spec.project_version == "0.19.0" for spec in specs)
 
 
 def test_removed_capabilities_and_packages_are_absent() -> None:
@@ -84,12 +84,14 @@ def test_vscode_exposes_simple_launches_and_complete_tasks_in_english() -> None:
         "04 Market: Explore Swing Candidates",
         "05 Research: Build Security Evidence (Network)",
         "06 Research: Preview Latest Explorer",
+        "07 Operations: Diagnose Artifacts",
     ]
     assert {item["label"].partition(":")[0] for item in tasks["tasks"]} == {
         "Setup",
         "Market",
         "Research",
         "Developer",
+        "Operations",
     }
     assert settings["files.exclude"]["**/.marketsieve"] is False
     assert settings["files.watcherExclude"]["**/.marketsieve/**"] is True
