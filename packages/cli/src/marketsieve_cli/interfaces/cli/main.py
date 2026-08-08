@@ -18,19 +18,21 @@ from marketsieve_cli.bootstrap import (
     MarketCompareInputs,
     MarketDiffInputs,
     MarketQueryInputs,
-    PreviewInputs,
     ResearchBuildInputs,
+    artifact_doctor,
+    artifact_inventory,
     build_console_output,
     build_diagnostics_service,
-    build_market_preview,
     build_market_snapshot,
-    build_research_preview,
+    build_preview,
     build_security_research,
     capabilities_document,
     compare_market_snapshot_securities,
+    configure_application_logging,
     diff_market_snapshots,
     list_market_snapshots,
     list_security_research,
+    operation_runs,
     query_market_snapshot,
     read_market_snapshot_security,
     sdk_version,
@@ -117,6 +119,7 @@ def main(
     context.obj.update(
         settings_path=settings_path, log_level=log_level, log_file=log_file, locale=locale
     )
+    configure_application_logging(level=log_level, write_log_file=log_file)
     if context.invoked_subcommand is None:
         _console(context, "auto").emit_landing(sdk_version())
 
@@ -186,7 +189,7 @@ def market_build(
     except (LookupError, OSError, RuntimeError, TypeError, ValueError) as error:
         _emit_failure(console, "market_build_failed", error)
     console.emit_document(document, title="Market Snapshot")
-    if not document["price_requirements_met"]:
+    if not document["price_coverage_gate_passed"]:
         raise click.exceptions.Exit(1)
 
 
@@ -223,7 +226,7 @@ def market_capture(
     except (LookupError, OSError, RuntimeError, TypeError, ValueError) as error:
         _emit_failure(console, "market_capture_failed", error)
     console.emit_document(document, title="Market Capture")
-    if not document["price_requirements_met"]:
+    if not document["price_coverage_gate_passed"]:
         raise click.exceptions.Exit(1)
 
 
@@ -256,7 +259,7 @@ def market_reconstruct(
     except (LookupError, OSError, RuntimeError, TypeError, ValueError) as error:
         _emit_failure(console, "market_reconstruct_failed", error)
     console.emit_document(document, title="Historical Price Reconstruction")
-    if not document["price_requirements_met"]:
+    if not document["price_coverage_gate_passed"]:
         raise click.exceptions.Exit(1)
 
 
@@ -281,24 +284,6 @@ def market_show(context: click.Context, snapshot_id: str, output_mode: str) -> N
     except (LookupError, OSError, TypeError, ValueError) as error:
         _emit_failure(_console(context, output_mode), "market_show_failed", error)
     _console(context, output_mode).emit_document(document, title="Market Snapshot")
-
-
-@market.command("serve")
-@click.argument("snapshot_id", required=True)
-@click.option("--port", type=click.IntRange(0, 65535), default=0, show_default=True)
-@click.option("--open", "open_browser", is_flag=True)
-@click.pass_context
-def market_serve(context: click.Context, snapshot_id: str, port: int, open_browser: bool) -> None:
-    """Preview one Snapshot Explorer over a loopback-only HTTP server."""
-
-    try:
-        preview = build_market_preview(
-            context.obj["settings_path"], PreviewInputs(snapshot_id, port)
-        )
-    except (LookupError, OSError, TypeError, ValueError) as error:
-        _emit_failure(_console(context, "text"), "market_serve_failed", error)
-    click.echo(preview.url)
-    preview.serve_forever(open_browser=open_browser)
 
 
 def _query_options(function: Any) -> Any:
@@ -328,6 +313,7 @@ def _query_options(function: Any) -> Any:
     function = click.option("--budget", type=Decimal)(function)
     function = click.option("--budget-currency")(function)
     function = click.option("--trading-unit", type=click.IntRange(min=1))(function)
+    function = click.option("--use-snapshot-fx", is_flag=True)(function)
     return function
 
 
@@ -375,6 +361,7 @@ def market_query(
                 budget=values["budget"],
                 budget_currency=values["budget_currency"],
                 trading_unit=values["trading_unit"],
+                use_snapshot_fx=values["use_snapshot_fx"],
             ),
         )
     except (LookupError, OSError, TypeError, ValueError) as error:
@@ -521,34 +508,119 @@ def research_show(
     _console(context, output_mode).emit_document(document, title="Security Research")
 
 
-@research.command("serve")
-@click.argument("research_id", required=True)
-@click.option("--snapshot", "snapshot_id")
-@click.option("--security", "instrument_id")
+@main.command("preview")
+@click.argument("object_ref")
+@click.option("--security")
 @click.option("--port", type=click.IntRange(0, 65535), default=0, show_default=True)
 @click.option("--open", "open_browser", is_flag=True)
 @click.pass_context
-def research_serve(
+def preview(
     context: click.Context,
-    research_id: str,
-    snapshot_id: str | None,
-    instrument_id: str | None,
+    object_ref: str,
+    security: str | None,
     port: int,
     open_browser: bool,
 ) -> None:
-    """Preview one Research Explorer over a loopback-only HTTP server."""
+    """Preview one verified Snapshot or Research object over loopback HTTP."""
 
     try:
-        preview = build_research_preview(
-            context.obj["settings_path"],
-            PreviewInputs(research_id, port),
-            snapshot_id=snapshot_id,
-            instrument_id=instrument_id,
+        server = build_preview(
+            context.obj["settings_path"], object_ref, security=security, port=port
         )
     except (LookupError, OSError, TypeError, ValueError) as error:
-        _emit_failure(_console(context, "text"), "research_serve_failed", error)
-    click.echo(preview.url)
-    preview.serve_forever(open_browser=open_browser)
+        _emit_failure(_console(context, "text"), "preview_failed", error)
+    click.echo(server.url)
+    server.serve_forever(open_browser=open_browser)
+
+
+@main.group()
+def artifacts() -> None:
+    """Inspect current, incompatible, and damaged evidence objects."""
+
+
+@artifacts.command("doctor")
+@output_option
+@click.pass_context
+def artifacts_doctor(context: click.Context, output_mode: str) -> None:
+    _console(context, output_mode).emit_document(artifact_doctor(), title="Artifact health")
+
+
+@artifacts.command("list")
+@click.option("--type", "object_type", type=click.Choice(("snapshot", "research")))
+@click.option("--status", type=click.Choice(("current", "incompatible", "corrupt", "orphan")))
+@output_option
+@click.pass_context
+def artifacts_list(
+    context: click.Context, object_type: str | None, status: str | None, output_mode: str
+) -> None:
+    document = artifact_inventory(object_type=object_type, status=status)
+    _console(context, output_mode).emit_document(document, title="Artifacts")
+
+
+@main.group("run")
+def run_group() -> None:
+    """Inspect and prune structured generation history."""
+
+
+@run_group.command("list")
+@click.option("--status")
+@click.option("--command")
+@output_option
+@click.pass_context
+def run_list(
+    context: click.Context, status: str | None, command: str | None, output_mode: str
+) -> None:
+    _console(context, output_mode).emit_document(
+        operation_runs().list(status=status, command=command), title="Operation runs"
+    )
+
+
+@run_group.command("show")
+@click.argument("run_id")
+@output_option
+@click.pass_context
+def run_show(context: click.Context, run_id: str, output_mode: str) -> None:
+    _console(context, output_mode).emit_document(
+        operation_runs().show(run_id), title="Operation run"
+    )
+
+
+@run_group.command("events")
+@click.argument("run_id")
+@click.option("--level", type=click.Choice(("DEBUG", "INFO", "WARNING", "ERROR")))
+@output_option
+@click.pass_context
+def run_events(context: click.Context, run_id: str, level: str | None, output_mode: str) -> None:
+    _console(context, output_mode).emit_document(
+        operation_runs().events(run_id, level=level), title="Operation events"
+    )
+
+
+@run_group.command("prune")
+@click.argument("run_ids", nargs=-1)
+@click.option("--before", type=click.DateTime(formats=["%Y-%m-%d"]))
+@click.option("--status")
+@click.option("--apply", is_flag=True)
+@output_option
+@click.pass_context
+def run_prune(
+    context: click.Context,
+    run_ids: tuple[str, ...],
+    before: Any,
+    status: str | None,
+    apply: bool,
+    output_mode: str,
+) -> None:
+    if not run_ids and before is None:
+        _emit_failure(
+            _console(context, output_mode),
+            "run_prune_failed",
+            ValueError("specify run IDs or --before"),
+        )
+    document = operation_runs().prune(
+        run_ids, before=None if before is None else before.date(), status=status, apply=apply
+    )
+    _console(context, output_mode).emit_document(document, title="Operation prune")
 
 
 def entrypoint() -> None:

@@ -9,7 +9,7 @@ and release history.
   membership changes.
 - Improve Market Snapshot acquisition efficiency only when failure semantics, content identity, and the
   yfinance-only source boundary remain unchanged.
-- Expose the existing typed build, capture, query, compare, diff, research, and serve application
+- Expose the existing typed build, capture, query, compare, diff, research, preview, artifact, and run application
   requests through MCP only after more than one client needs the boundary. MCP remains a transport
   adapter; it does not own provider access, persistence, or analysis instructions.
 - Invoke the one-shot JP and US close Capture commands from an external scheduler only after local

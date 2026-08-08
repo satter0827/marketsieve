@@ -1,6 +1,8 @@
 # Lifecycle
 
-A Market Snapshot run begins with explicit immutable inputs. It writes a resumable run request,
+A Market Snapshot run begins with explicit immutable inputs. A UUIDv7 `operation-run/v1` records
+the command, fingerprint, status, events, failures, timing, and published object IDs. Acquisition
+writes a separate resumable run request,
 acquires source evidence, calculates fields, writes a pending object, verifies every projection,
 atomically publishes the content-addressed object and latest reference, then removes the run.
 
@@ -15,10 +17,11 @@ instead of reacquiring it. A producer or projection contract change creates a ne
 rewriting the old object. JP and US price dates remain separate evidence and are never presented as
 one hidden common timestamp.
 
-Research v6 objects are immutable and intentionally incompatible with earlier Research contracts.
+Research v8 objects are immutable and intentionally incompatible with earlier Research contracts.
 Changing the requested evidence or source response creates a new content identity; changing only
 the Explorer display period does not create or mutate an object.
 
-Historical objects remain addressable by ID. Diff compares only fields with compatible type, unit,
+Historical objects remain addressable by ID. Artifact inventory isolates incompatible, corrupt,
+and orphan state so one entry cannot prevent current objects from being listed. Diff compares only fields with compatible type, unit,
 and definition version. Cleanup may remove caches, interrupted obsolete runs, build evidence, and
 legacy pre-0.12 local state only after new objects are verified.

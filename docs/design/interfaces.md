@@ -15,18 +15,25 @@ marketsieve market show SNAPSHOT_ID|latest
 marketsieve market query --snapshot SNAPSHOT_ID|latest [FILTERS...]
   [--profile short-swing|swing|position] [--domain DOMAIN...]
   [--order FIELD:asc|desc...] [--limit COUNT]
-  [--budget VALUE --budget-currency ISO --trading-unit COUNT]
+  [--budget VALUE --budget-currency JPY|USD --trading-unit COUNT --use-snapshot-fx]
 marketsieve market security MIC:SYMBOL --snapshot SNAPSHOT_ID|latest
 marketsieve market compare MIC:SYMBOL... --snapshot SNAPSHOT_ID|latest [--fields FIELD...]
 marketsieve market diff LEFT_SNAPSHOT RIGHT_SNAPSHOT [--fields FIELD...]
-marketsieve market serve SNAPSHOT_ID|latest [--port PORT] [--open]
 
 marketsieve [--settings FILE] research build MIC:SYMBOL...
   --snapshot SNAPSHOT_ID|latest --evidence DOMAIN... [--history-days DAYS]
 marketsieve research list [--snapshot ID] [--security MIC:SYMBOL]
 marketsieve research show RESEARCH_ID|latest [--snapshot ID --security MIC:SYMBOL]
-marketsieve research serve RESEARCH_ID|latest [--snapshot ID --security MIC:SYMBOL]
-  [--port PORT] [--open]
+marketsieve preview snapshot:SNAPSHOT_ID|latest [--port PORT] [--open]
+marketsieve preview research:RESEARCH_ID [--port PORT] [--open]
+marketsieve preview research:latest --security MIC:SYMBOL [--port PORT] [--open]
+marketsieve artifacts doctor
+marketsieve artifacts list [--type snapshot|research] [--status STATUS]
+marketsieve run list [--status STATUS] [--command COMMAND]
+marketsieve run show RUN_ID
+marketsieve run events RUN_ID [--level LEVEL]
+marketsieve run prune RUN_ID... [--apply]
+marketsieve run prune --before YYYY-MM-DD [--status STATUS] [--apply]
 
 marketsieve doctor
 marketsieve capabilities
@@ -43,16 +50,18 @@ Purpose profiles affect stored-data selection only and never alter Snapshot acqu
 trading-unit projections are invocation-only and are not persisted. Ordering is neutral and does
 not produce a score or recommendation.
 
-`serve` binds to `127.0.0.1`, selects an available port by default, and exposes only the selected
+`preview` binds to `127.0.0.1`, selects an available port by default, and exposes only the selected
 verified object's manifest-registered files. It disables directory listing, path traversal,
 symlinks, and access outside the object.
 
 ## Documents
 
-Current top-level contracts are `market-snapshot/v7`, `market-snapshot-list/v2`,
-`market-snapshot-query-result/v2`, `market-snapshot-comparison/v2`, `market-snapshot-diff/v1`,
-`security-research/v6`, `security-research-list/v2`, `security-research-batch/v1`,
-`explorer-data/v2` for Snapshot and Research, and
-`capabilities-result/v8`. Capture state uses `capture-run/v1`. Stable JSON keys and formal schemas
+Current top-level contracts are `market-snapshot/v8`, `market-snapshot-list/v3`,
+`market-snapshot-query-result/v3`, `market-snapshot-comparison/v3`, `market-snapshot-diff/v1`,
+`security-research/v8`, `security-research-list/v3`, `security-research-batch/v1`,
+`explorer-data/v4`, `operation-run/v1`, and `capabilities-result/v10`. Stable JSON keys and formal schemas
 are English. Human CLI output and Explorer labels may be localized without changing machine
 documents.
+
+`--output json` never translates keys or enum values. Non-TTY `--output auto` resolves to JSON;
+Rich output is used only for a TTY, and plain text requires `--output text`.

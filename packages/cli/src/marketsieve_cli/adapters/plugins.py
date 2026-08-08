@@ -4,10 +4,15 @@ from __future__ import annotations
 
 from importlib import metadata
 
-from marketsieve_extension_api import EquityBatchFetcher, SecurityResearchFetcher
+from marketsieve_extension_api import (
+    EquityBatchFetcher,
+    MarketIndicatorFetcher,
+    SecurityResearchFetcher,
+)
 
 EQUITY_BATCH_GROUP = "marketsieve.sources.equity_batches.fetchers"
 SECURITY_RESEARCH_GROUP = "marketsieve.sources.security_research.fetchers"
+MARKET_INDICATOR_GROUP = "marketsieve.sources.market_indicators.fetchers"
 
 
 class SourcePluginRegistry:
@@ -31,4 +36,10 @@ class SourcePluginRegistry:
         candidate = self._load(SECURITY_RESEARCH_GROUP, name)
         if not isinstance(candidate, SecurityResearchFetcher):
             raise TypeError("provider does not implement SecurityResearchFetcher")
+        return candidate
+
+    def load_market_indicator_fetcher(self, name: str) -> MarketIndicatorFetcher:
+        candidate = self._load(MARKET_INDICATOR_GROUP, name)
+        if not isinstance(candidate, MarketIndicatorFetcher):
+            raise TypeError("provider does not implement MarketIndicatorFetcher")
         return candidate

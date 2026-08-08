@@ -1,4 +1,4 @@
-"""Create a compact Snapshot v7 fixture for Explorer browser evidence."""
+"""Create compact current-contract fixtures for Explorer browser evidence."""
 
 from __future__ import annotations
 
@@ -44,13 +44,15 @@ def _build_research(output: Path) -> None:
         "financials.jsonl",
         "events.jsonl",
         "failures.jsonl",
-        "quality.json",
+        "quality-summary.json",
+        "quality-details.jsonl",
+        "quality-outliers.jsonl",
         "summary.md",
         "explorer-data.json",
         "explorer.html",
     )
     manifest = {
-        "schema": "security-research-manifest/v6",
+        "schema": "security-research-manifest/v8",
         "research_id": "1" * 64,
         "snapshot_id": "0" * 64,
         "instrument_id": "XNAS:MSFT",
@@ -60,7 +62,7 @@ def _build_research(output: Path) -> None:
         "artifacts": {name: name for name in names},
     }
     definitions = {
-        "schema": "security-research-definitions/v3",
+        "schema": "security-research-definitions/v4",
         "company_fields": [{"name": "name", "data_type": "string"}],
     }
     prices = [
@@ -78,7 +80,7 @@ def _build_research(output: Path) -> None:
         for day in range(1, 29)
     ]
     quality = {
-        "schema": "security-research-quality/v3",
+        "schema": "security-research-quality-summary/v4",
         "evidence_statuses": {
             "price": "available",
             "company": "available",
@@ -154,7 +156,9 @@ def _build_research(output: Path) -> None:
             }
         ],
     )
-    _write(output / "quality.json", quality)
+    _write(output / "quality-summary.json", quality)
+    _write_jsonl(output / "quality-details.jsonl", [])
+    _write_jsonl(output / "quality-outliers.jsonl", [])
     (output / "README.md").write_text("# Fixture\n", encoding="utf-8")
     (output / "summary.md").write_text("# Fixture\n", encoding="utf-8")
     explorer = build_research_explorer_data(manifest, definitions)
@@ -173,7 +177,9 @@ def main() -> None:
         for name in (
             "manifest.json",
             "definitions.json",
-            "quality.json",
+            "quality-summary.json",
+            "quality-details.jsonl",
+            "quality-outliers.jsonl",
             "aggregates.jsonl",
             "securities.jsonl",
             "failures.jsonl",
@@ -183,19 +189,19 @@ def main() -> None:
         )
     }
     manifest = {
-        "schema": "market-snapshot-manifest/v7",
+        "schema": "market-snapshot-manifest/v8",
         "snapshot_id": "0" * 64,
         "created_at": "2026-08-08T00:00:00+00:00",
         "source": {"name": "yfinance", "version": "1.5.2"},
         "artifacts": artifacts,
     }
     definitions = {
-        "schema": "market-snapshot-definitions/v3",
+        "schema": "market-snapshot-definitions/v4",
         "fields": fields,
         "missing_reasons": [],
     }
     quality = {
-        "schema": "market-snapshot-quality/v3",
+        "schema": "market-snapshot-quality-summary/v4",
         "domains": {"price": {"applicable": 2, "present": 2, "coverage": "1"}},
         "freshness": {
             "price_age_days": {"observation_count": 2, "median": 0, "p95": 0, "maximum": 0}
@@ -249,7 +255,9 @@ def main() -> None:
     ]
     _write(output / "manifest.json", manifest)
     _write(output / "definitions.json", definitions)
-    _write(output / "quality.json", quality)
+    _write(output / "quality-summary.json", quality)
+    _write_jsonl(output / "quality-details.jsonl", [])
+    _write_jsonl(output / "quality-outliers.jsonl", [])
     (output / "aggregates.jsonl").write_text("{}\n", encoding="utf-8")
     (output / "securities.jsonl").write_text(
         "".join(json.dumps(row, sort_keys=True) + "\n" for row in rows), encoding="utf-8"

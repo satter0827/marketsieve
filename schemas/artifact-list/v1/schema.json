@@ -1,0 +1,1 @@
+{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"urn:marketsieve:schema:artifact-list:1.0.0","type":"object","required":["schema","counts","artifacts"],"properties":{"schema":{"const":"artifact-list/v1"},"counts":{"type":"object"},"artifacts":{"type":"array"}},"additionalProperties":false}

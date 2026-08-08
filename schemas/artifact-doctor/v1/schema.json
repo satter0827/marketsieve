@@ -1,0 +1,1 @@
+{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"urn:marketsieve:schema:artifact-doctor:1.0.0","type":"object","required":["schema","status","counts","artifacts"],"properties":{"schema":{"const":"artifact-doctor/v1"},"status":{"enum":["healthy","degraded"]},"counts":{"type":"object"},"artifacts":{"type":"array"}},"additionalProperties":false}

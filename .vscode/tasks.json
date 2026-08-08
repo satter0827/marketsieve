@@ -3,6 +3,8 @@
   "tasks": [
     {"label": "Setup: Create Runtime Settings", "type": "process", "command": "make", "args": ["setup-settings"], "problemMatcher": []},
     {"label": "Setup: Doctor", "type": "process", "command": "make", "args": ["doctor"], "problemMatcher": []},
+    {"label": "Operations: Diagnose Artifacts", "type": "process", "command": "make", "args": ["artifacts-doctor"], "problemMatcher": []},
+    {"label": "Operations: List Runs", "type": "process", "command": "make", "args": ["run-list"], "problemMatcher": []},
     {"label": "Market: Build Full Snapshot (Network)", "type": "process", "command": "make", "args": ["market-build"], "problemMatcher": []},
     {"label": "Market: Capture JP Close (Network)", "type": "process", "command": "make", "args": ["market-capture", "MARKET=jp"], "problemMatcher": []},
     {"label": "Market: Capture US Close (Network)", "type": "process", "command": "make", "args": ["market-capture", "MARKET=us"], "problemMatcher": []},

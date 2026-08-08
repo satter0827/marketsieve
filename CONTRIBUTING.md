@@ -21,6 +21,9 @@ and unresolved conversations are closed. A human decision is required only when 
 on product meaning or another non-automatable tradeoff. Direct pushes to `develop` and `main` are
 not part of the normal workflow.
 
+Human approval is not a standing requirement for `develop`: an automated semantic review and the
+required gate are sufficient when they report no unresolved product decision.
+
 Open a `develop -> main` pull request to promote a release candidate. `Release Gate` verifies the
 source branch, supported Python versions, and public distribution. Release pull requests use merge
 commits so the promotion boundary remains visible.

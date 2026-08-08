@@ -14,6 +14,7 @@ from typing import Any, cast
 
 from marketsieve_extension_api import ImportedSecurityResearch
 
+from .artifacts import ArtifactInventory
 from .explorer_v2 import build_research_explorer_data, render_explorer
 
 ARTIFACTS = (
@@ -27,7 +28,9 @@ ARTIFACTS = (
     "financials.jsonl",
     "events.jsonl",
     "failures.jsonl",
-    "quality.json",
+    "quality-summary.json",
+    "quality-details.jsonl",
+    "quality-outliers.jsonl",
     "summary.md",
     "explorer-data.json",
     "explorer.html",
@@ -131,9 +134,12 @@ EVENT_FIELDS = {
 
 EVIDENCE_STATES = (
     "available",
+    "partial",
     "none_observed",
     "not_requested",
     "acquisition_failed",
+    "not_applicable",
+    "temporally_misaligned",
 )
 
 
@@ -154,6 +160,8 @@ def _evidence_statuses(
     def status(request: str, available: bool, failed: bool) -> str:
         if request not in requested:
             return "not_requested"
+        if available and failed:
+            return "partial"
         if available:
             return "available"
         if failed:
@@ -269,6 +277,7 @@ class ResearchStore:
             }
             for bar in imported.bars
         )
+        price_cutoff: str | None = cast(str, prices[-1]["date"]) if prices else None
         benchmark_prices = tuple(
             {
                 "schema": "security-research-benchmark-price/v1",
@@ -303,6 +312,9 @@ class ResearchStore:
                 "values": dict(event.values),
                 "available_at": imported.retrieved_at.isoformat(),
                 "availability_basis": "retrieval",
+                "unpriced_event": bool(
+                    price_cutoff is not None and event.effective_date.isoformat() > price_cutoff
+                ),
             }
             for event in imported.events
         )
@@ -350,12 +362,12 @@ class ResearchStore:
             for name, value in company_values.items()
             if name == "dividend_yield" and not Decimal(0) <= Decimal(value) <= Decimal(1)
         ]
-        quality = {
-            "schema": "security-research-quality/v3",
+        quality_summary = {
+            "schema": "security-research-quality-summary/v4",
             "requested_evidence": list(imported.request.evidence),
             "minimum_price_observations": minimum_price_observations,
             "price_observations": len(prices),
-            "price_requirements_met": requirements_met,
+            "price_coverage_gate_passed": requirements_met,
             "company_fields": len(company["values"]),
             "financial_facts": len(financials),
             "financial_facts_by_period": {
@@ -388,11 +400,22 @@ class ResearchStore:
             },
             "unit_checks": {
                 "issue_count": len(ratio_unit_issues),
-                "fields": ratio_unit_issues,
             },
+            "temporal_misalignment_count": sum(bool(value["unpriced_event"]) for value in events),
+            "outlier_candidate_count": 0,
         }
+        quality_details = tuple(
+            {
+                "schema": "security-research-quality-detail/v4",
+                "scope": "unit_issue",
+                "field": name,
+                "reason": "ratio_out_of_unit_range",
+            }
+            for name in ratio_unit_issues
+        )
+        quality_outliers: tuple[dict[str, Any], ...] = ()
         definitions = {
-            "schema": "security-research-definitions/v3",
+            "schema": "security-research-definitions/v4",
             "availability_basis": {
                 "retrieval": (
                     "The provider did not expose publication time; "
@@ -485,7 +508,32 @@ class ResearchStore:
             },
             "runtime_settings": runtime_settings,
             "runtime_settings_hash": runtime_settings_hash,
-            "price_requirements_met": requirements_met,
+            "price_coverage_gate_passed": requirements_met,
+            "temporal": {
+                "price_cutoff": price_cutoff,
+                "market_session": "close",
+                "company_retrieval_time": imported.retrieved_at.isoformat(),
+                "annual_fiscal_period_end": max(
+                    (
+                        value["fiscal_period_end"]
+                        for value in financials
+                        if value["period"] == "annual"
+                    ),
+                    default=None,
+                ),
+                "quarterly_fiscal_period_end": max(
+                    (
+                        value["fiscal_period_end"]
+                        for value in financials
+                        if value["period"] == "quarterly"
+                    ),
+                    default=None,
+                ),
+                "benchmark_cutoff": max(
+                    (value["date"] for value in benchmark_prices), default=None
+                ),
+                "availability_basis": "retrieval",
+            },
             "artifacts": {name: name for name in ARTIFACTS},
         }
         semantic = {
@@ -498,11 +546,13 @@ class ResearchStore:
             "financials": financials,
             "events": events,
             "failures": failures,
-            "quality": quality,
+            "quality_summary": quality_summary,
+            "quality_details": quality_details,
+            "quality_outliers": quality_outliers,
         }
         research_id = hashlib.sha256(_json_bytes(semantic)).hexdigest()
         manifest = {
-            "schema": "security-research-manifest/v6",
+            "schema": "security-research-manifest/v8",
             "research_id": research_id,
             **manifest_body,
         }
@@ -526,10 +576,12 @@ class ResearchStore:
                 _write_jsonl(pending / "financials.jsonl", financials)
                 _write_jsonl(pending / "events.jsonl", events)
                 _write_jsonl(pending / "failures.jsonl", failures)
-                (pending / "quality.json").write_bytes(_json_bytes(quality))
+                (pending / "quality-summary.json").write_bytes(_json_bytes(quality_summary))
+                _write_jsonl(pending / "quality-details.jsonl", quality_details)
+                _write_jsonl(pending / "quality-outliers.jsonl", quality_outliers)
                 (pending / "README.md").write_text(self._readme(manifest), encoding="utf-8")
                 (pending / "summary.md").write_text(
-                    self._summary(manifest, quality), encoding="utf-8"
+                    self._summary(manifest, quality_summary), encoding="utf-8"
                 )
                 (pending / "explorer-data.json").write_bytes(_json_bytes(explorer_data))
                 (pending / "explorer.html").write_text(
@@ -554,8 +606,8 @@ class ResearchStore:
         manifest = self._read_json(path / "manifest.json")
         return {
             **manifest,
-            "schema": "security-research/v6",
-            "quality": self._read_json(path / "quality.json"),
+            "schema": "security-research/v8",
+            "quality_summary": self._read_json(path / "quality-summary.json"),
             "artifacts": {name: str(path / name) for name in ARTIFACTS},
         }
 
@@ -572,14 +624,27 @@ class ResearchStore:
         self, *, snapshot_id: str | None = None, instrument_id: str | None = None
     ) -> dict[str, Any]:
         if not self.objects.exists():
-            return {"schema": "security-research-list/v2", "research": []}
+            return {
+                "schema": "security-research-list/v3",
+                "research": [],
+                "inventory_counts": ArtifactInventory(self.root.parent).list(
+                    object_type="research"
+                )["counts"],
+            }
         self._require_directory(self.objects)
         items = []
         for path in self.objects.iterdir():
-            if path.name.startswith("."):
+            if path.name.startswith(".") or path.name == ".DS_Store":
+                continue
+            manifest_path = path / "manifest.json"
+            try:
+                candidate = self._read_json(manifest_path)
+            except (LookupError, OSError, TypeError, ValueError):
+                continue
+            if candidate.get("schema") != "security-research-manifest/v8":
                 continue
             self._verify(path, path.name)
-            manifest = self._read_json(path / "manifest.json")
+            manifest = candidate
             if snapshot_id is not None and manifest["snapshot_id"] != snapshot_id:
                 continue
             if instrument_id is not None and manifest["instrument_id"] != instrument_id:
@@ -590,14 +655,20 @@ class ResearchStore:
                     "snapshot_id": manifest["snapshot_id"],
                     "instrument_id": manifest["instrument_id"],
                     "created_at": manifest["created_at"],
-                    "price_requirements_met": manifest["price_requirements_met"],
+                    "price_coverage_gate_passed": manifest["price_coverage_gate_passed"],
                 }
             )
         items.sort(
             key=lambda item: (datetime.fromisoformat(item["created_at"]), item["research_id"]),
             reverse=True,
         )
-        return {"schema": "security-research-list/v2", "research": items}
+        return {
+            "schema": "security-research-list/v3",
+            "research": items,
+            "inventory_counts": ArtifactInventory(self.root.parent).list(object_type="research")[
+                "counts"
+            ],
+        }
 
     @staticmethod
     def _readme(manifest: dict[str, Any]) -> str:
@@ -611,7 +682,8 @@ class ResearchStore:
             f"- Retrieved at: `{manifest['created_at']}`\n\n"
             "`prices.jsonl`, `financials.jsonl`, and `events.jsonl` are authoritative "
             "time-series evidence. `company.json` contains retrieval-time company facts. "
-            "`quality.json` and `failures.jsonl` describe limitations.\n"
+            "`quality-summary.json`, quality detail JSONL, and `failures.jsonl` "
+            "describe limitations.\n"
         )
 
     @staticmethod
@@ -625,7 +697,8 @@ class ResearchStore:
             f"- Financial facts: {quality['financial_facts']}\n"
             f"- Events: {quality['events']}\n"
             f"- Failures: {quality['failures']}\n"
-            f"- Price requirements met: `{str(quality['price_requirements_met']).lower()}`\n"
+            "- Price coverage gate passed: "
+            f"`{str(quality['price_coverage_gate_passed']).lower()}`\n"
         )
 
     @classmethod
@@ -638,7 +711,7 @@ class ResearchStore:
             raise ValueError("security research object is incomplete")
         manifest = cls._read_json(path / "manifest.json")
         if (
-            manifest.get("schema") != "security-research-manifest/v6"
+            manifest.get("schema") != "security-research-manifest/v8"
             or manifest.get("research_id") != research_id
         ):
             raise ValueError("security research manifest identity is invalid")
@@ -656,11 +729,13 @@ class ResearchStore:
             "financials": tuple(cls._read_jsonl(path / "financials.jsonl")),
             "events": tuple(cls._read_jsonl(path / "events.jsonl")),
             "failures": tuple(cls._read_jsonl(path / "failures.jsonl")),
-            "quality": cls._read_json(path / "quality.json"),
+            "quality_summary": cls._read_json(path / "quality-summary.json"),
+            "quality_details": tuple(cls._read_jsonl(path / "quality-details.jsonl")),
+            "quality_outliers": tuple(cls._read_jsonl(path / "quality-outliers.jsonl")),
         }
         if hashlib.sha256(_json_bytes(semantic)).hexdigest() != research_id:
             raise ValueError("security research content identity is invalid")
-        quality = semantic["quality"]
+        quality = semantic["quality_summary"]
         if (path / "README.md").read_text(encoding="utf-8") != cls._readme(manifest):
             raise ValueError("security research README projection is invalid")
         if (path / "summary.md").read_text(encoding="utf-8") != cls._summary(manifest, quality):
