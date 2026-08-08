@@ -27,6 +27,7 @@ class SecurityResearchRequest:
     max_retries: int
     retry_base_seconds: float
     settings: Mapping[str, str]
+    evidence: tuple[str, ...] = ("benchmarks", "company", "events", "financials", "price")
 
     def __post_init__(self) -> None:
         if (
@@ -61,6 +62,13 @@ class SecurityResearchRequest:
             for key, value in self.settings.items()
         ):
             raise TypeError("research settings must map strings to strings")
+        allowed = {"benchmarks", "company", "events", "financials", "price"}
+        if (
+            not self.evidence
+            or self.evidence != tuple(sorted(set(self.evidence)))
+            or set(self.evidence) - allowed
+        ):
+            raise ValueError("research evidence must be unique, sorted, and supported")
 
 
 @dataclass(frozen=True, slots=True)

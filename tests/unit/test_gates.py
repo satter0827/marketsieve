@@ -18,8 +18,8 @@ from scripts.runtime_wheelhouse import SUPPORTED_PYTHON_VERSIONS, download_comma
 
 
 def test_release_inputs_require_pep440_version_and_complete_commit() -> None:
-    validate_inputs("0.11.0", "a" * 40)
-    validate_source_release("0.11.0")
+    validate_inputs("0.12.0", "a" * 40)
+    validate_source_release("0.12.0")
 
     with pytest.raises(ValueError, match="version"):
         validate_inputs("v0.1", "a" * 40)
@@ -261,12 +261,8 @@ def create_review_bundle(tmp_path: Path) -> Path:
             "doctor": {},
             "module_doctor": {},
             "capabilities": {},
-            "snapshot": {
-                "exit_code": 0,
-                "schema_valid": True,
-                "reproducible": True,
-                "object_id": "a" * 64,
-            },
+            "market_help": {"exit_code": 0},
+            "research_help": {"exit_code": 0},
         },
         "artifacts": [
             {

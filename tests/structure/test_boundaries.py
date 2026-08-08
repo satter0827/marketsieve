@@ -55,46 +55,14 @@ def test_application_depends_on_public_sdk() -> None:
 
 def test_extension_and_source_packages_follow_inward_dependencies() -> None:
     extension = ROOT / "packages/extension-api/src/marketsieve_extension_api"
-    csv_source = ROOT / "packages/source-csv/src/marketsieve_source_csv"
-    jquants_source = ROOT / "packages/source-jquants/src/marketsieve_source_jquants"
-    alphavantage_source = ROOT / "packages/source-alphavantage/src/marketsieve_source_alphavantage"
-    fred_source = ROOT / "packages/source-fred/src/marketsieve_source_fred"
-    sec_source = ROOT / "packages/source-sec/src/marketsieve_source_sec"
-    edinet_source = ROOT / "packages/source-edinet/src/marketsieve_source_edinet"
-    rakuten_importer = ROOT / "packages/import-rakuten/src/marketsieve_import_rakuten"
+    yfinance_source = ROOT / "packages/source-yfinance/src/marketsieve_source_yfinance"
     extension_imports = set().union(*(imported_roots(path) for path in extension.rglob("*.py")))
-    csv_imports = set().union(*(imported_roots(path) for path in csv_source.rglob("*.py")))
-    jquants_imports = set().union(*(imported_roots(path) for path in jquants_source.rglob("*.py")))
-    alphavantage_imports = set().union(
-        *(imported_roots(path) for path in alphavantage_source.rglob("*.py"))
-    )
-    fred_imports = set().union(*(imported_roots(path) for path in fred_source.rglob("*.py")))
-    sec_imports = set().union(*(imported_roots(path) for path in sec_source.rglob("*.py")))
-    edinet_imports = set().union(*(imported_roots(path) for path in edinet_source.rglob("*.py")))
-    rakuten_imports = set().union(
-        *(imported_roots(path) for path in rakuten_importer.rglob("*.py"))
-    )
+    source_imports = set().union(*(imported_roots(path) for path in yfinance_source.rglob("*.py")))
 
     assert "marketsieve" in extension_imports
-    assert (
-        "marketsieve_cli"
-        not in extension_imports
-        | csv_imports
-        | jquants_imports
-        | alphavantage_imports
-        | fred_imports
-        | sec_imports
-        | edinet_imports
-        | rakuten_imports
-    )
-    assert "marketsieve_source_csv" not in extension_imports
-    assert "marketsieve_extension_api" in csv_imports
-    assert "marketsieve_extension_api" in jquants_imports
-    assert "marketsieve_extension_api" in alphavantage_imports
-    assert "marketsieve_extension_api" in fred_imports
-    assert "marketsieve_extension_api" in sec_imports
-    assert "marketsieve_extension_api" in edinet_imports
-    assert "marketsieve_extension_api" in rakuten_imports
+    assert "marketsieve_cli" not in extension_imports | source_imports
+    assert "marketsieve_source_yfinance" not in extension_imports
+    assert "marketsieve_extension_api" in source_imports
 
 
 def test_analysis_and_synthetic_sources_do_not_reference_each_other() -> None:

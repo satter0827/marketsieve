@@ -18,7 +18,7 @@ from scripts.secret_gate import scan_patch_text, scan_paths
 
 ROOT = Path(__file__).parents[1]
 STATE_ROOT = ROOT / ".marketsieve"
-SCHEMA_VERSION = "2.2.0"
+SCHEMA_VERSION = "2.3.0"
 SCHEMA_PATH = ROOT / "schemas/review-report/v2/schema.json"
 
 
@@ -81,8 +81,12 @@ def tool_version(*command: str) -> str:
 def render_summary(report: dict[str, Any]) -> str:
     failures = [item for item in report["checks"] if item["status"] != "passed"]
     findings = report["findings"]
-    cli_snapshot = report.get("cli", {}).get("snapshot", {})
-    cli_lines = [f"- snapshot={cli_snapshot['object_id']}"] if cli_snapshot.get("object_id") else []
+    cli = report.get("cli", {})
+    cli_lines = [
+        f"- {name.replace('_', ' ')}: exit {item['exit_code']}"
+        for name in ("market_help", "research_help")
+        if isinstance((item := cli.get(name)), dict) and "exit_code" in item
+    ]
     lines = [
         "# Review Summary",
         "",

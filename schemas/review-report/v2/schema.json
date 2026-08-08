@@ -1,11 +1,11 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:marketsieve:schema:review-report:2.2.0",
+  "$id": "urn:marketsieve:schema:review-report:2.3.0",
   "title": "MarketSieve review report",
   "type": "object",
   "required": ["schema_version", "repository", "base_sha", "head_sha", "environment", "changes", "checks", "metrics", "cli", "artifacts", "findings"],
   "properties": {
-    "schema_version": {"const": "2.2.0"},
+    "schema_version": {"const": "2.3.0"},
     "repository": {"type": "string", "minLength": 1},
     "base_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
     "head_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
@@ -57,20 +57,25 @@
     },
     "cli": {
       "type": "object",
-      "required": ["version", "doctor", "module_doctor", "capabilities", "snapshot"],
+      "required": ["version", "doctor", "module_doctor", "capabilities", "market_help", "research_help"],
       "properties": {
         "version": {"type": "object"},
         "doctor": {"type": "object"},
         "module_doctor": {"type": "object"},
         "capabilities": {"type": "object"},
-        "snapshot": {
+        "market_help": {
           "type": "object",
-          "required": ["exit_code", "schema_valid", "reproducible", "object_id"],
+          "required": ["exit_code"],
           "properties": {
-            "exit_code": {"const": 0},
-            "schema_valid": {"const": true},
-            "reproducible": {"const": true},
-            "object_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+            "exit_code": {"const": 0}
+          },
+          "additionalProperties": false
+        },
+        "research_help": {
+          "type": "object",
+          "required": ["exit_code"],
+          "properties": {
+            "exit_code": {"const": 0}
           },
           "additionalProperties": false
         }

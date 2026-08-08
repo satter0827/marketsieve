@@ -1,14 +1,15 @@
 {
   "version": "0.2.0",
   "configurations": [
-    {"name": "01 Market: Show Latest Snapshot", "type": "node-terminal", "request": "launch", "command": "make market-show", "cwd": "${workspaceFolder}"},
-    {"name": "02 Market: Refresh Snapshot (Network)", "type": "node-terminal", "request": "launch", "command": "make market-snapshot", "cwd": "${workspaceFolder}"},
-    {"name": "03 Market: Query Snapshot", "type": "node-terminal", "request": "launch", "command": "make market-query MARKET=${input:market}", "cwd": "${workspaceFolder}"},
-    {"name": "04 Research: Build Security Pack (Network)", "type": "node-terminal", "request": "launch", "command": "make security-research INSTRUMENT=${input:instrument}", "cwd": "${workspaceFolder}"},
-    {"name": "05 Research: Show Latest Security Pack", "type": "node-terminal", "request": "launch", "command": "make research-show INSTRUMENT=${input:instrument}", "cwd": "${workspaceFolder}"}
+    {"name": "01 Market: Build Full Snapshot (Network)", "type": "node-terminal", "request": "launch", "command": "make market-build", "cwd": "${workspaceFolder}"},
+    {"name": "02 Market: Open Latest Snapshot", "type": "node-terminal", "request": "launch", "command": "make market-show", "cwd": "${workspaceFolder}"},
+    {"name": "03 Market: Query Latest Snapshot", "type": "node-terminal", "request": "launch", "command": "make market-query QUERY_ARGS='--market ${input:market} --fields close --fields return_252d --fields volatility_252d'", "cwd": "${workspaceFolder}"},
+    {"name": "04 Research: Build Security Evidence (Network)", "type": "node-terminal", "request": "launch", "command": "make research-build INSTRUMENTS='${input:instruments}'", "cwd": "${workspaceFolder}"},
+    {"name": "05 Research: Open Latest Security Evidence", "type": "node-terminal", "request": "launch", "command": "make research-show INSTRUMENT='${input:instrument}'", "cwd": "${workspaceFolder}"}
   ],
   "inputs": [
     {"id": "market", "type": "pickString", "description": "Market", "options": ["jp", "us"], "default": "jp"},
-    {"id": "instrument", "type": "promptString", "description": "Instrument in MIC:SYMBOL form", "default": "XTKS:7203"}
+    {"id": "instrument", "type": "promptString", "description": "Instrument in MIC:SYMBOL form", "default": "XTKS:7203"},
+    {"id": "instruments", "type": "promptString", "description": "Space-separated instruments", "default": "XTKS:7203 XNAS:MSFT"}
   ]
 }
