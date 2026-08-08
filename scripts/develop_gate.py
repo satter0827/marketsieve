@@ -14,6 +14,7 @@ import tempfile
 import zipfile
 from collections.abc import Sequence
 from pathlib import Path
+from typing import cast
 
 from jsonschema import Draft202012Validator, FormatChecker
 
@@ -23,7 +24,19 @@ ROOT = Path(__file__).parents[1]
 STATE_ROOT = ROOT / ".marketsieve"
 RUNTIME_WHEELHOUSE = STATE_ROOT / "cache" / "runtime-wheelhouse"
 EXTERNAL_PLUGIN_EXAMPLES: tuple[Path, ...] = ()
-MINIMUM_COVERAGE_PERCENT = 80
+MINIMUM_STATEMENT_COVERAGE_PERCENT = 85.0
+MINIMUM_BRANCH_COVERAGE_PERCENT = 75.0
+MINIMUM_CRITICAL_MODULE_COVERAGE_PERCENT = 80.0
+CRITICAL_MODULE_SUFFIXES = (
+    "application/market.py",
+    "application/research.py",
+    "adapters/market_snapshots.py",
+    "adapters/research.py",
+    "develop_gate.py",
+    "release_gate.py",
+    "review_gate.py",
+    "governance_gate.py",
+)
 
 
 def run(command: Sequence[str], *, cwd: Path = ROOT) -> None:
@@ -82,6 +95,7 @@ def check_tests(path: Path) -> None:
     coverage_dir.mkdir(parents=True, exist_ok=True)
     junit = path / "junit.xml"
     coverage_json = path / "coverage.json"
+    run(("uv", "run", "coverage", "erase"))
     run(
         (
             "uv",
@@ -93,16 +107,85 @@ def check_tests(path: Path) -> None:
             f"--junitxml={junit}",
         )
     )
-    run(
-        (
-            "uv",
-            "run",
-            "coverage",
-            "report",
-            f"--fail-under={MINIMUM_COVERAGE_PERCENT}",
-        )
-    )
+    run(("uv", "run", "coverage", "report", "--fail-under=0"))
     run(("uv", "run", "coverage", "json", "-o", str(coverage_json)))
+    coverage = json.loads(coverage_json.read_text(encoding="utf-8"))
+    metrics = coverage_metrics(coverage)
+    validate_coverage(metrics)
+    configuration = (ROOT / "pyproject.toml").read_bytes()
+    (path / "coverage-metadata.json").write_text(
+        json.dumps(
+            {
+                "commit_sha": head_sha(),
+                "configuration_hash": hashlib.sha256(configuration).hexdigest(),
+                "targets": sorted(coverage["files"]),
+                "thresholds": {
+                    "statement_percent": MINIMUM_STATEMENT_COVERAGE_PERCENT,
+                    "branch_percent": MINIMUM_BRANCH_COVERAGE_PERCENT,
+                    "critical_module_percent": MINIMUM_CRITICAL_MODULE_COVERAGE_PERCENT,
+                },
+                "metrics": metrics,
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+
+def coverage_metrics(document: dict[str, object]) -> dict[str, object]:
+    """Calculate separate statement, branch, and critical-module coverage."""
+
+    totals = document["totals"]
+    files = document["files"]
+    if not isinstance(totals, dict) or not isinstance(files, dict):
+        raise ValueError("coverage JSON has an invalid shape")
+
+    def percent(covered: int, total: int) -> float:
+        return 100.0 if total == 0 else covered / total * 100
+
+    statement = percent(int(totals["covered_lines"]), int(totals["num_statements"]))
+    branch = percent(int(totals["covered_branches"]), int(totals["num_branches"]))
+    critical: dict[str, float] = {}
+    for name, value in files.items():
+        if not isinstance(name, str) or not isinstance(value, dict):
+            raise ValueError("coverage file entry has an invalid shape")
+        if not name.endswith(CRITICAL_MODULE_SUFFIXES):
+            continue
+        summary = value.get("summary")
+        if not isinstance(summary, dict):
+            raise ValueError("coverage file summary has an invalid shape")
+        critical[name] = percent(
+            int(summary["covered_lines"]),
+            int(summary["num_statements"]),
+        )
+    return {"statement_percent": statement, "branch_percent": branch, "critical": critical}
+
+
+def validate_coverage(metrics: dict[str, object]) -> None:
+    """Fail with actionable independent threshold evidence."""
+
+    statement = cast(float, metrics["statement_percent"])
+    branch = cast(float, metrics["branch_percent"])
+    critical = metrics["critical"]
+    if not isinstance(critical, dict):
+        raise ValueError("critical coverage metrics have an invalid shape")
+    failures = []
+    if statement < MINIMUM_STATEMENT_COVERAGE_PERCENT:
+        failures.append(
+            f"statement coverage {statement:.2f}% < {MINIMUM_STATEMENT_COVERAGE_PERCENT:.2f}%"
+        )
+    if branch < MINIMUM_BRANCH_COVERAGE_PERCENT:
+        failures.append(f"branch coverage {branch:.2f}% < {MINIMUM_BRANCH_COVERAGE_PERCENT:.2f}%")
+    failures.extend(
+        f"critical module {name} coverage {float(value):.2f}% "
+        f"< {MINIMUM_CRITICAL_MODULE_COVERAGE_PERCENT:.2f}%"
+        for name, value in sorted(critical.items())
+        if float(value) < MINIMUM_CRITICAL_MODULE_COVERAGE_PERCENT
+    )
+    if failures:
+        raise RuntimeError("; ".join(failures))
 
 
 def validate_schemas() -> None:
@@ -128,7 +211,7 @@ def check_smoke(path: Path) -> None:
         "capabilities-result": json.loads(capabilities.stdout),
     }
     for name, document in documents.items():
-        major = "v5" if name == "capabilities-result" else "v1"
+        major = "v8" if name == "capabilities-result" else "v1"
         schema = json.loads(
             (ROOT / f"schemas/{name}/{major}/schema.json").read_text(encoding="utf-8")
         )
@@ -335,19 +418,22 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
     check_parser = subparsers.add_parser("check")
-    check_parser.add_argument("scope", choices=("quality", "structure", "tests", "package", "all"))
+    check_parser.add_argument(
+        "scope", choices=("quality", "structure", "tests", "smoke", "package", "all")
+    )
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
     path = evidence_dir()
-    if args.scope in {"tests", "package"}:
+    if args.scope in {"tests", "smoke", "package"}:
         path.mkdir(parents=True, exist_ok=True)
     checks = {
         "quality": check_quality,
         "structure": check_structure,
         "tests": lambda: check_tests(path),
+        "smoke": lambda: check_smoke(path),
         "package": lambda: check_package(path),
         "all": check_all,
     }

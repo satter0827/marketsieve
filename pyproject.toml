@@ -105,7 +105,7 @@ warn_unused_ignores = true
 [tool.coverage.run]
 branch = true
 data_file = ".marketsieve/coverage/data"
-source = ["marketsieve", "marketsieve_cli", "marketsieve_extension_api", "marketsieve_source_yfinance"]
+source = ["marketsieve", "marketsieve_cli", "marketsieve_extension_api", "marketsieve_source_yfinance", "scripts"]
 omit = ["*/marketsieve_cli/__main__.py"]
 
 [tool.coverage.report]

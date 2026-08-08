@@ -8,6 +8,11 @@ A Security Research run resolves a verified Snapshot row, acquires explicit evid
 writes and verifies one immutable object per successful instrument, and reports per-instrument
 failures. Objects are never updated in place.
 
+A close Capture returns `capture-run/v1` state with a deterministic run ID, status, exit code, and
+resume capability. An identical market, session, date, input, asset, setting, and definition request
+resolves to an existing immutable object as a duplicate instead of reacquiring it. JP and US price
+dates remain separate evidence and are never presented as one hidden common timestamp.
+
 Historical objects remain addressable by ID. Diff compares only fields with compatible type, unit,
 and definition version. Cleanup may remove caches, interrupted obsolete runs, build evidence, and
 legacy pre-0.12 local state only after new objects are verified.

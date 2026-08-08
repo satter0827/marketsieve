@@ -11,5 +11,9 @@ fingerprints, and tamper detection. Live smoke tests are explicit and separate f
 offline suite.
 
 Release handoff requires format, lint, type, test, full development, package build, isolated install,
-and release gates. The executable coverage floor is 80 percent across the supported workspace. A
-reviewed commit is immutable evidence; later commits require another review.
+and release gates. Coverage includes product packages and `scripts/`, excludes tests from the
+denominator, and erases prior data before measurement. The floors are 85 percent statements,
+75 percent branches, and 80 percent statements for critical Market, Research, storage, release,
+review, governance, and gate modules. Evidence records the commit, configuration hash, and measured
+targets. A reviewed commit is immutable evidence; proven descendant changes use a delta semantic
+review, while discontinuous history requires a new full review.

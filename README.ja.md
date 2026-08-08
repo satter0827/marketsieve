@@ -7,9 +7,10 @@ MarketSieveは、APIキー不要のyfinanceから、日本株・米国株の再�
 ```shell
 make sync
 make doctor
-make market-build
-make market-show
-make market-query QUERY_ARGS='--market jp --fields close --fields return_252d'
+make market-capture MARKET=jp
+make market-capture MARKET=us
+make market-preview
+make market-query QUERY_ARGS='--market jp --profile swing --domain return --domain risk --order return_20d:desc --limit 30'
 make research-build INSTRUMENTS='XTKS:7203 XNAS:MSFT'
 ```
 
@@ -18,7 +19,8 @@ make research-build INSTRUMENTS='XTKS:7203 XNAS:MSFT'
 既定値を変える場合は`make setup-settings`で作成できます。
 
 Snapshotは`.marketsieve/market-snapshots/objects/SNAPSHOT_ID/`へ保存されます。JSON・JSONLを
-正本とし、`summary.md`と自己完結`explorer.html`を人間向け投影とします。個別調査は
+正本とし、`explorer-data.json`を図表に依存しない決定的投影、`summary.md`と自己完結
+`explorer.html`を人間向け投影とします。個別調査は
 `.marketsieve/research/objects/RESEARCH_ID/`へ保存し、元Snapshotとの対応を保持します。
 ExcelとCSVは生成しません。
 

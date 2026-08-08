@@ -13,7 +13,7 @@ from scripts.review_gate import validate
 
 ROOT = Path(__file__).parents[1]
 COMMIT = re.compile(r"^[0-9a-f]{40}$")
-STATUS_CONTEXT = "Pre-PR Review"
+STATUS_CONTEXT = "Semantic Review"
 
 
 def capture(*command: str, input_text: str | None = None) -> str:

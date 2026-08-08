@@ -4,11 +4,15 @@
     {"label": "Setup: Create Runtime Settings", "type": "process", "command": "make", "args": ["setup-settings"], "problemMatcher": []},
     {"label": "Setup: Doctor", "type": "process", "command": "make", "args": ["doctor"], "problemMatcher": []},
     {"label": "Market: Build Full Snapshot (Network)", "type": "process", "command": "make", "args": ["market-build"], "problemMatcher": []},
+    {"label": "Market: Capture JP Close (Network)", "type": "process", "command": "make", "args": ["market-capture", "MARKET=jp"], "problemMatcher": []},
+    {"label": "Market: Capture US Close (Network)", "type": "process", "command": "make", "args": ["market-capture", "MARKET=us"], "problemMatcher": []},
+    {"label": "Market: Reconstruct Historical Prices (Network)", "type": "process", "command": "make", "args": ["market-reconstruct", "MARKET=${input:market}", "AS_OF=${input:asOf}"], "problemMatcher": []},
     {"label": "Market: Build JP Snapshot (Network)", "type": "process", "command": "make", "args": ["market-build", "SCOPE=--market jp"], "problemMatcher": []},
     {"label": "Market: Build US Snapshot (Network)", "type": "process", "command": "make", "args": ["market-build", "SCOPE=--market us"], "problemMatcher": []},
     {"label": "Market: Resume Snapshot (Network)", "type": "process", "command": "make", "args": ["market-resume", "RUN_ID=${input:runId}"], "problemMatcher": []},
     {"label": "Market: List Snapshots", "type": "process", "command": "make", "args": ["market-list"], "problemMatcher": []},
     {"label": "Market: Show Snapshot", "type": "process", "command": "make", "args": ["market-show", "SNAPSHOT=${input:snapshotId}"], "problemMatcher": []},
+    {"label": "Market: Preview Explorer", "type": "process", "command": "make", "args": ["market-preview", "SNAPSHOT=${input:snapshotId}"], "problemMatcher": []},
     {"label": "Market: Query Snapshot", "type": "process", "command": "make", "args": ["market-query", "SNAPSHOT=${input:snapshotId}", "QUERY_ARGS=${input:queryArgs}"], "problemMatcher": []},
     {"label": "Market: Show Security", "type": "process", "command": "make", "args": ["market-security", "INSTRUMENT=${input:instrument}", "SNAPSHOT=${input:snapshotId}"], "problemMatcher": []},
     {"label": "Market: Compare Securities", "type": "process", "command": "make", "args": ["market-compare", "INSTRUMENTS=${input:instruments}", "SNAPSHOT=${input:snapshotId}"], "problemMatcher": []},
@@ -16,6 +20,7 @@
     {"label": "Research: Build Security Evidence (Network)", "type": "process", "command": "make", "args": ["research-build", "INSTRUMENTS=${input:instruments}", "SNAPSHOT=${input:snapshotId}"], "problemMatcher": []},
     {"label": "Research: List Evidence", "type": "process", "command": "make", "args": ["research-list"], "problemMatcher": []},
     {"label": "Research: Show Evidence", "type": "process", "command": "make", "args": ["research-show", "RESEARCH_ID=${input:researchId}", "INSTRUMENT=${input:instrument}", "SNAPSHOT=${input:snapshotId}"], "problemMatcher": []},
+    {"label": "Research: Preview Explorer", "type": "process", "command": "make", "args": ["research-preview", "RESEARCH_ID=${input:researchId}", "INSTRUMENT=${input:instrument}", "SNAPSHOT=${input:snapshotId}"], "problemMatcher": []},
     {"label": "Developer: Sync", "type": "process", "command": "make", "args": ["sync"], "problemMatcher": []},
     {"label": "Developer: Format", "type": "process", "command": "make", "args": ["format"], "problemMatcher": []},
     {"label": "Developer: Format Check", "type": "process", "command": "make", "args": ["format-check"], "problemMatcher": []},
@@ -36,5 +41,7 @@
     {"id": "researchId", "type": "promptString", "description": "Research ID or latest", "default": "latest"},
     {"id": "runId", "type": "promptString", "description": "Interrupted Snapshot run ID"},
     {"id": "queryArgs", "type": "promptString", "description": "Explicit market query options", "default": "--market jp --fields close --fields return_252d"}
+    ,{"id": "market", "type": "pickString", "description": "Market", "options": ["jp", "us"], "default": "jp"}
+    ,{"id": "asOf", "type": "promptString", "description": "Historical date in YYYY-MM-DD form"}
   ]
 }

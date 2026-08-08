@@ -21,7 +21,13 @@ from marketsieve.matrix import (
     build_matrix_row,
     field_definitions,
 )
-from marketsieve_cli.contracts import MarketBuildInputs, RuntimeSettings
+from marketsieve_cli.contracts import (
+    MarketBuildInputs,
+    MarketCompareInputs,
+    MarketDiffInputs,
+    MarketQueryInputs,
+    RuntimeSettings,
+)
 from marketsieve_extension_api import (
     EquityAcquisitionFailure,
     EquityBatchFetcher,
@@ -64,11 +70,14 @@ class MarketSnapshotRepository(Protocol):
         rows: tuple[MatrixRow, ...],
         summary: dict[str, Any],
         failures: tuple[dict[str, str], ...],
+        market_indicators: tuple[dict[str, Any], ...] = (),
     ) -> dict[str, Any]: ...
 
     def show(self, snapshot_id: str) -> dict[str, Any]: ...
 
     def list(self) -> dict[str, Any]: ...
+
+    def find_by_request_fingerprint(self, fingerprint: str) -> dict[str, Any] | None: ...
 
     def row(self, snapshot_id: str, instrument_id: str) -> dict[str, Any]: ...
 
@@ -86,6 +95,13 @@ class MarketSnapshotRepository(Protocol):
         present: tuple[str, ...],
         missing: tuple[str, ...],
         fields: tuple[str, ...],
+        order: tuple[str, ...] = (),
+        limit: int | None = None,
+        domains: tuple[str, ...] = (),
+        profile: str | None = None,
+        budget: Decimal | None = None,
+        budget_currency: str | None = None,
+        trading_unit: int | None = None,
     ) -> dict[str, Any]: ...
 
     def research_context(self, snapshot_id: str, instrument_id: str) -> dict[str, Any]: ...
@@ -125,16 +141,33 @@ class MarketService:
                 tuple(stored_request["inputs"]["indices"]),
                 tuple(stored_request["inputs"]["evidence"]),
                 stored_request["inputs"]["history_days"],
+                (
+                    date.fromisoformat(stored_request["inputs"]["as_of"])
+                    if stored_request["inputs"].get("as_of") is not None
+                    else None
+                ),
+                stored_request["inputs"].get("mode", "current"),
+                stored_request["inputs"].get("session"),
             )
         assert inputs is not None
         universe, assets = _load_universe(inputs.indices)
         benchmark_seeds = (
             _benchmark_seeds(inputs.indices) if "benchmarks" in inputs.evidence else ()
         )
-        requested = tuple(sorted((*universe, *benchmark_seeds), key=_seed_key))
+        indicator_seeds = _market_indicator_seeds() if "price" in inputs.evidence else ()
+        requested = tuple(sorted((*universe, *benchmark_seeds, *indicator_seeds), key=_seed_key))
         acquisition_date = self._today()
+        end_date = inputs.as_of or acquisition_date
+        if end_date > acquisition_date:
+            raise ValueError("market acquisition date cannot be in the future")
+        if inputs.mode == "historical_price_reconstruction":
+            asset_dates = [date.fromisoformat(value["as_of"]) for value in assets.values()]
+            if end_date < max(asset_dates):
+                raise ValueError(
+                    "historical reconstruction predates the built-in universe asset basis"
+                )
         if resume is None:
-            end = acquisition_date
+            end = end_date
             start = end - timedelta(days=inputs.history_days or 0)
         else:
             try:
@@ -143,17 +176,20 @@ class MarketService:
                 end = date.fromisoformat(str(stored_request["end"]))
             except (KeyError, TypeError, ValueError) as error:
                 raise ValueError("stored market snapshot run has an invalid date window") from error
-            if end != acquisition_date:
+            if inputs.mode == "current" and end != acquisition_date:
                 raise ValueError(
                     "market snapshot runs can be resumed only on their original acquisition date; "
                     "start a new build"
                 )
         fingerprint_document = {
-            "schema": "market-snapshot-request/v2",
+            "schema": "market-snapshot-request/v3",
             "inputs": {
                 "indices": list(inputs.indices),
                 "evidence": list(inputs.evidence),
                 "history_days": inputs.history_days,
+                "as_of": inputs.as_of.isoformat() if inputs.as_of is not None else None,
+                "mode": inputs.mode,
+                "session": inputs.session,
             },
             "assets": assets,
             "start": start.isoformat(),
@@ -164,6 +200,18 @@ class MarketService:
             "source": {"name": "yfinance"},
         }
         fingerprint = hashlib.sha256(_json_bytes(fingerprint_document)).hexdigest()
+        existing = self._store.find_by_request_fingerprint(fingerprint)
+        if existing is not None and resume is None:
+            return {
+                **existing,
+                "run": {
+                    "schema": "capture-run/v1",
+                    "run_id": fingerprint[:16],
+                    "status": "duplicate",
+                    "exit_code": 0,
+                    "resumable": False,
+                },
+            }
         run_id = self._store.begin_run(
             fingerprint,
             fingerprint_document,
@@ -190,7 +238,7 @@ class MarketService:
         imported = fetcher.fetch(request)
         if imported.request != request:
             raise ValueError("source fetch result must preserve the exact market request")
-        if self._today() != acquisition_date:
+        if inputs.mode == "current" and self._today() != acquisition_date:
             raise ValueError(
                 "market acquisition crossed the local date boundary; start a new build"
             )
@@ -276,6 +324,38 @@ class MarketService:
             price_requested="price" in inputs.evidence,
         )
         failures = _failures(ordered_rows, imported.failures)
+        indicator_keys = {_seed_key(seed) for seed in indicator_seeds}
+        indicator_failure_reasons: dict[tuple[str, str], str] = {}
+        for failure in imported.failures:
+            key = _seed_key(failure)
+            if key not in indicator_keys:
+                continue
+            current = indicator_failure_reasons.get(key)
+            failure_priority = _failure_reason_priority(failure.reason)
+            current_priority = _failure_reason_priority(current) if current is not None else None
+            if current_priority is None or failure_priority > current_priority:
+                indicator_failure_reasons[key] = failure.reason
+        market_indicators = tuple(
+            {
+                "schema": "market-indicator/v1",
+                "indicator_id": indicator_id,
+                "provider_symbol": seed.provider_symbol,
+                "name": MARKET_INDICATORS[indicator_id][3],
+                "unit": MARKET_INDICATORS[indicator_id][2],
+                "retrieved_at": observations[_seed_key(seed)].retrieved_at.isoformat(),
+                "observations": [
+                    {"date": bar.trading_date.isoformat(), "value": str(bar.close)}
+                    for bar in observations[_seed_key(seed)].bars
+                ],
+                "missing_reason": (
+                    None
+                    if observations[_seed_key(seed)].bars
+                    else indicator_failure_reasons.get(_seed_key(seed), "history_empty")
+                ),
+            }
+            for seed in indicator_seeds
+            for indicator_id in (seed.memberships[0].removeprefix("indicator:"),)
+        )
         manifest_body = {
             "created_at": imported.retrieved_at.isoformat(),
             "request": {"fingerprint": fingerprint, **fingerprint_document},
@@ -297,19 +377,28 @@ class MarketService:
             "coverage": summary["coverage"],
             "price_requirements_met": summary["price_requirements_met"],
         }
-        return self._store.put(
+        document = self._store.put(
             run_id=run_id,
             manifest_body=manifest_body,
             fields=field_definitions(),
             rows=ordered_rows,
             summary=summary,
             failures=failures,
+            market_indicators=market_indicators,
         )
+        return {
+            **document,
+            "run": {
+                "schema": "capture-run/v1",
+                "run_id": run_id,
+                "status": "completed",
+                "exit_code": 0,
+                "resumable": False,
+            },
+        }
 
-    def diff(
-        self, left_snapshot_id: str, right_snapshot_id: str, fields: tuple[str, ...]
-    ) -> dict[str, Any]:
-        return self._store.diff(left_snapshot_id, right_snapshot_id, fields)
+    def diff(self, request: MarketDiffInputs) -> dict[str, Any]:
+        return self._store.diff(request.left_snapshot_id, request.right_snapshot_id, request.fields)
 
     def show(self, snapshot_id: str) -> dict[str, Any]:
         return self._store.show(snapshot_id)
@@ -320,34 +409,25 @@ class MarketService:
     def row(self, snapshot_id: str, instrument_id: str) -> dict[str, Any]:
         return self._store.row(snapshot_id, instrument_id)
 
-    def compare(
-        self, snapshot_id: str, instrument_ids: tuple[str, ...], fields: tuple[str, ...]
-    ) -> dict[str, Any]:
-        if len(instrument_ids) < 2:
-            raise ValueError("market snapshot compare requires at least two instruments")
-        if len(instrument_ids) != len(set(instrument_ids)):
-            raise ValueError("market snapshot compare instruments must be unique")
-        return self._store.compare(snapshot_id, instrument_ids, fields)
+    def compare(self, request: MarketCompareInputs) -> dict[str, Any]:
+        return self._store.compare(request.snapshot_id, request.instrument_ids, request.fields)
 
-    def query(
-        self,
-        snapshot_id: str,
-        *,
-        filters: dict[str, tuple[str, ...]],
-        minimums: dict[str, Decimal],
-        maximums: dict[str, Decimal],
-        present: tuple[str, ...],
-        missing: tuple[str, ...],
-        fields: tuple[str, ...],
-    ) -> dict[str, Any]:
+    def query(self, request: MarketQueryInputs) -> dict[str, Any]:
         return self._store.query(
-            snapshot_id,
-            filters=filters,
-            minimums=minimums,
-            maximums=maximums,
-            present=present,
-            missing=missing,
-            fields=fields,
+            request.snapshot_id,
+            filters=request.filters,
+            minimums=request.minimums,
+            maximums=request.maximums,
+            present=request.present,
+            missing=request.missing,
+            fields=request.fields,
+            order=request.order,
+            limit=request.limit,
+            domains=request.domains,
+            profile=request.profile,
+            budget=request.budget,
+            budget_currency=request.budget_currency,
+            trading_unit=request.trading_unit,
         )
 
     def research_context(self, snapshot_id: str, instrument_id: str) -> dict[str, Any]:
@@ -429,6 +509,19 @@ _VOLUME_FAILURE_FIELDS = {
         "zero_volume_days_20d",
     },
     "volume_60d": {"average_volume_60d"},
+}
+
+MARKET_INDICATORS = {
+    "gold": ("GOLD", "GC=F", "USD", "Gold futures proxy"),
+    "major_index_dow": ("DJI", "^DJI", "USD", "Dow Jones Industrial Average"),
+    "major_index_nasdaq100": ("NDX", "^NDX", "USD", "Nasdaq-100 index"),
+    "major_index_nikkei225": ("N225", "^N225", "JPY", "Nikkei 225 index"),
+    "major_index_sp500": ("GSPC", "^GSPC", "USD", "S&P 500 index"),
+    "oil_wti": ("WTI", "CL=F", "USD", "WTI crude-oil futures proxy"),
+    "usd_jpy": ("USDJPY", "JPY=X", "JPY_per_USD", "U.S. dollar to Japanese yen"),
+    "us_rate_10y": ("US10Y", "^TNX", "percent", "U.S. 10-year Treasury yield"),
+    "us_rate_3m": ("US3M", "^IRX", "percent", "U.S. 13-week Treasury yield"),
+    "vix": ("VIX", "^VIX", "index_points", "CBOE Volatility Index"),
 }
 
 
@@ -649,6 +742,23 @@ def _benchmark_seeds(indices: tuple[str, ...]) -> tuple[EquityBatchInstrument, .
     )
 
 
+def _market_indicator_seeds() -> tuple[EquityBatchInstrument, ...]:
+    return tuple(
+        EquityBatchInstrument(
+            Instrument.create(
+                symbol=symbol,
+                mic="XNAS",
+                currency="JPY" if unit == "JPY_per_USD" else "USD",
+                exchange_timezone="America/New_York",
+            ),
+            provider_symbol,
+            (f"indicator:{indicator_id}",),
+            True,
+        )
+        for indicator_id, (symbol, provider_symbol, unit, _) in sorted(MARKET_INDICATORS.items())
+    )
+
+
 def _decimal(values: Mapping[str, str], name: str) -> Decimal | None:
     try:
         return Decimal(values[name])
@@ -732,6 +842,21 @@ def _build_summary(
                 row
                 for row in rows
                 if dict(row.values).get(classification_field) == classification_value
+            )
+    for market_name, market_rows in (
+        ("jp", groups["market:jp"]),
+        ("us", groups["market:us"]),
+    ):
+        sectors = sorted(
+            {
+                sector
+                for row in market_rows
+                if (sector := dict(row.values).get("sector")) is not None
+            }
+        )
+        for sector in sectors:
+            groups[f"market-sector:{market_name}|{sector}"] = tuple(
+                row for row in market_rows if dict(row.values).get("sector") == sector
             )
     documents: dict[str, Any] = {}
     for name, selected in groups.items():
@@ -933,18 +1058,10 @@ def _failures(
                 "reason": value.reason,
             }
         )
-    for row in rows:
-        instrument_id = f"{row.security.instrument.mic}:{row.security.instrument.symbol}"
-        output.extend(
-            {
-                "instrument_id": instrument_id,
-                "stage": "calculation",
-                "field": field,
-                "reason": reason,
-            }
-            for field, reason in row.missing
-            if reason not in {"not_applicable", "not_requested"}
-        )
+    # Cell-level absence is authoritative in each row's ``missing`` mapping.
+    # failures.jsonl is intentionally limited to acquisition or calculation
+    # attempts that actually failed at their boundary.
+    del rows
     return tuple(
         sorted(
             output,

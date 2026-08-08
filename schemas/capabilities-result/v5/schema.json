@@ -1,1 +1,0 @@
-{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"urn:marketsieve:schema:capabilities-result:5.0.0","type":"object","required":["schema","version","commands"],"properties":{"schema":{"const":"capabilities-result/v5"},"version":{"type":"string"},"commands":{"type":"array","items":{"type":"object"}}},"additionalProperties":false}

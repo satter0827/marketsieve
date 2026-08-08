@@ -21,7 +21,7 @@ def test_public_cli_is_small_and_explicit() -> None:
     assert "market build --all" in landing.stdout
     assert version.output == f"marketsieve, version {__version__}\n"
     document = json.loads(capabilities.stdout)
-    assert document["schema"] == "capabilities-result/v5"
+    assert document["schema"] == "capabilities-result/v8"
     assert {item["name"].split()[0] for item in document["commands"]} == {
         "market",
         "research",
@@ -74,9 +74,9 @@ def test_market_query_maps_repeatable_cli_classifications_to_canonical_names(
     captured: dict[str, Any] = {}
 
     def query(*args: Any, **kwargs: Any) -> dict[str, Any]:
-        captured.update(kwargs)
+        captured["request"] = args[1]
         return {
-            "schema": "market-snapshot-query-result/v1",
+            "schema": "market-snapshot-query-result/v2",
             "snapshot_id": "a" * 64,
             "matched_count": 0,
             "fields": [],
@@ -102,4 +102,4 @@ def test_market_query_maps_repeatable_cli_classifications_to_canonical_names(
     )
 
     assert result.exit_code == 0
-    assert captured["filters"] == {"market": ("jp",), "index": ("nikkei225",)}
+    assert captured["request"].filters == {"market": ("jp",), "index": ("nikkei225",)}

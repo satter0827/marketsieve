@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.15.0] - 2026-08-08
+
+- Add explicit market-close Capture runs and price-only historical reconstruction with structured
+  run state, duplicate detection, future-date checks, and universe-basis safeguards.
+- Move operation capabilities and typed requests toward a transport-independent application
+  boundary without adding MCP or scheduling dependencies.
+
+## [0.14.0] - 2026-08-08
+
+- Add purpose profiles, neutral ordering and limits, domain projections, and transient budget and
+  trading-unit affordability to persisted Snapshot queries.
+- Add yfinance market indicators and shared chart-neutral Snapshot and Research Explorer data.
+- Add loopback-only preview commands that expose one verified immutable object without directory
+  listing or path traversal.
+
+## [0.13.0] - 2026-08-08
+
+- Normalize yfinance percentage-point fields to ratio units at the provider boundary.
+- Separate applicability, comparison scope, temporal metadata, normal missing cells, and actual
+  acquisition failures in the Snapshot v4 and Research v3 contracts.
+- Add field and segment coverage, freshness, unit checks, outlier candidates, and market-sector
+  aggregates to quality evidence.
+- Measure product packages and scripts with independent statement and branch quality thresholds.
+- Consolidate CI evidence in Develop Gate and replace repeated full pre-PR review with semantic
+  full-then-delta review.
+
 ## [0.12.0] - 2026-08-08
 
 ### Added

@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import pytest
@@ -81,11 +82,32 @@ def test_test_gate_runs_once_and_enforces_coverage_threshold(
     evidence = tmp_path / "evidence"
     evidence.mkdir()
     monkeypatch.setattr(develop_gate, "STATE_ROOT", state_root)
-    monkeypatch.setattr(develop_gate, "run", commands.append)
+
+    def run(command: tuple[str, ...]) -> None:
+        commands.append(command)
+        if command[2:4] == ("coverage", "json"):
+            (evidence / "coverage.json").write_text(
+                json.dumps(
+                    {
+                        "totals": {
+                            "covered_lines": 90,
+                            "num_statements": 100,
+                            "covered_branches": 80,
+                            "num_branches": 100,
+                        },
+                        "files": {},
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+    monkeypatch.setattr(develop_gate, "run", run)
+    monkeypatch.setattr(develop_gate, "head_sha", lambda: "a" * 40)
 
     develop_gate.check_tests(evidence)
 
     assert commands == [
+        ("uv", "run", "coverage", "erase"),
         (
             "uv",
             "run",
@@ -100,7 +122,7 @@ def test_test_gate_runs_once_and_enforces_coverage_threshold(
             "run",
             "coverage",
             "report",
-            f"--fail-under={develop_gate.MINIMUM_COVERAGE_PERCENT}",
+            "--fail-under=0",
         ),
         (
             "uv",
@@ -111,3 +133,14 @@ def test_test_gate_runs_once_and_enforces_coverage_threshold(
             str(evidence / "coverage.json"),
         ),
     ]
+
+
+def test_coverage_thresholds_are_independent() -> None:
+    metrics = {
+        "statement_percent": 90.0,
+        "branch_percent": 70.0,
+        "critical": {"application/market.py": 79.0},
+    }
+
+    with pytest.raises(RuntimeError, match=r"branch coverage.*critical module"):
+        develop_gate.validate_coverage(metrics)

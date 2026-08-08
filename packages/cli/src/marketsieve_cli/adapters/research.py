@@ -3,16 +3,18 @@
 from __future__ import annotations
 
 import hashlib
-import html
 import json
 import os
 import shutil
 from collections.abc import Iterable
-from datetime import datetime
+from datetime import date, datetime
+from decimal import Decimal
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from marketsieve_extension_api import ImportedSecurityResearch
+
+from .explorer import build_research_explorer_data, render_explorer
 
 ARTIFACTS = (
     "README.md",
@@ -27,6 +29,7 @@ ARTIFACTS = (
     "failures.jsonl",
     "quality.json",
     "summary.md",
+    "explorer-data.json",
     "explorer.html",
 )
 
@@ -244,6 +247,25 @@ class ResearchStore:
         for failure in failures:
             failures_by_reason[failure["reason"]] = failures_by_reason.get(failure["reason"], 0) + 1
             failures_by_stage[failure["stage"]] = failures_by_stage.get(failure["stage"], 0) + 1
+        requested = set(imported.request.evidence)
+        event_failures = [value for value in failures if value["stage"] == "research"]
+        event_status = (
+            "not_requested"
+            if "events" not in requested
+            else "acquisition_failed"
+            if event_failures
+            else "available"
+            if events
+            else "none_observed"
+        )
+        financial_dates = [value["fiscal_period_end"] for value in financials]
+        retrieved_date = imported.retrieved_at.date()
+        company_values = cast(dict[str, str], company["values"])
+        ratio_unit_issues = [
+            name
+            for name, value in company_values.items()
+            if name == "dividend_yield" and not Decimal(0) <= Decimal(value) <= Decimal(1)
+        ]
         quality = {
             "schema": "security-research-quality/v2",
             "requested_evidence": list(imported.request.evidence),
@@ -257,6 +279,7 @@ class ResearchStore:
                 for period in ("annual", "quarterly")
             },
             "events": len(events),
+            "event_status": event_status,
             "benchmark_observations": len(benchmark_prices),
             "failures": len(failures),
             "failures_by_reason": dict(sorted(failures_by_reason.items())),
@@ -264,6 +287,24 @@ class ResearchStore:
             "price_date_range": {
                 "start": prices[0]["date"] if prices else None,
                 "end": prices[-1]["date"] if prices else None,
+            },
+            "freshness": {
+                "price_age_days": (
+                    (retrieved_date - date.fromisoformat(str(prices[-1]["date"]))).days
+                    if prices
+                    else None
+                ),
+                "financial_age_days": (
+                    (
+                        retrieved_date - max(date.fromisoformat(value) for value in financial_dates)
+                    ).days
+                    if financial_dates
+                    else None
+                ),
+            },
+            "unit_checks": {
+                "issue_count": len(ratio_unit_issues),
+                "fields": ratio_unit_issues,
             },
         }
         definitions = {
@@ -377,10 +418,19 @@ class ResearchStore:
         }
         research_id = hashlib.sha256(_json_bytes(semantic)).hexdigest()
         manifest = {
-            "schema": "security-research-manifest/v2",
+            "schema": "security-research-manifest/v4",
             "research_id": research_id,
             **manifest_body,
         }
+        explorer_data = build_research_explorer_data(
+            manifest,
+            company,
+            quality,
+            prices,
+            benchmark_prices,
+            financials,
+            events,
+        )
         self._ensure_directory(self.objects)
         destination = self.objects / research_id
         if destination.is_symlink():
@@ -405,16 +455,9 @@ class ResearchStore:
                 (pending / "summary.md").write_text(
                     self._summary(manifest, quality), encoding="utf-8"
                 )
+                (pending / "explorer-data.json").write_bytes(_json_bytes(explorer_data))
                 (pending / "explorer.html").write_text(
-                    self._html(
-                        manifest,
-                        company,
-                        quality,
-                        prices,
-                        benchmark_prices,
-                        financials,
-                        events,
-                    ),
+                    render_explorer(explorer_data),
                     encoding="utf-8",
                 )
                 pending.rename(destination)
@@ -435,7 +478,7 @@ class ResearchStore:
         manifest = self._read_json(path / "manifest.json")
         return {
             **manifest,
-            "schema": "security-research/v2",
+            "schema": "security-research/v4",
             "quality": self._read_json(path / "quality.json"),
             "artifacts": {name: str(path / name) for name in ARTIFACTS},
         }
@@ -509,96 +552,6 @@ class ResearchStore:
             f"- Price requirements met: `{str(quality['price_requirements_met']).lower()}`\n"
         )
 
-    @staticmethod
-    def _html(
-        manifest: dict[str, Any],
-        company: dict[str, Any],
-        quality: dict[str, Any],
-        prices: tuple[dict[str, Any], ...],
-        benchmarks: tuple[dict[str, Any], ...],
-        financials: tuple[dict[str, Any], ...],
-        events: tuple[dict[str, Any], ...],
-    ) -> str:
-        company_rows = "".join(
-            f"<tr><th>{html.escape(key)}</th><td>{html.escape(str(value))}</td></tr>"
-            for key, value in sorted(company["values"].items())
-        )
-        financial_rows = "".join(
-            "<tr>"
-            f"<td>{html.escape(str(row['fiscal_period_end']))}</td>"
-            f"<td>{html.escape(str(row['period']))}</td>"
-            f"<td>{html.escape(str(row['concept']))}</td>"
-            f"<td>{html.escape(str(row['value']))}</td>"
-            f"<td>{html.escape(str(row['currency']))}</td>"
-            "</tr>"
-            for row in financials
-        )
-        event_rows = "".join(
-            "<tr>"
-            f"<td>{html.escape(str(row['effective_date']))}</td>"
-            f"<td>{html.escape(str(row['event_type']))}</td>"
-            f"<td>{html.escape(json.dumps(row['values'], ensure_ascii=False, sort_keys=True))}</td>"
-            "</tr>"
-            for row in events
-        )
-        data = json.dumps(
-            {"prices": prices, "benchmarks": benchmarks},
-            ensure_ascii=False,
-            separators=(",", ":"),
-            sort_keys=True,
-        ).replace("<", "\\u003c")
-        return (
-            '<!doctype html><html lang="en"><head><meta charset="utf-8">'
-            '<meta name="viewport" content="width=device-width,initial-scale=1">'
-            "<title>MarketSieve Security Research</title>"
-            "<style>body{font:14px system-ui;margin:2rem;color:#17212b;background:#fff}"
-            ".cards{display:flex;gap:1rem;flex-wrap:wrap}.card{border:1px solid #ccd6df;"
-            "border-radius:.5rem;padding:.75rem;min-width:10rem}figure{margin:1rem 0}"
-            "svg{width:100%;height:320px;border:1px solid #ccd6df;background:#fff}"
-            "table{border-collapse:collapse;width:100%;margin:1rem 0}"
-            "th,td{border-bottom:1px solid #ccd6df;padding:.45rem;text-align:left}"
-            ".muted{color:#52606d}</style></head><body>"
-            f"<h1>{manifest['instrument_id']}</h1>"
-            f"<p class=muted>Research {manifest['research_id']} · {manifest['created_at']}</p>"
-            '<div class="cards">'
-            f'<div class="card"><strong>Prices</strong><br>{quality["price_observations"]}</div>'
-            '<div class="card"><strong>Benchmarks</strong><br>'
-            f"{quality['benchmark_observations']}</div>"
-            '<div class="card"><strong>Financial facts</strong><br>'
-            f"{quality['financial_facts']}</div>"
-            f'<div class="card"><strong>Events</strong><br>{quality["events"]}</div>'
-            f'<div class="card"><strong>Failures</strong><br>{quality["failures"]}</div></div>'
-            "<figure><figcaption>Normalized adjusted price and benchmarks</figcaption>"
-            '<svg id="price-chart" role="img" aria-label="Normalized price history"></svg></figure>'
-            f"<h2>Company</h2><table>{company_rows}</table>"
-            "<h2>Financial history</h2><table><tr><th>Period end</th>"
-            "<th>Period</th><th>Concept</th><th>Value</th><th>Currency</th></tr>"
-            f"{financial_rows}</table>"
-            "<h2>Events</h2><table><tr><th>Date</th><th>Type</th><th>Values</th></tr>"
-            f"{event_rows}</table>"
-            f'<script id="chart-data" type="application/json">{data}</script>'
-            "<script>(()=>{const d=JSON.parse(document.getElementById('chart-data').textContent);"
-            "const groups={security:d.prices.map(x=>[x.date,+x.close])};"
-            "for(const x of d.benchmarks)(groups[x.benchmark]??=[]).push([x.date,+x.close]);"
-            "const all=Object.values(groups).flat();if(!all.length)return;"
-            "const dates=[...new Set(all.map(x=>x[0]))].sort(),w=1000,h=300,p=32;"
-            "const svg=document.getElementById('price-chart'),ns='http://www.w3.org/2000/svg';"
-            "const colors=['#1769aa','#d97706','#0f766e','#7c3aed','#be123c'];let i=0;"
-            "for(const [name,rows] of Object.entries(groups)){if(!rows.length)continue;"
-            "const base=rows[0][1],pts=rows.map(x=>{const xi=p+"
-            "(dates.indexOf(x[0])/(Math.max(1,dates.length-1)))*(w-2*p);"
-            "const yv=x[1]/base*100;return [xi,yv]}),ys=Object.values(groups)"
-            ".flatMap(g=>g.length?g.map(x=>x[1]/g[0][1]*100):[]);"
-            "const lo=Math.min(...ys),hi=Math.max(...ys),poly="
-            "document.createElementNS(ns,'polyline');"
-            "poly.setAttribute('points',pts.map(x=>`${x[0]},${h-p-(x[1]-lo)/"
-            "(Math.max(.0001,hi-lo))*(h-2*p)}`).join(' '));"
-            "poly.setAttribute('fill','none');poly.setAttribute('stroke',colors[i++%colors.length]);"
-            "poly.setAttribute('stroke-width','2');const title="
-            "document.createElementNS(ns,'title');"
-            "title.textContent=name;poly.appendChild(title);svg.appendChild(poly)}})();</script></body></html>"
-        )
-
     @classmethod
     def _verify(cls, path: Path, research_id: str) -> None:
         if path.is_symlink() or not path.is_dir() or path.name != research_id:
@@ -609,7 +562,7 @@ class ResearchStore:
             raise ValueError("security research object is incomplete")
         manifest = cls._read_json(path / "manifest.json")
         if (
-            manifest.get("schema") != "security-research-manifest/v2"
+            manifest.get("schema") != "security-research-manifest/v4"
             or manifest.get("research_id") != research_id
         ):
             raise ValueError("security research manifest identity is invalid")
@@ -641,7 +594,8 @@ class ResearchStore:
             raise ValueError("security research README projection is invalid")
         if (path / "summary.md").read_text(encoding="utf-8") != cls._summary(manifest, quality):
             raise ValueError("security research summary projection is invalid")
-        if (path / "explorer.html").read_text(encoding="utf-8") != cls._html(
+        explorer_data = cls._read_json(path / "explorer-data.json")
+        expected_explorer_data = build_research_explorer_data(
             manifest,
             company,
             quality,
@@ -649,7 +603,10 @@ class ResearchStore:
             benchmarks,
             financials,
             events,
-        ):
+        )
+        if explorer_data != expected_explorer_data:
+            raise ValueError("security research Explorer data projection is invalid")
+        if (path / "explorer.html").read_text(encoding="utf-8") != render_explorer(explorer_data):
             raise ValueError("security research HTML projection is invalid")
 
     @staticmethod

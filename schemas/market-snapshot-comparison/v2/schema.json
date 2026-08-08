@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:marketsieve:schema:market-snapshot-comparison:2.0.0",
+  "type": "object",
+  "required": ["schema", "snapshot_id", "fields", "rows"],
+  "properties": {
+    "schema": {"const": "market-snapshot-comparison/v2"},
+    "snapshot_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "fields": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string"}},
+    "rows": {"type": "array", "minItems": 2, "items": {"type": "object", "required": ["instrument_id", "values", "missing"], "additionalProperties": false, "properties": {"instrument_id": {"type": "string"}, "values": {"type": "object"}, "missing": {"type": "object"}}}}
+  },
+  "additionalProperties": false
+}
