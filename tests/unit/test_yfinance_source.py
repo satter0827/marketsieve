@@ -18,6 +18,9 @@ from marketsieve.domain import Instrument
 from marketsieve_extension_api import (
     EquityBatchInstrument,
     EquityBatchRequest,
+    MarketIndicatorKind,
+    MarketIndicatorRequest,
+    MarketIndicatorSpec,
     SecurityResearchRequest,
 )
 from marketsieve_source_yfinance import YFinanceSource
@@ -56,6 +59,53 @@ def _request(*items: EquityBatchInstrument) -> EquityBatchRequest:
         0.0,
         {"cache_dir": ".marketsieve/cache/yfinance-test"},
     )
+
+
+def test_market_indicator_adapter_sorts_internal_equity_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class RequestObserved(RuntimeError):
+        pass
+
+    def observe_request(_source: YFinanceSource, request: EquityBatchRequest) -> Any:
+        identities = tuple(
+            (item.instrument.mic, item.instrument.symbol) for item in request.instruments
+        )
+        assert identities == tuple(sorted(identities))
+        assert len(identities) == len(set(identities))
+        raise RequestObserved
+
+    monkeypatch.setattr(YFinanceSource, "fetch", observe_request)
+    specs = tuple(
+        sorted(
+            (
+                MarketIndicatorSpec(
+                    "us_rate_10y",
+                    "^TNX",
+                    "U.S. 10-year yield",
+                    MarketIndicatorKind.YIELD,
+                    "percent",
+                ),
+                MarketIndicatorSpec(
+                    "usd_jpy", "JPY=X", "USD/JPY", MarketIndicatorKind.FX_RATE, "JPY_per_USD"
+                ),
+            ),
+            key=lambda value: value.indicator_id,
+        )
+    )
+    request = MarketIndicatorRequest(
+        "market-indicators-yfinance",
+        specs,
+        date(2026, 8, 1),
+        date(2026, 8, 7),
+        30,
+        3,
+        0.0,
+        {},
+    )
+
+    with pytest.raises(RequestObserved):
+        YFinanceSource().fetch_market_indicators(request)
 
 
 def _history(symbols: tuple[str, ...]) -> pd.DataFrame:
