@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.15.1] - 2026-08-08
+
+- Merge overlapping benchmark and market-indicator roles before constructing the all-market
+  yfinance batch, preserving unique sorted instrument requests.
+- Restrict Explorer security search to identifiers and classification text so numeric observations
+  do not create unrelated matches.
+
 ## [0.15.0] - 2026-08-08
 
 - Add explicit market-close Capture runs and price-only historical reconstruction with structured

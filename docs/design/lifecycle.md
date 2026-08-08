@@ -9,9 +9,11 @@ writes and verifies one immutable object per successful instrument, and reports 
 failures. Objects are never updated in place.
 
 A close Capture returns `capture-run/v1` state with a deterministic run ID, status, exit code, and
-resume capability. An identical market, session, date, input, asset, setting, and definition request
-resolves to an existing immutable object as a duplicate instead of reacquiring it. JP and US price
-dates remain separate evidence and are never presented as one hidden common timestamp.
+resume capability. An identical market, session, date, input, asset, setting, definition, producer,
+Snapshot schema, and Explorer schema request resolves to an existing immutable object as a duplicate
+instead of reacquiring it. A producer or projection contract change creates a new object without
+rewriting the old object. JP and US price dates remain separate evidence and are never presented as
+one hidden common timestamp.
 
 Historical objects remain addressable by ID. Diff compares only fields with compatible type, unit,
 and definition version. Cleanup may remove caches, interrupted obsolete runs, build evidence, and
