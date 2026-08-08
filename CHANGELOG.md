@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.19.1] - 2026-08-09
+
+- Sorted the internal price-only equity request used by market indicators so full live Snapshot
+  generation satisfies the deterministic batch contract after equity acquisition completes.
+- Added a regression test for indicator IDs whose contract order differs from their normalized
+  internal instrument order.
+
 ## [0.19.0] - 2026-08-09
 
 - Added a small stable SDK surface for models, deterministic indicators, and field definitions.
