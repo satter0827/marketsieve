@@ -23,7 +23,9 @@ files are JSON and JSONL. `explorer-data.json` is the deterministic view contrac
 `summary.md` and `explorer.html` are human views. The Explorer is self-contained at the object-folder
 level and reads the same canonical files through the loopback-only `serve` command.
 Research packs are stored under `.marketsieve/research/objects/RESEARCH_ID/` and remain tied to the
-source Snapshot. No Excel or CSV artifact is generated.
+source Snapshot. Research Explorer reads the pack's authoritative files over `research serve`,
+offers 3-month through full-history views, and preserves independent acquisition states for each
+evidence domain. No Excel or CSV artifact is generated.
 
 The public CLI is intentionally small: `market`, `research`, `doctor`, and `capabilities`. Portfolio,
 watchlist, routine report, generic source, generic snapshot, and experiment workflows are not part

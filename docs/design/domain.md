@@ -23,8 +23,10 @@ Provider percentage-point fields are normalized to stored ratios at acquisition.
 part of each field definition; `not_applicable` observations do not enter aggregate denominators.
 
 An Explorer Projection is a deterministic view contract over authoritative JSON and JSONL. It
-contains fields, units, periods, observation and missing counts, applicability, drawing values, and
-a table fallback. Rendering does not add conclusions, scores, recommendations, or model prompts.
+contains source references, fields, units, periods, applicability, and display definitions, but
+does not duplicate authoritative observations. Rendering derives drawing marks and table fallbacks
+from saved evidence without acquisition or persistence. It does not add conclusions, scores,
+recommendations, or model prompts.
 
 A Capture run records one market close session and explicit evidence domains. Historical price
 reconstruction is a separate mode that contains only price and benchmark evidence and may not

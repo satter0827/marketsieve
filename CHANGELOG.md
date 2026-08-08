@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.17.0] - 2026-08-09
+
+- Replaced the embedded Research Explorer projection with a reference-only v2 contract that reads
+  authoritative price, benchmark, financial, event, company, quality, and failure evidence.
+- Added selectable 3-month through full-history views for price, moving averages, volume,
+  benchmark-relative performance, rolling risk, financial periods, events, and structured evidence.
+- Split the former aggregate event state into independent price, company, annual and quarterly
+  financial, earnings, dividend, split, and benchmark acquisition states so partial success remains
+  usable.
+
 ## [0.16.0] - 2026-08-08
 
 - Replaced duplicated embedded Snapshot Explorer data with a reference-only v2 contract that reads

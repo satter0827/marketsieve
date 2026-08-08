@@ -47,7 +47,7 @@ COMMAND_CAPABILITIES = (
     ("market serve", "interactive-preview/v1", False, ()),
     ("research build", "security-research-batch/v1", True, ("security_research",)),
     ("research list", "security-research-list/v2", False, ()),
-    ("research show", "security-research/v4", False, ()),
+    ("research show", "security-research/v6", False, ()),
     ("research serve", "interactive-preview/v1", False, ()),
     ("doctor", "doctor-result/v1", False, ("log_file",)),
     ("capabilities", "capabilities-result/v8", False, ()),

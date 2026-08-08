@@ -71,13 +71,13 @@ def test_removed_feature_schemas_do_not_exist() -> None:
         ("market-snapshot-list", "v2", {"schema": "market-snapshot-list/v2", "snapshots": [{}]}),
         (
             "security-research",
-            "v4",
-            {"schema": "security-research/v4", "quality": {}, "artifacts": {}},
+            "v6",
+            {"schema": "security-research/v6", "quality": {}, "artifacts": {}},
         ),
         (
             "security-research-manifest",
-            "v4",
-            {"schema": "security-research-manifest/v4", "artifacts": {}},
+            "v6",
+            {"schema": "security-research-manifest/v6", "artifacts": {}},
         ),
         (
             "security-research-list",

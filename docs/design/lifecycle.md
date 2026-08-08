@@ -15,6 +15,10 @@ instead of reacquiring it. A producer or projection contract change creates a ne
 rewriting the old object. JP and US price dates remain separate evidence and are never presented as
 one hidden common timestamp.
 
+Research v6 objects are immutable and intentionally incompatible with earlier Research contracts.
+Changing the requested evidence or source response creates a new content identity; changing only
+the Explorer display period does not create or mutate an object.
+
 Historical objects remain addressable by ID. Diff compares only fields with compatible type, unit,
 and definition version. Cleanup may remove caches, interrupted obsolete runs, build evidence, and
 legacy pre-0.12 local state only after new objects are verified.
