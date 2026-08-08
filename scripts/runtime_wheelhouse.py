@@ -7,7 +7,10 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from functools import partial
 from pathlib import Path
+
+from scripts.parallel import Task, run_tasks
 
 ROOT = Path(__file__).parents[1]
 SUPPORTED_PYTHON_VERSIONS = ("3.12", "3.13", "3.14")
@@ -72,8 +75,19 @@ def prepare(output: Path) -> None:
         venv = temporary / "venv"
         run((sys.executable, "-m", "venv", str(venv)))
         python = python_in_venv(venv)
-        for target_version in SUPPORTED_PYTHON_VERSIONS:
-            run(download_command(python, requirement_file, resolved, target_version))
+        run_tasks(
+            [
+                Task(
+                    f"download:{target_version}",
+                    partial(
+                        run,
+                        download_command(python, requirement_file, resolved, target_version),
+                    ),
+                )
+                for target_version in SUPPORTED_PYTHON_VERSIONS
+            ],
+            jobs=2,
+        )
 
 
 def main() -> None:

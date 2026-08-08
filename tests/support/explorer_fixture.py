@@ -1,11 +1,20 @@
-"""Write a deterministic chart-renderer fixture for CI visual evidence."""
+"""Create a compact Snapshot v7 fixture for Explorer browser evidence."""
 
 from __future__ import annotations
 
 import argparse
+import json
+from dataclasses import asdict
 from pathlib import Path
 
-from marketsieve_cli.adapters.explorer import render_explorer
+from marketsieve.matrix import field_definitions
+from marketsieve_cli.adapters.explorer_v2 import build_snapshot_explorer_data, render_explorer
+
+
+def _write(path: Path, document: object) -> None:
+    path.write_text(
+        json.dumps(document, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8"
+    )
 
 
 def main() -> None:
@@ -13,116 +22,98 @@ def main() -> None:
     parser.add_argument("output", type=Path)
     output = parser.parse_args().output
     output.mkdir(parents=True, exist_ok=True)
-    charts = []
-    for chart_type in ("line", "horizontal_bar", "histogram", "box_plot"):
-        charts.append(
-            {
-                "chart_id": chart_type,
-                "section": "Overview",
-                "chart_type": chart_type,
-                "title": chart_type,
-                "fields": ["value"],
-                "unit": "ratio",
-                "period": "20 trading days",
-                "observation_count": 4,
-                "missing_count": 0,
-                "applicability": "all_equities",
-                "data": [
-                    {"date": f"2026-08-0{index + 1}", "label": f"value-{index}", "value": index}
-                    for index in range(4)
-                ],
-                "fallback_table": [
-                    {"label": f"value-{index}", "value": index} for index in range(4)
-                ],
-            }
+    fields = [asdict(field) for field in field_definitions()]
+    artifacts = {
+        name: name
+        for name in (
+            "manifest.json",
+            "definitions.json",
+            "quality.json",
+            "aggregates.jsonl",
+            "securities.jsonl",
+            "failures.jsonl",
+            "market-indicators.jsonl",
+            "explorer-data.json",
+            "explorer.html",
         )
-    charts.extend(
-        (
-            {
-                "chart_id": "scatter",
-                "section": "Risk",
-                "chart_type": "scatter",
-                "title": "scatter",
-                "fields": ["x", "y"],
-                "unit": "ratio",
-                "period": "60 trading days",
-                "observation_count": 4,
-                "missing_count": 0,
-                "applicability": "all_equities",
-                "data": [
-                    {"label": str(index), "x": index, "y": index * index} for index in range(4)
-                ],
-                "fallback_table": [
-                    {"label": str(index), "x": index, "y": index * index} for index in range(4)
-                ],
-            },
-            {
-                "chart_id": "heatmap",
-                "section": "Risk",
-                "chart_type": "heatmap",
-                "title": "heatmap",
-                "fields": ["return_20d"],
-                "unit": "ratio",
-                "period": "20 trading days",
-                "observation_count": 4,
-                "missing_count": 0,
-                "applicability": "all_equities",
-                "data": [
-                    {"x": market, "y": sector, "value": value, "count": 10}
-                    for market, sector, value in (
-                        ("jp", "Technology", 0.02),
-                        ("jp", "Financials", -0.01),
-                        ("us", "Technology", 0.03),
-                        ("us", "Financials", 0.01),
-                    )
-                ],
-                "fallback_table": [],
-            },
-        )
-    )
-    document = {
-        "schema": "explorer-data/v1",
-        "object_type": "market_snapshot",
-        "object_id": "0" * 64,
-        "title": "MarketSieve Explorer Visual Evidence",
-        "locale": "ja",
-        "sections": ["Overview", "Risk", "Securities"],
-        "charts": charts,
-        "securities": [
-            {
-                "instrument_id": "XNAS:OTHER",
-                "provider_symbol": "OTHER",
-                "instrument": {"mic": "XNAS"},
-                "market": "us",
-                "memberships": ["sp500"],
-                "values": {
-                    "name": "Numeric Match Control",
-                    "close": "7203",
-                    "currency": "USD",
-                    "sector": "Technology",
-                    "industry": "Software",
-                },
-                "missing": {},
-            },
-            {
-                "instrument_id": "XTKS:7203",
-                "provider_symbol": "7203.T",
-                "instrument": {"mic": "XTKS"},
-                "market": "jp",
-                "memberships": ["nikkei225", "topix500"],
-                "values": {
-                    "name": "Toyota Motor Corporation",
-                    "close": "3130",
-                    "currency": "JPY",
-                    "sector": "Consumer Cyclical",
-                    "industry": "Auto Manufacturers",
-                },
-                "missing": {},
-            },
-        ],
-        "field_definitions": [],
     }
-    (output / "explorer.html").write_text(render_explorer(document), encoding="utf-8")
+    manifest = {
+        "schema": "market-snapshot-manifest/v7",
+        "snapshot_id": "0" * 64,
+        "created_at": "2026-08-08T00:00:00+00:00",
+        "source": {"name": "yfinance", "version": "1.5.2"},
+        "artifacts": artifacts,
+    }
+    definitions = {
+        "schema": "market-snapshot-definitions/v3",
+        "fields": fields,
+        "missing_reasons": [],
+    }
+    quality = {
+        "schema": "market-snapshot-quality/v3",
+        "domains": {"price": {"applicable": 2, "present": 2, "coverage": "1"}},
+        "freshness": {
+            "price_age_days": {"observation_count": 2, "median": 0, "p95": 0, "maximum": 0}
+        },
+        "failures": {"record_count": 0, "affected_security_count": 0},
+    }
+    base_values = {
+        "currency": "USD",
+        "sector": "Technology",
+        "industry": "Software",
+        "close": "200",
+        "return_5d": "0.01",
+        "return_20d": "0.04",
+        "return_60d": "0.08",
+        "volatility_60d": "0.2",
+        "atr_14_ratio": "0.02",
+        "distance_sma_20": "0.03",
+        "distance_sma_200": "0.08",
+        "position_52w": "0.7",
+        "maximum_drawdown_252d": "-0.15",
+        "trailing_pe": "22",
+        "earnings_growth": "0.12",
+        "price_to_book": "5",
+        "return_on_equity": "0.2",
+        "price_as_of": "2026-08-07",
+    }
+    rows = [
+        {
+            "instrument_id": "XNAS:MSFT",
+            "provider_symbol": "MSFT",
+            "instrument": {"mic": "XNAS", "currency": "USD"},
+            "memberships": ["nasdaq100", "sp500"],
+            "values": {**base_values, "name": "Microsoft Corporation"},
+            "missing": {},
+            "temporal": {},
+        },
+        {
+            "instrument_id": "XNAS:NVDA",
+            "provider_symbol": "NVDA",
+            "instrument": {"mic": "XNAS", "currency": "USD"},
+            "memberships": ["nasdaq100", "sp500"],
+            "values": {
+                **base_values,
+                "name": "NVIDIA Corporation",
+                "return_20d": "-0.02",
+                "return_60d": "0.03",
+            },
+            "missing": {},
+            "temporal": {},
+        },
+    ]
+    _write(output / "manifest.json", manifest)
+    _write(output / "definitions.json", definitions)
+    _write(output / "quality.json", quality)
+    (output / "aggregates.jsonl").write_text("{}\n", encoding="utf-8")
+    (output / "securities.jsonl").write_text(
+        "".join(json.dumps(row, sort_keys=True) + "\n" for row in rows), encoding="utf-8"
+    )
+    (output / "failures.jsonl").write_text("", encoding="utf-8")
+    (output / "market-indicators.jsonl").write_text("", encoding="utf-8")
+    explorer = build_snapshot_explorer_data(manifest, fields)
+    _write(output / "explorer-data.json", explorer)
+    (output / "explorer.html").write_text(render_explorer(explorer), encoding="utf-8")
 
 
 if __name__ == "__main__":

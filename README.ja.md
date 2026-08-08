@@ -19,8 +19,9 @@ make research-build INSTRUMENTS='XTKS:7203 XNAS:MSFT'
 既定値を変える場合は`make setup-settings`で作成できます。
 
 Snapshotは`.marketsieve/market-snapshots/objects/SNAPSHOT_ID/`へ保存されます。JSON・JSONLを
-正本とし、`explorer-data.json`を図表に依存しない決定的投影、`summary.md`と自己完結
-`explorer.html`を人間向け投影とします。個別調査は
+正本とし、`explorer-data.json`を正本ファイル参照付きの決定的な画面契約、`summary.md`と
+`explorer.html`を人間向け投影とします。Explorerは単一ファイルではなく成果物フォルダ
+全体で自己完結し、`market serve`または`research serve`で閲覧します。個別調査は
 `.marketsieve/research/objects/RESEARCH_ID/`へ保存し、元Snapshotとの対応を保持します。
 ExcelとCSVは生成しません。
 

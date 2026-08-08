@@ -13,10 +13,13 @@ from marketsieve import __version__
 from marketsieve.domain import Instrument
 from marketsieve.matrix import MatrixRow, MatrixSecurity, build_matrix_row, field_definitions
 from marketsieve.synthetic.daily import JP_INSTRUMENT, US_INSTRUMENT, fixture_bars
+from marketsieve_cli.adapters import explorer_v2
 from marketsieve_cli.adapters.config import Settings
+from marketsieve_cli.adapters.explorer_v2 import build_snapshot_explorer_data
 from marketsieve_cli.adapters.market_snapshots import MarketSnapshotStore, _request_fingerprint
 from marketsieve_cli.application.market import (
     MarketService,
+    _load_universe,
     _not_requested_fields,
     _provider_failure_fields,
     _summary,
@@ -29,6 +32,34 @@ from marketsieve_extension_api import (
     ImportedEquityBatch,
     SourceDiagnostic,
 )
+
+
+def test_snapshot_explorer_rejects_incomplete_field_catalog() -> None:
+    with pytest.raises(ValueError, match="unknown fields"):
+        build_snapshot_explorer_data({}, ())
+
+
+def test_snapshot_explorer_rejects_view_field_missing_from_catalog(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fields = [{"name": definition.name} for definition in field_definitions()]
+    original = explorer_v2._view
+
+    def invalid_view(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        view = original(*args, **kwargs)
+        view["fields"] = ["unknown_view_field"]
+        return view
+
+    monkeypatch.setattr(explorer_v2, "_view", invalid_view)
+    with pytest.raises(ValueError, match=r"view .* contains unknown fields"):
+        build_snapshot_explorer_data(
+            {
+                "snapshot_id": "snapshot",
+                "created_at": "2026-08-08T00:00:00Z",
+                "source": "fixture",
+            },
+            fields,
+        )
 
 
 def _row(instrument: Instrument, memberships: tuple[str, ...], offset: int) -> MatrixRow:
@@ -125,23 +156,45 @@ def test_snapshot_is_self_contained_without_spreadsheets(tmp_path: Path) -> None
     store, document = _store(tmp_path)
     root = Path(document["artifacts"]["manifest.json"]).parent
 
-    assert document["schema"] == "market-snapshot/v6"
+    assert document["schema"] == "market-snapshot/v7"
     assert set(path.name for path in root.iterdir()) == set(document["artifacts"])
     assert (root / "aggregates.jsonl").is_file()
     assert not list(root.glob("*.csv"))
     assert not list(root.glob("*.xlsx"))
     assert "http://" not in (root / "explorer.html").read_text()
     assert "https://" not in (root / "explorer.html").read_text()
-    assert "JSON.stringify(r).toLowerCase().includes(q)" not in (root / "explorer.html").read_text()
-    assert "searchText(r).includes(q)" in (root / "explorer.html").read_text()
+    assert "securities.jsonl" not in (root / "explorer.html").read_text()
+    assert "fetch('explorer-data.json'" in (root / "explorer.html").read_text()
+    html = (root / "explorer.html").read_text()
+    assert "sectors.indexOf(d.y)" in html
+    assert "Math.floor(i/2)" not in html
+    assert 'return`<span class="meta"' not in html
     explorer_data = json.loads((root / "explorer-data.json").read_text())
-    assert explorer_data["schema"] == "explorer-data/v1"
-    assert {chart["section"] for chart in explorer_data["charts"]} >= {
-        "Overview",
-        "Risk",
-        "Fundamentals",
-        "Quality",
+    assert explorer_data["schema"] == "explorer-data/v2"
+    assert "securities" not in explorer_data
+    assert {view["section"] for view in explorer_data["views"]} >= {
+        "overview",
+        "risk",
+        "fundamentals",
+        "quality",
     }
+    assert all(
+        "data" not in view and "fallback_table" not in view for view in explorer_data["views"]
+    )
+    assert len((root / "explorer-data.json").read_bytes()) < 100_000
+    assert len((root / "explorer.html").read_bytes()) < 100_000
+    explorer_schema = json.loads(
+        (Path(__file__).parents[2] / "schemas/explorer-data/v2/schema.json").read_text()
+    )
+    Draft202012Validator(explorer_schema).validate(explorer_data)
+    quality = json.loads((root / "quality.json").read_text())
+    assert quality["schema"] == "market-snapshot-quality/v3"
+    assert quality["failures"]["record_count"] == document["failure_count"]
+    assert quality["freshness"]["price_age_days"]["observation_count"] == 2
+    definitions = json.loads((root / "definitions.json").read_text())
+    units = {field["name"]: field["unit"] for field in definitions["fields"]}
+    assert units["position_52w"] == "bounded_ratio"
+    assert units["trailing_pe"] == "multiple"
     assert store.list()["schema"] == "market-snapshot-list/v2"
     assert (
         store.query(
@@ -273,7 +326,7 @@ def test_historical_reconstruction_is_price_only_and_deduplicated(tmp_path: Path
     assert duplicate["run"]["status"] == "duplicate"
 
 
-def test_all_market_build_merges_overlapping_benchmark_and_indicator(tmp_path: Path) -> None:
+def test_overlapping_market_build_merges_benchmark_and_indicator(tmp_path: Path) -> None:
     registry = _Registry()
     service = MarketService(
         registry,
@@ -284,13 +337,14 @@ def test_all_market_build_merges_overlapping_benchmark_and_indicator(tmp_path: P
 
     document = service.build(
         MarketBuildInputs(
-            ("dow30", "nasdaq100", "nikkei225", "sp500", "topix500"),
+            ("nasdaq100", "sp500"),
             ("benchmarks", "price"),
             365,
         )
     )
 
-    assert document["row_count"] == 1021
+    expected_universe, _ = _load_universe(("nasdaq100", "sp500"))
+    assert document["row_count"] == len(expected_universe)
     request = registry.fetcher.request
     assert request is not None
     identities = tuple(
@@ -303,6 +357,19 @@ def test_all_market_build_merges_overlapping_benchmark_and_indicator(tmp_path: P
         if (item.instrument.mic, item.instrument.symbol) == ("XNAS", "NDX")
     )
     assert ndx.memberships == ("indicator:major_index_nasdaq100", "nasdaq100")
+
+
+def test_complete_builtin_universe_is_unique_and_stable() -> None:
+    universe, assets = _load_universe(("dow30", "nasdaq100", "nikkei225", "sp500", "topix500"))
+
+    identities = [(seed.instrument.mic, seed.instrument.symbol) for seed in universe]
+    assert len(universe) == 1021
+    assert identities == sorted(set(identities))
+    assert set(assets) == {"dow30", "nasdaq100", "nikkei225", "sp500", "topix500"}
+    assert all(
+        len(asset["asset_hash"]) == 64 and len(asset["source_hash"]) == 64
+        for asset in assets.values()
+    )
 
 
 def test_historical_reconstruction_rejects_future_and_pre_universe_dates(tmp_path: Path) -> None:
@@ -414,8 +481,8 @@ def test_market_service_builds_explicit_company_only_scope(tmp_path: Path) -> No
     assert document["request"]["producer"] == {
         "name": "marketsieve-cli",
         "version": __version__,
-        "snapshot_schema": "market-snapshot/v6",
-        "explorer_schema": "explorer-data/v1",
+        "snapshot_schema": "market-snapshot/v7",
+        "explorer_schema": "explorer-data/v2",
     }
     assert document["row_count"] == 30
     assert document["price_requirements_met"] is True
@@ -427,9 +494,12 @@ def test_market_service_builds_explicit_company_only_scope(tmp_path: Path) -> No
         for line in Path(document["artifacts"]["failures.jsonl"]).read_text().splitlines()
     ]
     assert not any(failure["field"] == "close" for failure in failures)
+    quality = json.loads(Path(document["artifacts"]["quality.json"]).read_text())
+    assert quality["failures"]["affected_security_count"] == 0
+    assert quality["failures"]["complete_failure_security_count"] == 0
     assert service.show("latest")["snapshot_id"] == document["snapshot_id"]
     schema = json.loads(
-        (Path(__file__).parents[2] / "schemas/market-snapshot/v6/schema.json").read_text()
+        (Path(__file__).parents[2] / "schemas/market-snapshot/v7/schema.json").read_text()
     )
     Draft202012Validator(schema).validate(document)
 

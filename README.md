@@ -19,8 +19,9 @@ Every network run receives its analytical scope through CLI arguments. Optional
 `make setup-settings` when defaults are not sufficient.
 
 Snapshots are stored under `.marketsieve/market-snapshots/objects/SNAPSHOT_ID/`. The authoritative
-files are JSON and JSONL. `explorer-data.json` is the chart-neutral deterministic projection;
-`summary.md` and the self-contained `explorer.html` are human views.
+files are JSON and JSONL. `explorer-data.json` is the deterministic view contract;
+`summary.md` and `explorer.html` are human views. The Explorer is self-contained at the object-folder
+level and reads the same canonical files through the loopback-only `serve` command.
 Research packs are stored under `.marketsieve/research/objects/RESEARCH_ID/` and remain tied to the
 source Snapshot. No Excel or CSV artifact is generated.
 
