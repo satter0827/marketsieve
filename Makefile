@@ -13,12 +13,17 @@ INSTRUMENTS ?=
 RESEARCH_EVIDENCE ?= --evidence price --evidence company --evidence financials --evidence events --evidence benchmarks
 RESEARCH_HISTORY_DAYS ?= 3653
 RESEARCH_ID ?= latest
+MARKET ?= jp
+SESSION ?= close
+PORT ?= 0
+AS_OF ?=
 RUN_ID ?=
 LEFT_SNAPSHOT ?=
 RIGHT_SNAPSHOT ?=
 BASE_SHA ?= origin/develop
 HEAD_SHA ?= HEAD
 REVIEWED_SHA ?=
+PREVIOUS_REVIEWED_SHA ?=
 HEAD_COMMIT = $(shell git rev-parse $(HEAD_SHA))
 EVIDENCE_DIR ?= $(STATE_DIR)/artifacts/checks/$(HEAD_COMMIT)
 REVIEW_DIR ?= $(STATE_DIR)/artifacts/review/$(HEAD_COMMIT)
@@ -30,7 +35,7 @@ RELEASE_DIR ?= $(STATE_DIR)/artifacts/release/$(COMMIT)
 export UV_CACHE_DIR := $(abspath $(STATE_DIR))/cache/uv
 export PYTHONPYCACHEPREFIX := $(abspath $(STATE_DIR))/cache/python
 
-.PHONY: help setup-settings doctor market-build market-resume market-list market-show market-query market-security market-compare market-diff research-build research-list research-show sync format format-check lint typecheck test secret-check check capabilities-json build evidence evidence-bundle evidence-validate review-attest governance-check release-build release-verify release-check
+.PHONY: help setup-settings doctor market-build market-capture market-reconstruct market-resume market-list market-show market-preview market-query market-security market-compare market-diff research-build research-list research-show research-preview sync format format-check lint typecheck test secret-check check capabilities-json build evidence evidence-bundle evidence-validate review-attest governance-check release-build release-verify release-check
 
 help: ## Show operational and developer commands.
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z0-9_-]+:.*## / {printf "%-22s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -44,6 +49,13 @@ doctor: ## Check the local runtime and installed packages.
 market-build: ## Build a Snapshot; override SCOPE, EVIDENCE, and HISTORY_DAYS.
 	@if test -f "$(SETTINGS)"; then uv run marketsieve --settings "$(SETTINGS)" market build $(SCOPE) $(EVIDENCE) --history-days "$(HISTORY_DAYS)"; else uv run marketsieve market build $(SCOPE) $(EVIDENCE) --history-days "$(HISTORY_DAYS)"; fi
 
+market-capture: ## Capture MARKET=jp|us after the selected close SESSION.
+	@if test -f "$(SETTINGS)"; then uv run marketsieve --settings "$(SETTINGS)" market capture --market "$(MARKET)" --session "$(SESSION)" $(EVIDENCE) --history-days "$(HISTORY_DAYS)"; else uv run marketsieve market capture --market "$(MARKET)" --session "$(SESSION)" $(EVIDENCE) --history-days "$(HISTORY_DAYS)"; fi
+
+market-reconstruct: ## Reconstruct price evidence for MARKET and AS_OF=YYYY-MM-DD.
+	@test -n "$(AS_OF)" || { echo "AS_OF is required" >&2; exit 2; }
+	uv run marketsieve market reconstruct --market "$(MARKET)" --date "$(AS_OF)" --history-days "$(HISTORY_DAYS)"
+
 market-resume: ## Resume an interrupted Snapshot run by RUN_ID.
 	@test -n "$(RUN_ID)" || { echo "RUN_ID is required" >&2; exit 2; }
 	@if test -f "$(SETTINGS)"; then uv run marketsieve --settings "$(SETTINGS)" market build --resume "$(RUN_ID)"; else uv run marketsieve market build --resume "$(RUN_ID)"; fi
@@ -53,6 +65,9 @@ market-list: ## List verified stored Snapshots.
 
 market-show: ## Show SNAPSHOT=latest or an exact Snapshot.
 	uv run marketsieve market show "$(SNAPSHOT)"
+
+market-preview: ## Preview one Snapshot Explorer over loopback HTTP.
+	uv run marketsieve market serve "$(SNAPSHOT)" --port "$(PORT)" --open
 
 market-query: ## Query a stored Snapshot; set QUERY_ARGS explicitly.
 	uv run marketsieve market query --snapshot "$(SNAPSHOT)" $(QUERY_ARGS)
@@ -78,6 +93,9 @@ research-list: ## List stored research packs.
 
 research-show: ## Show RESEARCH_ID; latest also needs INSTRUMENT and SNAPSHOT.
 	@if test "$(RESEARCH_ID)" = latest; then test -n "$(INSTRUMENT)" || { echo "INSTRUMENT is required for latest" >&2; exit 2; }; uv run marketsieve research show latest --security "$(INSTRUMENT)" --snapshot "$(SNAPSHOT)"; else uv run marketsieve research show "$(RESEARCH_ID)"; fi
+
+research-preview: ## Preview one Research Explorer over loopback HTTP.
+	@if test "$(RESEARCH_ID)" = latest; then test -n "$(INSTRUMENT)" || { echo "INSTRUMENT is required for latest" >&2; exit 2; }; uv run marketsieve research serve latest --security "$(INSTRUMENT)" --snapshot "$(SNAPSHOT)" --port "$(PORT)" --open; else uv run marketsieve research serve "$(RESEARCH_ID)" --port "$(PORT)" --open; fi
 
 sync: ## Install the locked workspace and development dependencies.
 	uv sync --locked
@@ -112,8 +130,8 @@ build: ## Build all public distributions under generated state.
 
 evidence: check evidence-bundle ## Run the gate and create a review bundle.
 
-evidence-bundle: ## Create a review bundle from development evidence.
-	uv run python -m scripts.review_gate create --base-sha "$(BASE_SHA)" --head-sha "$(HEAD_SHA)" --evidence-dir "$(EVIDENCE_DIR)" --output-dir "$(REVIEW_DIR)"
+evidence-bundle: ## Create a full or reviewed-SHA delta semantic review bundle.
+	uv run python -m scripts.review_gate create --base-sha "$(BASE_SHA)" --head-sha "$(HEAD_SHA)" --evidence-dir "$(EVIDENCE_DIR)" --output-dir "$(REVIEW_DIR)" $(if $(PREVIOUS_REVIEWED_SHA),--reviewed-sha "$(PREVIOUS_REVIEWED_SHA)",)
 
 evidence-validate: ## Validate BUNDLE=<review-bundle-directory>.
 	uv run python -m scripts.review_gate validate "$(BUNDLE)"

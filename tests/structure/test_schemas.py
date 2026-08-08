@@ -18,6 +18,7 @@ def test_public_schemas_are_current_and_valid() -> None:
 
     assert names == {
         "capabilities-result",
+        "capture-run",
         "cli-error",
         "doctor-result",
         "log-record",
@@ -60,22 +61,22 @@ def test_removed_feature_schemas_do_not_exist() -> None:
 @pytest.mark.parametrize(
     ("name", "version", "document"),
     (
-        ("market-snapshot", "v3", {"schema": "market-snapshot/v3", "market": {}}),
+        ("market-snapshot", "v6", {"schema": "market-snapshot/v6", "market": {}}),
         (
             "market-snapshot-manifest",
-            "v3",
-            {"schema": "market-snapshot-manifest/v3", "artifacts": {}},
+            "v6",
+            {"schema": "market-snapshot-manifest/v6", "artifacts": {}},
         ),
         ("market-snapshot-list", "v2", {"schema": "market-snapshot-list/v2", "snapshots": [{}]}),
         (
             "security-research",
-            "v2",
-            {"schema": "security-research/v2", "quality": {}, "artifacts": {}},
+            "v4",
+            {"schema": "security-research/v4", "quality": {}, "artifacts": {}},
         ),
         (
             "security-research-manifest",
-            "v2",
-            {"schema": "security-research-manifest/v2", "artifacts": {}},
+            "v4",
+            {"schema": "security-research-manifest/v4", "artifacts": {}},
         ),
         (
             "security-research-list",

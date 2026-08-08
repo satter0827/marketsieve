@@ -15,65 +15,130 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  develop-gate:
+  static:
     if: >-
       (github.event_name == 'pull_request' && github.base_ref == 'develop') ||
       github.ref == 'refs/heads/develop'
-    name: Develop Gate
+    name: Static
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+        with: {fetch-depth: 0}
       - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
-        with:
-          python-version: "3.13"
-          enable-cache: false
-      - run: make sync
-      - name: Run development gate
+        with: {python-version: "3.13", enable-cache: false}
+      - run: uv sync --locked
+      - run: make format-check
+      - run: make lint
+      - run: make typecheck
+      - run: uv run python -m scripts.develop_gate check structure
+
+  tests:
+    if: >-
+      (github.event_name == 'pull_request' && github.base_ref == 'develop') ||
+      github.ref == 'refs/heads/develop'
+    name: Tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: {fetch-depth: 0}
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with: {python-version: "3.13", enable-cache: false}
+      - run: uv sync --locked
+      - run: uv run python -m scripts.develop_gate check tests
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
-        run: make check BASE_SHA="$BASE_SHA"
+          EVIDENCE_DIR: .marketsieve/artifacts/checks/${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: develop-evidence-${{ github.event.pull_request.head.sha || github.sha }}
+          name: tests-${{ github.event.pull_request.head.sha || github.sha }}
           path: .marketsieve/artifacts/checks/${{ github.event.pull_request.head.sha || github.sha }}
           retention-days: 30
 
-  evidence-gate:
-    if: github.event_name == 'pull_request' && github.base_ref == 'develop'
-    name: Evidence Gate
-    needs: develop-gate
+  package:
+    if: >-
+      (github.event_name == 'pull_request' && github.base_ref == 'develop') ||
+      github.ref == 'refs/heads/develop'
+    name: Package
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          ref: ${{ github.event.pull_request.head.sha }}
+        with: {fetch-depth: 0}
       - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
-        with:
-          python-version: "3.13"
-          enable-cache: false
+        with: {python-version: "3.13", enable-cache: false}
       - run: make sync
+      - run: uv run python -m scripts.develop_gate check package
+        env:
+          EVIDENCE_DIR: .marketsieve/artifacts/checks/${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: package-${{ github.event.pull_request.head.sha || github.sha }}
+          path: .marketsieve/artifacts/checks/${{ github.event.pull_request.head.sha || github.sha }}/package.json
+          retention-days: 30
+
+  develop-gate:
+    if: >-
+      always() && (
+        (github.event_name == 'pull_request' && github.base_ref == 'develop') ||
+        github.ref == 'refs/heads/develop'
+      )
+    name: Develop Gate
+    needs: [static, tests, package]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - name: Require parallel checks
+        env:
+          STATIC_RESULT: ${{ needs.static.result }}
+          TESTS_RESULT: ${{ needs.tests.result }}
+          PACKAGE_RESULT: ${{ needs.package.result }}
+        run: |
+          test "$STATIC_RESULT" = success
+          test "$TESTS_RESULT" = success
+          test "$PACKAGE_RESULT" = success
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: {fetch-depth: 0}
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with: {python-version: "3.13", enable-cache: false}
+      - run: uv sync --locked
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: develop-evidence-${{ github.event.pull_request.head.sha }}
-          path: .marketsieve/artifacts/checks/${{ github.event.pull_request.head.sha }}
-      - name: Create review bundle
+          name: tests-${{ github.event.pull_request.head.sha || github.sha }}
+          path: .marketsieve/artifacts/checks/${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: package-${{ github.event.pull_request.head.sha || github.sha }}
+          path: .marketsieve/artifacts/checks/${{ github.event.pull_request.head.sha || github.sha }}
+      - run: uv run python -m scripts.develop_gate check smoke
+        env:
+          EVIDENCE_DIR: .marketsieve/artifacts/checks/${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Capture Explorer visual evidence
+        env:
+          EVIDENCE_DIR: .marketsieve/artifacts/checks/${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          uv run python tests/support/explorer_fixture.py "$EVIDENCE_DIR/explorer-ui"
+          python3 -m http.server 8765 --bind 127.0.0.1 --directory "$EVIDENCE_DIR/explorer-ui" &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID"' EXIT
+          for attempt in 1 2 3 4 5; do curl --fail --silent http://127.0.0.1:8765/explorer.html && break; sleep 1; done
+          google-chrome --headless=new --no-sandbox --disable-gpu --window-size=1440,1000 \
+            --screenshot="$EVIDENCE_DIR/explorer-desktop.png" http://127.0.0.1:8765/explorer.html
+          google-chrome --headless=new --no-sandbox --disable-gpu --window-size=390,844 \
+            --screenshot="$EVIDENCE_DIR/explorer-mobile.png" http://127.0.0.1:8765/explorer.html
+      - name: Create the single review evidence bundle
+        if: github.event_name == 'pull_request'
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           EVIDENCE_DIR: .marketsieve/artifacts/checks/${{ github.event.pull_request.head.sha }}
-        run: >-
-          make evidence-bundle BASE_SHA="$BASE_SHA" HEAD_SHA="$HEAD_SHA"
-          EVIDENCE_DIR="$EVIDENCE_DIR"
+        run: make evidence-bundle BASE_SHA="$BASE_SHA" HEAD_SHA="$HEAD_SHA" EVIDENCE_DIR="$EVIDENCE_DIR"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: review-${{ github.event.pull_request.head.sha }}
-          path: .marketsieve/artifacts/review/${{ github.event.pull_request.head.sha }}
+          name: develop-evidence-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            .marketsieve/artifacts/checks/${{ github.event.pull_request.head.sha || github.sha }}
+            .marketsieve/artifacts/review/${{ github.event.pull_request.head.sha || github.sha }}
           retention-days: 30
 
   main-source:
@@ -102,16 +167,12 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
-        with:
-          python-version: "3.13"
-          enable-cache: false
+        with: {python-version: "3.13", enable-cache: false}
       - run: make sync
       - id: metadata
         run: echo "version=$(uv version --package marketsieve --short)" >> "$GITHUB_OUTPUT"
       - name: Build release candidate
-        env:
-          VERSION: ${{ steps.metadata.outputs.version }}
-          COMMIT: ${{ github.sha }}
+        env: {VERSION: "${{ steps.metadata.outputs.version }}", COMMIT: "${{ github.sha }}"}
         run: make release-build VERSION="$VERSION" COMMIT="$COMMIT"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -129,22 +190,17 @@ jobs:
     timeout-minutes: 10
     strategy:
       fail-fast: false
-      matrix:
-        python-version: ["3.12", "3.13", "3.14"]
+      matrix: {python-version: ["3.12", "3.13", "3.14"]}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
-        with:
-          python-version: ${{ matrix.python-version }}
-          enable-cache: false
+        with: {python-version: "${{ matrix.python-version }}", enable-cache: false}
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: release-${{ github.sha }}
           path: .marketsieve/artifacts/release/${{ github.sha }}
       - name: Verify release candidate
-        env:
-          VERSION: ${{ needs.release-build.outputs.version }}
-          COMMIT: ${{ github.sha }}
+        env: {VERSION: "${{ needs.release-build.outputs.version }}", COMMIT: "${{ github.sha }}"}
         run: make release-verify VERSION="$VERSION" COMMIT="$COMMIT"
 
   release-gate:
@@ -164,6 +220,6 @@ jobs:
           MATRIX_RESULT: ${{ needs.release-matrix.result }}
           SOURCE_RESULT: ${{ needs.main-source.result }}
         run: |
-          test "$BUILD_RESULT" = "success"
-          test "$MATRIX_RESULT" = "success"
-          test "$SOURCE_RESULT" = "success" -o "$SOURCE_RESULT" = "skipped"
+          test "$BUILD_RESULT" = success
+          test "$MATRIX_RESULT" = success
+          test "$SOURCE_RESULT" = success -o "$SOURCE_RESULT" = skipped

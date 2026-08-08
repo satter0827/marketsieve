@@ -23,7 +23,7 @@ def test_workspace_contains_only_the_supported_public_packages() -> None:
     assert set(workspace["tool"]["uv"]["workspace"]["members"]) == {
         spec.path.relative_to(ROOT).as_posix() for spec in specs
     }
-    assert all(spec.project_version == "0.12.0" for spec in specs)
+    assert all(spec.project_version == "0.15.0" for spec in specs)
 
 
 def test_removed_capabilities_and_packages_are_absent() -> None:
@@ -77,11 +77,12 @@ def test_vscode_exposes_simple_launches_and_complete_tasks_in_english() -> None:
     settings = json.loads((vscode / "settings.json").read_text(encoding="utf-8"))
 
     assert [item["name"] for item in launch["configurations"]] == [
-        "01 Market: Build Full Snapshot (Network)",
-        "02 Market: Open Latest Snapshot",
-        "03 Market: Query Latest Snapshot",
-        "04 Research: Build Security Evidence (Network)",
-        "05 Research: Open Latest Security Evidence",
+        "01 Market: Capture JP Close (Network)",
+        "02 Market: Capture US Close (Network)",
+        "03 Market: Preview Latest Explorer",
+        "04 Market: Explore Swing Candidates",
+        "05 Research: Build Security Evidence (Network)",
+        "06 Research: Preview Latest Explorer",
     ]
     assert {item["label"].partition(":")[0] for item in tasks["tasks"]} == {
         "Setup",

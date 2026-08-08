@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, date, datetime
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
+import pytest
 from jsonschema import Draft202012Validator
 
 from marketsieve.domain import Instrument
@@ -12,9 +14,15 @@ from marketsieve.matrix import MatrixRow, MatrixSecurity, build_matrix_row, fiel
 from marketsieve.synthetic.daily import JP_INSTRUMENT, US_INSTRUMENT, fixture_bars
 from marketsieve_cli.adapters.config import Settings
 from marketsieve_cli.adapters.market_snapshots import MarketSnapshotStore, _request_fingerprint
-from marketsieve_cli.application.market import MarketService, _not_requested_fields, _summary
+from marketsieve_cli.application.market import (
+    MarketService,
+    _not_requested_fields,
+    _provider_failure_fields,
+    _summary,
+)
 from marketsieve_cli.contracts import MarketBuildInputs, RuntimeSettings
 from marketsieve_extension_api import (
+    EquityAcquisitionFailure,
     EquityBatchObservation,
     EquityBatchRequest,
     ImportedEquityBatch,
@@ -116,13 +124,21 @@ def test_snapshot_is_self_contained_without_spreadsheets(tmp_path: Path) -> None
     store, document = _store(tmp_path)
     root = Path(document["artifacts"]["manifest.json"]).parent
 
-    assert document["schema"] == "market-snapshot/v3"
+    assert document["schema"] == "market-snapshot/v6"
     assert set(path.name for path in root.iterdir()) == set(document["artifacts"])
     assert (root / "aggregates.jsonl").is_file()
     assert not list(root.glob("*.csv"))
     assert not list(root.glob("*.xlsx"))
     assert "http://" not in (root / "explorer.html").read_text()
     assert "https://" not in (root / "explorer.html").read_text()
+    explorer_data = json.loads((root / "explorer-data.json").read_text())
+    assert explorer_data["schema"] == "explorer-data/v1"
+    assert {chart["section"] for chart in explorer_data["charts"]} >= {
+        "Overview",
+        "Risk",
+        "Fundamentals",
+        "Quality",
+    }
     assert store.list()["schema"] == "market-snapshot-list/v2"
     assert (
         store.query(
@@ -136,6 +152,152 @@ def test_snapshot_is_self_contained_without_spreadsheets(tmp_path: Path) -> None
         )["matched_count"]
         == 1
     )
+    comparison = store.compare("latest", ("XNAS:MSFT",), ("close", "return_20d"))
+    assert comparison["schema"] == "market-snapshot-comparison/v2"
+    assert comparison["rows"][0]["instrument_id"] == "XNAS:MSFT"
+    context = store.research_context("latest", "XNAS:MSFT")
+    assert context["market"]["markets"].keys() == {"us"}
+    assert all(
+        segment["segment_type"] in {"index", "sector", "industry", "market-sector"}
+        for segment in context["segments"]
+    )
+    with pytest.raises(LookupError, match="not present"):
+        store.row("latest", "XNAS:MISSING")
+    with pytest.raises(ValueError, match="one market and currency"):
+        store.compare("latest", ("XNAS:MSFT", "XTKS:7203"), ("market_cap",))
+    with pytest.raises(ValueError, match="unique"):
+        store.compare("latest", ("XNAS:MSFT",), ("close", "close"))
+    with pytest.raises(ValueError, match="unknown"):
+        store.compare("latest", ("XNAS:MSFT",), ("unknown",))
+    with pytest.raises(LookupError, match="not present"):
+        store.compare("latest", ("XNAS:MISSING",), ("close",))
+
+
+def test_snapshot_query_supports_profile_order_limit_and_transient_budget(tmp_path: Path) -> None:
+    store, _ = _store(tmp_path)
+
+    result = store.query(
+        "latest",
+        filters={},
+        minimums={},
+        maximums={},
+        present=("close",),
+        missing=(),
+        fields=(),
+        order=("return_20d:desc",),
+        limit=1,
+        domains=("return", "risk"),
+        profile="swing",
+        budget=Decimal("50000"),
+        budget_currency="JPY",
+        trading_unit=100,
+    )
+
+    assert result["schema"] == "market-snapshot-query-result/v2"
+    assert result["total_matched_count"] == 2
+    assert result["matched_count"] == 1
+    assert all("252d" not in field for field in result["fields"])
+    assert result["rows"][0]["purchase_projection"]["trading_unit"] == 100
+
+
+def test_snapshot_query_rejects_invalid_order_domain_and_limit(tmp_path: Path) -> None:
+    store, _ = _store(tmp_path)
+    common: dict[str, Any] = dict(
+        snapshot_id="latest",
+        filters={},
+        minimums={},
+        maximums={},
+        present=(),
+        missing=(),
+        fields=("close",),
+    )
+    with pytest.raises(ValueError, match="FIELD:asc"):
+        store.query(**common, order=("close",))
+    with pytest.raises(ValueError, match="domains"):
+        store.query(**common, domains=("unknown",))
+    with pytest.raises(ValueError, match="positive"):
+        store.query(**common, limit=0)
+
+
+def test_financial_issuer_metrics_are_not_applicable() -> None:
+    bars = fixture_bars(
+        US_INSTRUMENT,
+        tuple(str(100 + index) for index in range(253)),
+        dataset="financial-issuer",
+    )
+    security = MatrixSecurity(
+        US_INSTRUMENT,
+        "MSFT",
+        ("sp500",),
+        datetime(2026, 8, 8, tzinfo=UTC),
+        bars,
+        tuple(sorted({"sector": "Financial Services", "quote_type": "EQUITY"}.items())),
+        (("debt_to_equity", "1.2"), ("enterprise_to_ebitda", "8")),
+        "d" * 64,
+    )
+
+    row = build_matrix_row(security, {})
+    definitions = {value.name: value for value in field_definitions()}
+
+    assert dict(row.missing)["debt_to_equity"] == "not_applicable"
+    assert dict(row.missing)["enterprise_to_ebitda"] == "not_applicable"
+    assert definitions["debt_to_equity"].applicable_to == "non_financial_non_reit_equities"
+    assert "financial_or_insurance_issuer" in definitions["debt_to_equity"].exclusion_conditions
+
+
+def test_historical_reconstruction_is_price_only_and_deduplicated(tmp_path: Path) -> None:
+    service = MarketService(
+        _Registry(),
+        MarketSnapshotStore(tmp_path / "market-snapshots"),
+        Settings(None),
+        today=lambda: date(2026, 8, 8),
+    )
+    inputs = MarketBuildInputs(
+        ("dow30",),
+        ("benchmarks", "price"),
+        365,
+        as_of=date(2026, 7, 1),
+        mode="historical_price_reconstruction",
+        session="close",
+    )
+
+    first = service.build(inputs)
+    duplicate = service.build(inputs)
+
+    assert first["inputs"]["mode"] == "historical_price_reconstruction"
+    assert first["run"]["status"] == "completed"
+    assert duplicate["snapshot_id"] == first["snapshot_id"]
+    assert duplicate["run"]["status"] == "duplicate"
+
+
+def test_historical_reconstruction_rejects_future_and_pre_universe_dates(tmp_path: Path) -> None:
+    service = MarketService(
+        _Registry(),
+        MarketSnapshotStore(tmp_path / "market-snapshots"),
+        Settings(None),
+        today=lambda: date(2026, 8, 8),
+    )
+
+    with pytest.raises(ValueError, match="future"):
+        service.build(
+            MarketBuildInputs(
+                ("dow30",),
+                ("benchmarks", "price"),
+                365,
+                as_of=date(2026, 8, 9),
+                mode="historical_price_reconstruction",
+            )
+        )
+    with pytest.raises(ValueError, match="universe asset basis"):
+        service.build(
+            MarketBuildInputs(
+                ("dow30",),
+                ("benchmarks", "price"),
+                365,
+                as_of=date(2026, 6, 30),
+                mode="historical_price_reconstruction",
+            )
+        )
 
 
 def test_snapshot_diff_is_deterministic_and_definition_safe(tmp_path: Path) -> None:
@@ -203,6 +365,9 @@ def test_market_service_builds_explicit_company_only_scope(tmp_path: Path) -> No
         "indices": ["dow30"],
         "evidence": ["company"],
         "history_days": None,
+        "as_of": None,
+        "mode": "current",
+        "session": None,
     }
     assert document["row_count"] == 30
     assert document["price_requirements_met"] is True
@@ -216,9 +381,22 @@ def test_market_service_builds_explicit_company_only_scope(tmp_path: Path) -> No
     assert not any(failure["field"] == "close" for failure in failures)
     assert service.show("latest")["snapshot_id"] == document["snapshot_id"]
     schema = json.loads(
-        (Path(__file__).parents[2] / "schemas/market-snapshot/v3/schema.json").read_text()
+        (Path(__file__).parents[2] / "schemas/market-snapshot/v6/schema.json").read_text()
     )
     Draft202012Validator(schema).validate(document)
+
+
+def test_market_service_requires_exactly_one_new_or_resumed_request(tmp_path: Path) -> None:
+    service = MarketService(
+        _Registry(),
+        MarketSnapshotStore(tmp_path / "market-snapshots"),
+        Settings(None),
+        today=lambda: date(2026, 8, 8),
+    )
+    with pytest.raises(ValueError, match="inputs are required"):
+        service.build(None)
+    with pytest.raises(ValueError, match="cannot be combined"):
+        service.build(MarketBuildInputs(("dow30",), ("company",), None), resume="run")
 
 
 def test_financial_only_scope_preserves_required_currency_field() -> None:
@@ -226,3 +404,22 @@ def test_financial_only_scope_preserves_required_currency_field() -> None:
 
     assert "financial_currency" not in missing
     assert missing["currency"] == "not_requested"
+
+
+@pytest.mark.parametrize(
+    ("stage", "field", "expected"),
+    (
+        ("price", "close", "return_20d"),
+        ("profile", "company_profile", "sector"),
+        ("financials", "company_financials", "trailing_pe"),
+        ("financials", "annual_income", "revenue_cagr_3y"),
+        ("financials", "balance_sheet", "total_assets"),
+        ("financials", "quarterly_cash_flow", "free_cash_flow_ttm"),
+        ("volume", "volume_20d", "average_volume_20d"),
+    ),
+)
+def test_provider_failures_map_to_their_complete_field_domain(
+    stage: str, field: str, expected: str
+) -> None:
+    failure = EquityAcquisitionFailure(US_INSTRUMENT, stage, field, "field_absent")
+    assert expected in _provider_failure_fields(failure)

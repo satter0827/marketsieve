@@ -41,7 +41,10 @@ class MatrixField:
     definition: str
     formula: str | None
     period: str | None
-    definition_version: str = "market-snapshot-fields/v1"
+    applicable_to: str = "all_equities"
+    comparison_scope: str = "same_market_and_currency"
+    exclusion_conditions: tuple[str, ...] = ()
+    definition_version: str = "market-snapshot-fields/v2"
 
 
 @dataclass(frozen=True, slots=True)
@@ -99,12 +102,27 @@ def _field(
     definition: str,
     formula: str | None = None,
     period: str | None = None,
+    applicable_to: str = "all_equities",
+    comparison_scope: str = "same_market_and_currency",
+    exclusion_conditions: tuple[str, ...] = (),
 ) -> MatrixField:
-    return MatrixField(name, group, data_type, unit, source, definition, formula, period)
+    return MatrixField(
+        name,
+        group,
+        data_type,
+        unit,
+        source,
+        definition,
+        formula,
+        period,
+        applicable_to,
+        comparison_scope,
+        exclusion_conditions,
+    )
 
 
 def field_definitions() -> tuple[MatrixField, ...]:
-    """Return the complete stable v1 field catalog."""
+    """Return the complete stable v2 field catalog."""
 
     fields = [
         _field(
@@ -565,6 +583,13 @@ def field_definitions() -> tuple[MatrixField, ...]:
         "total_cash",
         "total_debt",
     }
+    limited_applicability = {
+        "current_ratio",
+        "quick_ratio",
+        "debt_to_equity",
+        "enterprise_to_revenue",
+        "enterprise_to_ebitda",
+    }
     for name in provider_financials:
         financial_period = (
             "trailing twelve months"
@@ -615,6 +640,16 @@ def field_definitions() -> tuple[MatrixField, ...]:
                 definition=definition,
                 formula=formula,
                 period=financial_period,
+                applicable_to=(
+                    "non_financial_non_reit_equities"
+                    if name in limited_applicability
+                    else "all_equities"
+                ),
+                exclusion_conditions=(
+                    ("financial_or_insurance_issuer", "reit")
+                    if name in limited_applicability
+                    else ()
+                ),
             )
         )
     fields.extend(
@@ -626,6 +661,8 @@ def field_definitions() -> tuple[MatrixField, ...]:
                 definition="Free cash flow divided by revenue.",
                 formula="free_cash_flow_ttm / revenue_ttm",
                 period="trailing twelve months",
+                applicable_to="non_financial_non_reit_equities",
+                exclusion_conditions=("financial_or_insurance_issuer", "reit"),
             ),
             _field(
                 "equity_ratio",
@@ -650,10 +687,41 @@ def field_definitions() -> tuple[MatrixField, ...]:
                 definition="Free cash flow divided by market capitalization.",
                 formula="free_cash_flow_ttm / market_cap",
                 period="trailing twelve months over current market cap",
+                applicable_to="non_financial_non_reit_equities",
+                exclusion_conditions=("financial_or_insurance_issuer", "reit"),
             ),
         )
     )
     return tuple(sorted(fields, key=lambda value: value.name))
+
+
+_CAPITAL_STRUCTURE_FIELDS = frozenset(
+    {
+        "current_ratio",
+        "quick_ratio",
+        "debt_to_equity",
+        "enterprise_to_revenue",
+        "enterprise_to_ebitda",
+        "free_cash_flow_margin",
+        "free_cash_flow_yield",
+    }
+)
+
+
+def _not_applicable_fields(profile: Mapping[str, str]) -> frozenset[str]:
+    """Identify metrics whose economic meaning is not comparable for this issuer."""
+
+    sector = profile.get("sector", "").casefold()
+    industry = profile.get("industry", "").casefold()
+    quote_type = profile.get("quote_type", "").casefold()
+    is_financial = "financial" in sector or "insurance" in sector or "insurance" in industry
+    is_reit = "reit" in industry or "real estate investment trust" in industry
+    is_equity = quote_type in {"", "equity"}
+    if not is_equity:
+        return frozenset(field.name for field in field_definitions() if field.group != "identity")
+    if is_financial or is_reit:
+        return _CAPITAL_STRUCTURE_FIELDS
+    return frozenset()
 
 
 def _decimal(value: str | None) -> Decimal | None:
@@ -747,9 +815,12 @@ def _build_matrix_row(
     profile = dict(security.profile)
     financials = dict(security.financials)
     missing_overrides = dict(security.missing)
+    not_applicable = _not_applicable_fields(profile)
 
     def put(name: str, value: object | None, reason: str = "field_absent") -> None:
-        if override := missing_overrides.get(name):
+        if name in not_applicable:
+            missing[name] = "not_applicable"
+        elif override := missing_overrides.get(name):
             missing[name] = override
         elif value is None:
             missing[name] = missing_overrides.get(name, reason)
