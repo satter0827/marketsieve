@@ -35,11 +35,11 @@ QUERY_DOMAINS = (
     "quality",
 )
 COMMAND_CAPABILITIES = (
-    ("market build", "market-snapshot/v6", True, ("market_snapshot",)),
-    ("market capture", "market-snapshot/v6", True, ("market_snapshot", "capture_run")),
-    ("market reconstruct", "market-snapshot/v6", True, ("market_snapshot", "capture_run")),
+    ("market build", "market-snapshot/v7", True, ("market_snapshot",)),
+    ("market capture", "market-snapshot/v7", True, ("market_snapshot", "capture_run")),
+    ("market reconstruct", "market-snapshot/v7", True, ("market_snapshot", "capture_run")),
     ("market list", "market-snapshot-list/v2", False, ()),
-    ("market show", "market-snapshot/v6", False, ()),
+    ("market show", "market-snapshot/v7", False, ()),
     ("market query", "market-snapshot-query-result/v2", False, ()),
     ("market security", "market-snapshot-security-result/v1", False, ()),
     ("market compare", "market-snapshot-comparison/v2", False, ()),

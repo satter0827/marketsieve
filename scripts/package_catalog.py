@@ -4,11 +4,16 @@ from __future__ import annotations
 
 import argparse
 import re
+import shutil
 import subprocess
+import tempfile
 import tomllib
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 from typing import Any
+
+from scripts.parallel import Task, run_tasks
 
 ROOT = Path(__file__).parents[1]
 VALID_ROLES = {"sdk", "extension-api", "cli", "adapter"}
@@ -125,16 +130,41 @@ def load_package_catalog(root: Path = ROOT) -> tuple[PackageSpec, ...]:
     return tuple(specs)
 
 
-def build_all(dist_dir: Path) -> None:
+def build_all(dist_dir: Path, *, jobs: int = 0) -> None:
     """Build every catalog distribution into one directory."""
 
     dist_dir.mkdir(parents=True, exist_ok=True)
-    for spec in load_package_catalog():
-        subprocess.run(
-            ("uv", "build", "--package", spec.distribution, "--out-dir", str(dist_dir)),
-            cwd=ROOT,
-            check=True,
+    catalog = load_package_catalog()
+    with tempfile.TemporaryDirectory(prefix="marketsieve-build-") as temporary:
+        temporary_root = Path(temporary)
+        outputs = {spec.distribution: temporary_root / spec.artifact_stem for spec in catalog}
+        for output in outputs.values():
+            output.mkdir()
+        run_tasks(
+            [
+                Task(
+                    f"build:{spec.distribution}",
+                    partial(
+                        subprocess.run,
+                        (
+                            "uv",
+                            "build",
+                            "--package",
+                            spec.distribution,
+                            "--out-dir",
+                            str(outputs[spec.distribution]),
+                        ),
+                        cwd=ROOT,
+                        check=True,
+                    ),
+                )
+                for spec in catalog
+            ],
+            jobs=jobs,
         )
+        for spec in catalog:
+            for artifact in sorted(outputs[spec.distribution].iterdir()):
+                shutil.copy2(artifact, dist_dir / artifact.name)
 
 
 def parse_args() -> argparse.Namespace:
@@ -142,6 +172,7 @@ def parse_args() -> argparse.Namespace:
     subparsers = parser.add_subparsers(dest="command", required=True)
     build_parser = subparsers.add_parser("build")
     build_parser.add_argument("--out-dir", type=Path, required=True)
+    build_parser.add_argument("--jobs", type=int, default=0)
     subparsers.add_parser("list")
     return parser.parse_args()
 
@@ -149,7 +180,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     if args.command == "build":
-        build_all(args.out_dir)
+        build_all(args.out_dir, jobs=args.jobs)
         return
     for spec in load_package_catalog():
         print(spec.distribution)

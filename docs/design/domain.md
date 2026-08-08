@@ -22,7 +22,7 @@ availability basis are distinct facts. A retrieval timestamp never backdates a f
 Provider percentage-point fields are normalized to stored ratios at acquisition. Applicability is
 part of each field definition; `not_applicable` observations do not enter aggregate denominators.
 
-An Explorer Projection is a deterministic, chart-neutral view of authoritative JSON and JSONL. It
+An Explorer Projection is a deterministic view contract over authoritative JSON and JSONL. It
 contains fields, units, periods, observation and missing counts, applicability, drawing values, and
 a table fallback. Rendering does not add conclusions, scores, recommendations, or model prompts.
 

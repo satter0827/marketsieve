@@ -202,8 +202,8 @@ class MarketService:
             "producer": {
                 "name": "marketsieve-cli",
                 "version": __version__,
-                "snapshot_schema": "market-snapshot/v6",
-                "explorer_schema": "explorer-data/v1",
+                "snapshot_schema": "market-snapshot/v7",
+                "explorer_schema": "explorer-data/v2",
             },
         }
         fingerprint = hashlib.sha256(_json_bytes(fingerprint_document)).hexdigest()

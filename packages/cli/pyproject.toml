@@ -1,6 +1,6 @@
 [project]
 name = "marketsieve-cli"
-version = "0.15.1"
+version = "0.16.0"
 description = "Public command-line workbench for MarketSieve."
 readme = "README.md"
 requires-python = ">=3.12,<3.15"
@@ -11,9 +11,9 @@ authors = [
 ]
 dependencies = [
     "click>=8.1,<9",
-    "marketsieve>=0.15,<0.16",
-    "marketsieve-extension-api>=0.15,<0.16",
-    "marketsieve-source-yfinance>=0.15,<0.16",
+    "marketsieve>=0.16,<0.17",
+    "marketsieve-extension-api>=0.16,<0.17",
+    "marketsieve-source-yfinance>=0.16,<0.17",
     "rich>=14,<15",
 ]
 

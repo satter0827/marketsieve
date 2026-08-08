@@ -25,11 +25,13 @@ Each content-addressed object contains `manifest.json`, `definitions.json`, `qua
 one-security-per-line authority. JSONL and JSON are data; Markdown and HTML are deterministic
 projections. No file references outside its object directory.
 
-Storage owns canonical writing, hashing, and integrity verification. Snapshot and Research
-projection builders convert authoritative evidence into shared `explorer-data/v1`; the shared
-renderer supports only line, horizontal bar, histogram, box plot, scatter, and heatmap views with
-table fallbacks. It does not depend on the stores, yfinance, or Click. The HTML embeds the exact
-projection and uses no external CDN.
+Storage owns canonical writing, hashing, and integrity verification. The Snapshot projection
+builder creates reference-only `explorer-data/v2`. It declares sections, sources, views, filters,
+column sets, fields, and saved-data actions while referring to canonical JSON and JSONL in the same
+object. The shared renderer loads only those registered relative artifacts through the loopback
+preview server. It supports line, horizontal bar, histogram, scatter, and heatmap views with table
+fallbacks and uses no external CDN. Research retains its v1 projection until the 0.17 contract
+change.
 
 The object identity covers exact inputs, effective runtime settings, universe assets, definitions,
 source evidence, rows, aggregates, failures, and artifact inventory. Interrupted runs can resume
@@ -40,7 +42,7 @@ only with the persisted request. Saved-data commands never contact the network o
 Research resolves explicit instrument IDs from an explicit Snapshot, then requests selected price,
 company, financial, event, and benchmark evidence. Multiple instruments are independent: one
 failure does not erase successful packs. Each immutable pack includes its source Snapshot context,
-definitions, quality, failures, neutral summary, and self-contained chart-led Explorer.
+definitions, quality, failures, neutral summary, and object-folder-contained chart-led Explorer.
 
 Provider publication time is never invented. Retrieval-only facts state that availability basis.
 Missing evidence remains missing. External AI interpretation cannot write back into evidence

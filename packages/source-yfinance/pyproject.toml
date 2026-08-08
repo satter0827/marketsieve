@@ -1,6 +1,6 @@
 [project]
 name = "marketsieve-source-yfinance"
-version = "0.15.1"
+version = "0.16.0"
 description = "No-key yfinance equity batch source for MarketSieve."
 readme = "README.md"
 requires-python = ">=3.12,<3.15"
@@ -10,8 +10,8 @@ authors = [{ name = "MarketSieve contributors" }]
 dependencies = [
     "curl-cffi>=0.15,<1",
     "exchange-calendars>=4.11,<5",
-    "marketsieve>=0.15,<0.16",
-    "marketsieve-extension-api>=0.15,<0.16",
+    "marketsieve>=0.16,<0.17",
+    "marketsieve-extension-api>=0.16,<0.17",
     "yfinance>=1.5.2,<2",
 ]
 

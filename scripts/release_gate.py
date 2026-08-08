@@ -14,9 +14,11 @@ import tarfile
 import tempfile
 import zipfile
 from collections.abc import Sequence
+from functools import partial
 from pathlib import Path
 
 from scripts.package_catalog import load_package_catalog
+from scripts.parallel import Task, run_tasks
 
 ROOT = Path(__file__).parents[1]
 RUNTIME_WHEELHOUSE = ROOT / ".marketsieve" / "cache" / "runtime-wheelhouse"
@@ -238,8 +240,35 @@ def build(version: str, commit: str, dist_dir: Path) -> None:
     if capture(("git", "rev-parse", "HEAD")) != commit:
         raise RuntimeError("commit does not match the checked-out HEAD")
     prepare_dist_dir(dist_dir)
-    for spec in load_package_catalog():
-        run(("uv", "build", "--package", spec.distribution, "--out-dir", str(dist_dir)))
+    catalog = load_package_catalog()
+    with tempfile.TemporaryDirectory(prefix="marketsieve-release-build-") as temporary:
+        build_root = Path(temporary)
+        outputs = {spec.distribution: build_root / spec.artifact_stem for spec in catalog}
+        for output in outputs.values():
+            output.mkdir()
+        run_tasks(
+            [
+                Task(
+                    f"build:{spec.distribution}",
+                    partial(
+                        run,
+                        (
+                            "uv",
+                            "build",
+                            "--package",
+                            spec.distribution,
+                            "--out-dir",
+                            str(outputs[spec.distribution]),
+                        ),
+                    ),
+                )
+                for spec in catalog
+            ],
+            jobs=4,
+        )
+        for spec in catalog:
+            for artifact in sorted(outputs[spec.distribution].iterdir()):
+                shutil.copy2(artifact, dist_dir / artifact.name)
     runtime_wheels = tuple(sorted(RUNTIME_WHEELHOUSE.glob("*.whl")))
     if not runtime_wheels:
         raise RuntimeError("locked runtime wheelhouse is empty; run make sync")

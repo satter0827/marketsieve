@@ -23,7 +23,7 @@ def test_workspace_contains_only_the_supported_public_packages() -> None:
     assert set(workspace["tool"]["uv"]["workspace"]["members"]) == {
         spec.path.relative_to(ROOT).as_posix() for spec in specs
     }
-    assert all(spec.project_version == "0.15.1" for spec in specs)
+    assert all(spec.project_version == "0.16.0" for spec in specs)
 
 
 def test_removed_capabilities_and_packages_are_absent() -> None:
@@ -68,6 +68,7 @@ def test_makefile_has_explicit_inputs_and_no_legacy_workflows() -> None:
     for removed in ("portfolio-import:", "watchlist-add:", "daily-jp:", "weekly:"):
         assert removed not in makefile
     assert "--settings" in makefile and "--config" not in makefile
+    assert "uv run python scripts/" not in makefile
 
 
 def test_vscode_exposes_simple_launches_and_complete_tasks_in_english() -> None:

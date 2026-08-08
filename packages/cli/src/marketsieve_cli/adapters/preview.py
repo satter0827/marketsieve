@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import threading
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -11,19 +12,27 @@ from urllib.parse import urlsplit
 
 
 class ObjectPreviewServer:
-    """Expose only one Explorer and its chart-neutral data on loopback."""
+    """Expose only one verified object's registered artifacts on loopback."""
 
     def __init__(self, object_path: Path, *, port: int = 0) -> None:
         resolved = object_path.resolve()
         if object_path.is_symlink() or not resolved.is_dir():
             raise LookupError("preview evidence object does not exist")
-        allowed = {
-            "/": resolved / "explorer.html",
-            "/explorer.html": resolved / "explorer.html",
-            "/explorer-data.json": resolved / "explorer-data.json",
-        }
+        manifest_path = resolved / "manifest.json"
+        if manifest_path.is_symlink() or not manifest_path.is_file():
+            raise ValueError("preview evidence object has no manifest")
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise ValueError("preview evidence object manifest is invalid") from error
+        artifacts = manifest.get("artifacts")
+        if not isinstance(artifacts, dict) or "explorer.html" not in artifacts:
+            raise ValueError("preview evidence object has incomplete artifact metadata")
+        allowed_names = set(artifacts) | {"manifest.json"}
+        allowed = {f"/{name}": resolved / name for name in allowed_names}
+        allowed["/"] = resolved / "explorer.html"
         if any(path.is_symlink() or not path.is_file() for path in allowed.values()):
-            raise ValueError("preview evidence object has incomplete Explorer artifacts")
+            raise ValueError("preview evidence object has incomplete registered artifacts")
 
         class Handler(BaseHTTPRequestHandler):
             def do_GET(self) -> None:
@@ -33,11 +42,12 @@ class ObjectPreviewServer:
                     self.send_error(404)
                     return
                 body = path.read_bytes()
-                content_type = (
-                    "application/json; charset=utf-8"
-                    if path.suffix == ".json"
-                    else "text/html; charset=utf-8"
-                )
+                content_type = {
+                    ".html": "text/html; charset=utf-8",
+                    ".json": "application/json; charset=utf-8",
+                    ".jsonl": "application/x-ndjson; charset=utf-8",
+                    ".md": "text/markdown; charset=utf-8",
+                }.get(path.suffix, "application/octet-stream")
                 self.send_response(200)
                 self.send_header("Content-Type", content_type)
                 self.send_header("Content-Length", str(len(body)))

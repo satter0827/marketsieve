@@ -2,6 +2,7 @@ SHELL := /bin/sh
 .DEFAULT_GOAL := help
 
 STATE_DIR ?= .marketsieve
+GATE_JOBS ?= 0
 TEST ?=
 SETTINGS ?= marketsieve.settings.toml
 SCOPE ?= --all
@@ -99,7 +100,7 @@ research-preview: ## Preview one Research Explorer over loopback HTTP.
 
 sync: ## Install the locked workspace and development dependencies.
 	uv sync --locked
-	uv run python scripts/runtime_wheelhouse.py prepare --output "$(STATE_DIR)/cache/runtime-wheelhouse"
+	uv run python -m scripts.runtime_wheelhouse prepare --output "$(STATE_DIR)/cache/runtime-wheelhouse"
 
 format: ## Format source, tests, scripts, and configuration snippets.
 	uv run ruff format .
@@ -117,10 +118,10 @@ test: ## Run all tests, or TEST=<path> for a focused test.
 	uv run pytest $(TEST)
 
 secret-check: ## Scan tracked files and the current diff without printing values.
-	uv run python scripts/secret_gate.py --base "$(BASE_SHA)"
+	uv run python -m scripts.secret_gate --base "$(BASE_SHA)"
 
-check: ## Run the complete development gate.
-	BASE_SHA="$(BASE_SHA)" EVIDENCE_DIR="$(EVIDENCE_DIR)" uv run python -m scripts.develop_gate check all
+check: ## Run the complete development gate with bounded parallel workers.
+	BASE_SHA="$(BASE_SHA)" EVIDENCE_DIR="$(EVIDENCE_DIR)" GATE_JOBS="$(GATE_JOBS)" uv run python -m scripts.develop_gate check all --jobs "$(GATE_JOBS)"
 
 capabilities-json: ## Describe the CLI machine contract.
 	uv run marketsieve capabilities --output json

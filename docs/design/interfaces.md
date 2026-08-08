@@ -43,14 +43,16 @@ Purpose profiles affect stored-data selection only and never alter Snapshot acqu
 trading-unit projections are invocation-only and are not persisted. Ordering is neutral and does
 not produce a score or recommendation.
 
-`serve` binds to `127.0.0.1`, selects an available port by default, exposes only one verified
-object's Explorer files, and disables directory listing and path traversal.
+`serve` binds to `127.0.0.1`, selects an available port by default, and exposes only the selected
+verified object's manifest-registered files. It disables directory listing, path traversal,
+symlinks, and access outside the object.
 
 ## Documents
 
-Current top-level contracts are `market-snapshot/v6`, `market-snapshot-list/v2`,
+Current top-level contracts are `market-snapshot/v7`, `market-snapshot-list/v2`,
 `market-snapshot-query-result/v2`, `market-snapshot-comparison/v2`, `market-snapshot-diff/v1`,
-`security-research/v4`, `security-research-list/v2`, `security-research-batch/v1`, and
+`security-research/v4`, `security-research-list/v2`, `security-research-batch/v1`,
+`explorer-data/v2` for Snapshot, and
 `capabilities-result/v8`. Capture state uses `capture-run/v1`. Stable JSON keys and formal schemas
 are English. Human CLI output and Explorer labels may be localized without changing machine
 documents.
