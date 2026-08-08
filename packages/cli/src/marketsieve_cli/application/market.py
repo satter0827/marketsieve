@@ -10,6 +10,7 @@ from decimal import Decimal, localcontext
 from importlib import resources
 from typing import Any, Protocol
 
+from marketsieve import __version__
 from marketsieve.analysis.indicators import CONTEXT, canonical_decimal
 from marketsieve.data.daily import Adjustment
 from marketsieve.domain import Instrument
@@ -198,6 +199,12 @@ class MarketService:
             "runtime_settings": self._settings.effective_document(),
             "runtime_settings_hash": self._settings.effective_hash(),
             "source": {"name": "yfinance"},
+            "producer": {
+                "name": "marketsieve-cli",
+                "version": __version__,
+                "snapshot_schema": "market-snapshot/v6",
+                "explorer_schema": "explorer-data/v1",
+            },
         }
         fingerprint = hashlib.sha256(_json_bytes(fingerprint_document)).hexdigest()
         existing = self._store.find_by_request_fingerprint(fingerprint)

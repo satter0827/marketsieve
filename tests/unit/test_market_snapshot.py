@@ -9,6 +9,7 @@ from typing import Any
 import pytest
 from jsonschema import Draft202012Validator
 
+from marketsieve import __version__
 from marketsieve.domain import Instrument
 from marketsieve.matrix import MatrixRow, MatrixSecurity, build_matrix_row, field_definitions
 from marketsieve.synthetic.daily import JP_INSTRUMENT, US_INSTRUMENT, fixture_bars
@@ -131,6 +132,8 @@ def test_snapshot_is_self_contained_without_spreadsheets(tmp_path: Path) -> None
     assert not list(root.glob("*.xlsx"))
     assert "http://" not in (root / "explorer.html").read_text()
     assert "https://" not in (root / "explorer.html").read_text()
+    assert "JSON.stringify(r).toLowerCase().includes(q)" not in (root / "explorer.html").read_text()
+    assert "searchText(r).includes(q)" in (root / "explorer.html").read_text()
     explorer_data = json.loads((root / "explorer-data.json").read_text())
     assert explorer_data["schema"] == "explorer-data/v1"
     assert {chart["section"] for chart in explorer_data["charts"]} >= {
@@ -407,6 +410,12 @@ def test_market_service_builds_explicit_company_only_scope(tmp_path: Path) -> No
         "as_of": None,
         "mode": "current",
         "session": None,
+    }
+    assert document["request"]["producer"] == {
+        "name": "marketsieve-cli",
+        "version": __version__,
+        "snapshot_schema": "market-snapshot/v6",
+        "explorer_schema": "explorer-data/v1",
     }
     assert document["row_count"] == 30
     assert document["price_requirements_met"] is True

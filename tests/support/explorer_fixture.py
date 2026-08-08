@@ -88,7 +88,38 @@ def main() -> None:
         "locale": "ja",
         "sections": ["Overview", "Risk", "Securities"],
         "charts": charts,
-        "securities": [],
+        "securities": [
+            {
+                "instrument_id": "XNAS:OTHER",
+                "provider_symbol": "OTHER",
+                "instrument": {"mic": "XNAS"},
+                "market": "us",
+                "memberships": ["sp500"],
+                "values": {
+                    "name": "Numeric Match Control",
+                    "close": "7203",
+                    "currency": "USD",
+                    "sector": "Technology",
+                    "industry": "Software",
+                },
+                "missing": {},
+            },
+            {
+                "instrument_id": "XTKS:7203",
+                "provider_symbol": "7203.T",
+                "instrument": {"mic": "XTKS"},
+                "market": "jp",
+                "memberships": ["nikkei225", "topix500"],
+                "values": {
+                    "name": "Toyota Motor Corporation",
+                    "close": "3130",
+                    "currency": "JPY",
+                    "sector": "Consumer Cyclical",
+                    "industry": "Auto Manufacturers",
+                },
+                "missing": {},
+            },
+        ],
         "field_definitions": [],
     }
     (output / "explorer.html").write_text(render_explorer(document), encoding="utf-8")
