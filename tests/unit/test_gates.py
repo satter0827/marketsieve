@@ -18,8 +18,8 @@ from scripts.runtime_wheelhouse import SUPPORTED_PYTHON_VERSIONS, download_comma
 
 
 def test_release_inputs_require_pep440_version_and_complete_commit() -> None:
-    validate_inputs("0.16.0", "a" * 40)
-    validate_source_release("0.16.0")
+    validate_inputs("0.17.0", "a" * 40)
+    validate_source_release("0.17.0")
 
     with pytest.raises(ValueError, match="version"):
         validate_inputs("v0.1", "a" * 40)

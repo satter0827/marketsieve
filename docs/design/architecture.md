@@ -43,6 +43,11 @@ Research resolves explicit instrument IDs from an explicit Snapshot, then reques
 company, financial, event, and benchmark evidence. Multiple instruments are independent: one
 failure does not erase successful packs. Each immutable pack includes its source Snapshot context,
 definitions, quality, failures, neutral summary, and object-folder-contained chart-led Explorer.
+Research Explorer v2 stores only view metadata and relative references. The renderer loads the
+authoritative object-local files through the restricted preview server and derives moving averages,
+rolling risk, drawdown, and benchmark rebasing in the browser without acquisition or persistence.
+Price, company, annual financial, quarterly financial, earnings, dividend, split, and benchmark
+evidence have independent states so one failed provider endpoint cannot hide evidence from another.
 
 Provider publication time is never invented. Retrieval-only facts state that availability basis.
 Missing evidence remains missing. External AI interpretation cannot write back into evidence

@@ -8,8 +8,11 @@ inconsistency.
 Storage tests verify content identity, canonical JSON/JSONL, complete inventories, object-local
 Explorer references, absent spreadsheet artifacts, deterministic query order, compatible diff
 fields, resume fingerprints, and tamper detection. Preview tests verify that only
-manifest-registered files are served. Live smoke tests are explicit and separate from the default
-offline suite.
+manifest-registered files are served. Research quality reports independent evidence-domain states:
+`available`, `none_observed`,
+`not_requested`, or `acquisition_failed`. A failure is assigned only to its affected domain; for
+example, an earnings endpoint failure does not invalidate acquired dividend or split events.
+Live smoke tests are explicit and separate from the default offline suite.
 
 The local development gate runs independent quality, test, package, and smoke lanes with bounded
 parallelism. `GATE_JOBS=0` selects at most four workers and `GATE_JOBS=1` is the deterministic

@@ -23,6 +23,9 @@ Snapshotは`.marketsieve/market-snapshots/objects/SNAPSHOT_ID/`へ保存され�
 `explorer.html`を人間向け投影とします。Explorerは単一ファイルではなく成果物フォルダ
 全体で自己完結し、`market serve`または`research serve`で閲覧します。個別調査は
 `.marketsieve/research/objects/RESEARCH_ID/`へ保存し、元Snapshotとの対応を保持します。
+Research Explorerは`research serve`経由で正本ファイルを直接読み、3か月から全期間までを
+再取得なしで切り替えます。価格、会社、財務、決算、配当、分割、ベンチマークの取得状態は
+独立しており、一部取得失敗が取得済み証拠を隠しません。
 ExcelとCSVは生成しません。
 
 公開CLIは`market`、`research`、`doctor`、`capabilities`だけです。Portfolio、Watchlist、定期

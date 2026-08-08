@@ -5,6 +5,7 @@ from dataclasses import replace
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -14,10 +15,12 @@ from marketsieve.data.daily import Adjustment
 from marketsieve.domain import Instrument
 from marketsieve.synthetic.daily import fixture_bars
 from marketsieve_cli.adapters.config import Settings
+from marketsieve_cli.adapters.explorer_v2 import build_research_explorer_data
 from marketsieve_cli.adapters.research import ResearchStore
 from marketsieve_cli.application.research import ResearchService
 from marketsieve_cli.contracts import ResearchBuildInputs
 from marketsieve_extension_api import (
+    EquityAcquisitionFailure,
     EquityBatchObservation,
     ImportedEquityBatch,
     ImportedSecurityResearch,
@@ -93,19 +96,27 @@ def test_research_pack_is_self_contained_and_charted(tmp_path: Path) -> None:
     )
     root = Path(document["artifacts"]["manifest.json"]).parent
 
-    assert document["schema"] == "security-research/v4"
+    assert document["schema"] == "security-research/v6"
     assert document["price_requirements_met"] is True
     assert not list(root.glob("*.csv")) and not list(root.glob("*.xlsx"))
     html = (root / "explorer.html").read_text()
     assert "<svg" in html and "https://" not in html
-    chart_payload = html.split('<script id="explorer-data" type="application/json">', 1)[1].split(
-        "</script>", 1
-    )[0]
-    assert any(
-        chart["chart_id"] == "price_sma_volume" for chart in json.loads(chart_payload)["charts"]
+    assert "Microsoft" not in html and 'id="explorer-data"' not in html
+    explorer = json.loads((root / "explorer-data.json").read_text())
+    assert explorer["schema"] == "explorer-data/v2"
+    assert explorer["metadata"]["object_contract"] == "security-research/v6"
+    assert explorer["sources"]["prices"]["path"] == "prices.jsonl"
+    assert "prices" not in explorer
+    explorer_schema = json.loads(
+        (Path(__file__).parents[2] / "schemas/explorer-data/v2/schema.json").read_text()
     )
+    Draft202012Validator(explorer_schema).validate(explorer)
+    incomplete_manifest = json.loads((root / "manifest.json").read_text())
+    incomplete_manifest["artifacts"].pop("prices.jsonl")
+    with pytest.raises(ValueError, match="not registered"):
+        build_research_explorer_data(incomplete_manifest, {})
     schema = json.loads(
-        (Path(__file__).parents[2] / "schemas/security-research/v4/schema.json").read_text()
+        (Path(__file__).parents[2] / "schemas/security-research/v6/schema.json").read_text()
     )
     Draft202012Validator(schema).validate(document)
     assert (
@@ -120,6 +131,99 @@ def test_research_pack_is_self_contained_and_charted(tmp_path: Path) -> None:
         ResearchStore(tmp_path / "research").show("invalid")
     with pytest.raises(LookupError, match="does not exist"):
         ResearchStore(tmp_path / "empty").latest("a" * 64, "XNAS:MSFT")
+
+
+def test_research_quality_preserves_independent_event_success(tmp_path: Path) -> None:
+    request = SecurityResearchRequest(
+        "market-yfinance",
+        INSTRUMENT,
+        "MSFT",
+        date(2026, 1, 1),
+        date(2026, 8, 8),
+        Adjustment.ADJUSTED,
+        30,
+        3,
+        2.0,
+        {},
+        ("events",),
+    )
+    imported = ImportedSecurityResearch(
+        request,
+        "yfinance",
+        "1.5.2",
+        datetime(2026, 8, 8, tzinfo=UTC),
+        (),
+        (),
+        (),
+        (
+            ResearchEvent("dividend", date(2026, 5, 15), (("amount", "0.83"),)),
+            ResearchEvent("split", date(2026, 6, 1), (("ratio", "2"),)),
+        ),
+        (EquityAcquisitionFailure(INSTRUMENT, "research", "earnings", "network_error"),),
+        "e" * 64,
+    )
+    document = ResearchStore(tmp_path / "research").put(
+        imported,
+        {"snapshot_id": "a" * 64, "definitions": {}},
+        minimum_price_observations=252,
+        runtime_settings={},
+        runtime_settings_hash="b" * 64,
+        benchmarks=None,
+    )
+
+    assert document["quality"]["evidence_statuses"] == {
+        "price": "not_requested",
+        "company": "not_requested",
+        "annual_financials": "not_requested",
+        "quarterly_financials": "not_requested",
+        "earnings": "acquisition_failed",
+        "dividends": "available",
+        "splits": "available",
+        "benchmarks": "not_requested",
+    }
+
+
+def test_benchmark_failure_does_not_mark_security_price_failed(tmp_path: Path) -> None:
+    request = SecurityResearchRequest(
+        "market-yfinance",
+        INSTRUMENT,
+        "MSFT",
+        date(2026, 1, 1),
+        date(2026, 8, 8),
+        Adjustment.ADJUSTED,
+        30,
+        3,
+        2.0,
+        {},
+        ("benchmarks", "price"),
+    )
+    imported = ImportedSecurityResearch(
+        request,
+        "yfinance",
+        "1.5.2",
+        datetime(2026, 8, 8, tzinfo=UTC),
+        (),
+        (),
+        (),
+        (),
+        (),
+        "f" * 64,
+    )
+    benchmark = SimpleNamespace(
+        observations=(),
+        failures=(EquityAcquisitionFailure(INSTRUMENT, "history", "price", "network_error"),),
+    )
+    document = ResearchStore(tmp_path / "research").put(
+        imported,
+        {"snapshot_id": "a" * 64, "definitions": {}},
+        minimum_price_observations=252,
+        runtime_settings={},
+        runtime_settings_hash="b" * 64,
+        benchmarks=benchmark,
+    )
+
+    assert document["quality"]["evidence_statuses"]["price"] == "none_observed"
+    assert document["quality"]["evidence_statuses"]["benchmarks"] == "acquisition_failed"
 
 
 class _Market:
