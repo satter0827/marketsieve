@@ -68,6 +68,7 @@ def test_makefile_has_explicit_inputs_and_no_legacy_workflows() -> None:
     for removed in ("portfolio-import:", "watchlist-add:", "daily-jp:", "weekly:"):
         assert removed not in makefile
     assert "--settings" in makefile and "--config" not in makefile
+    assert "uv run python scripts/" not in makefile
 
 
 def test_vscode_exposes_simple_launches_and_complete_tasks_in_english() -> None:

@@ -100,7 +100,7 @@ research-preview: ## Preview one Research Explorer over loopback HTTP.
 
 sync: ## Install the locked workspace and development dependencies.
 	uv sync --locked
-	uv run python scripts/runtime_wheelhouse.py prepare --output "$(STATE_DIR)/cache/runtime-wheelhouse"
+	uv run python -m scripts.runtime_wheelhouse prepare --output "$(STATE_DIR)/cache/runtime-wheelhouse"
 
 format: ## Format source, tests, scripts, and configuration snippets.
 	uv run ruff format .
@@ -118,7 +118,7 @@ test: ## Run all tests, or TEST=<path> for a focused test.
 	uv run pytest $(TEST)
 
 secret-check: ## Scan tracked files and the current diff without printing values.
-	uv run python scripts/secret_gate.py --base "$(BASE_SHA)"
+	uv run python -m scripts.secret_gate --base "$(BASE_SHA)"
 
 check: ## Run the complete development gate with bounded parallel workers.
 	BASE_SHA="$(BASE_SHA)" EVIDENCE_DIR="$(EVIDENCE_DIR)" GATE_JOBS="$(GATE_JOBS)" uv run python -m scripts.develop_gate check all --jobs "$(GATE_JOBS)"
