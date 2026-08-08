@@ -1,12 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:marketsieve:schema:matrix-query-result:1.0.0",
-  "title": "MarketSieve persisted market matrix query result",
+  "$id": "urn:marketsieve:schema:market-snapshot-query-result:1.0.0",
+  "title": "MarketSieve persisted Market Snapshot query result",
   "type": "object",
-  "required": ["schema", "matrix_id", "filters", "fields", "matched_count", "rows"],
+  "required": ["schema", "snapshot_id", "filters", "fields", "matched_count", "rows"],
   "properties": {
-    "schema": {"const": "matrix-query-result/v1"},
-    "matrix_id": {"$ref": "#/$defs/digest"},
+    "schema": {"const": "market-snapshot-query-result/v1"},
+    "snapshot_id": {"$ref": "#/$defs/digest"},
     "filters": {"$ref": "#/$defs/filters"},
     "fields": {
       "type": "array",

@@ -1,12 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:marketsieve:schema:market-matrix:2.0.0",
-  "title": "MarketSieve market matrix projection",
+  "$id": "urn:marketsieve:schema:market-snapshot:2.0.0",
+  "title": "MarketSieve Market Snapshot projection",
   "type": "object",
-  "required": ["schema", "matrix_id", "created_at", "request", "source", "input_snapshot_id", "universe_assets", "configuration", "row_count", "field_count", "failure_count", "coverage", "quality_status", "summary", "artifacts"],
+  "required": ["schema", "snapshot_id", "created_at", "request", "source", "input_snapshot_id", "universe_assets", "configuration", "row_count", "field_count", "failure_count", "coverage", "price_requirements_met", "market", "artifacts"],
   "properties": {
-    "schema": {"const": "market-matrix/v2"},
-    "matrix_id": {"$ref": "#/$defs/digest"},
+    "schema": {"const": "market-snapshot/v2"},
+    "snapshot_id": {"$ref": "#/$defs/digest"},
     "created_at": {"type": "string", "format": "date-time"},
     "request": {"$ref": "#/$defs/request"},
     "source": {"$ref": "#/$defs/source"},
@@ -17,8 +17,28 @@
     "field_count": {"type": "integer", "minimum": 1},
     "failure_count": {"type": "integer", "minimum": 0},
     "coverage": {"$ref": "#/$defs/coverage"},
-    "quality_status": {"enum": ["ready", "partial"]},
-    "summary": {"$ref": "#/$defs/summary"},
+    "price_requirements_met": {"type": "boolean"},
+    "market": {
+      "type": "object",
+      "required": ["schema", "generated_at", "coverage", "price_requirements_met", "markets"],
+      "properties": {
+        "schema": {"const": "market-snapshot-market/v1"},
+        "generated_at": {"type": "string", "format": "date-time"},
+        "coverage": {"$ref": "#/$defs/coverage"},
+        "price_requirements_met": {"type": "boolean"},
+        "markets": {
+          "type": "object",
+          "required": ["all", "jp", "us"],
+          "properties": {
+            "all": {"$ref": "#/$defs/group"},
+            "jp": {"$ref": "#/$defs/group"},
+            "us": {"$ref": "#/$defs/group"}
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
     "artifacts": {"$ref": "#/$defs/artifacts"}
   },
   "$defs": {
@@ -29,7 +49,7 @@
       "required": ["fingerprint", "schema", "indices", "assets", "start", "end", "adjustment", "settings", "source"],
       "properties": {
         "fingerprint": {"$ref": "#/$defs/digest"},
-        "schema": {"const": "market-matrix-request/v1"},
+        "schema": {"const": "market-snapshot-request/v1"},
         "indices": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/indexName"}},
         "assets": {"type": "object"},
         "start": {"type": "string", "format": "date"},
@@ -41,7 +61,7 @@
           "required": ["name", "profile"],
           "properties": {
             "name": {"const": "yfinance"},
-            "profile": {"const": "matrix-yfinance"}
+            "profile": {"const": "market-yfinance"}
           },
           "additionalProperties": false
         }
@@ -154,10 +174,11 @@
     },
     "group": {
       "type": "object",
-      "required": ["security_count", "price_count", "price_coverage", "advancing_count", "declining_count", "unchanged_count", "above_sma_20_count", "above_sma_200_count", "distributions", "currency_distributions", "concentration", "sectors", "missing"],
+      "required": ["security_count", "price_count", "latest_price_date", "price_coverage", "advancing_count", "declining_count", "unchanged_count", "above_sma_20_count", "above_sma_200_count", "distributions", "currency_distributions", "concentration", "sectors", "missing"],
       "properties": {
-        "security_count": {"type": "integer", "minimum": 1},
+        "security_count": {"type": "integer", "minimum": 0},
         "price_count": {"type": "integer", "minimum": 0},
+        "latest_price_date": {"type": ["string", "null"], "format": "date"},
         "price_coverage": {"type": "string", "minLength": 1},
         "advancing_count": {"type": "integer", "minimum": 0},
         "declining_count": {"type": "integer", "minimum": 0},
@@ -178,12 +199,12 @@
     },
     "summary": {
       "type": "object",
-      "required": ["schema", "generated_at", "coverage", "quality_status", "groups"],
+      "required": ["schema", "generated_at", "coverage", "price_requirements_met", "groups"],
       "properties": {
-        "schema": {"const": "market-matrix-summary/v1"},
+        "schema": {"const": "market-snapshot-summary/v1"},
         "generated_at": {"type": "string", "format": "date-time"},
         "coverage": {"$ref": "#/$defs/coverage"},
-        "quality_status": {"enum": ["ready", "partial"]},
+        "price_requirements_met": {"type": "boolean"},
         "groups": {
           "type": "object",
           "required": ["all"],
@@ -196,17 +217,18 @@
     },
     "artifacts": {
       "type": "object",
-      "required": ["README.md", "manifest.json", "fields.json", "missing-reasons.json", "securities.jsonl", "index-summary.json", "failures.jsonl", "matrix.csv", "overview.html", "summary.md"],
+      "required": ["README.md", "manifest.json", "definitions.json", "quality.json", "market.json", "segments.jsonl", "securities.jsonl", "failures.jsonl", "securities.csv", "explorer.html", "summary.md"],
       "properties": {
         "README.md": {"type": "string", "minLength": 1},
         "manifest.json": {"type": "string", "minLength": 1},
-        "fields.json": {"type": "string", "minLength": 1},
-        "missing-reasons.json": {"type": "string", "minLength": 1},
+        "definitions.json": {"type": "string", "minLength": 1},
+        "quality.json": {"type": "string", "minLength": 1},
+        "market.json": {"type": "string", "minLength": 1},
+        "segments.jsonl": {"type": "string", "minLength": 1},
         "securities.jsonl": {"type": "string", "minLength": 1},
-        "index-summary.json": {"type": "string", "minLength": 1},
         "failures.jsonl": {"type": "string", "minLength": 1},
-        "matrix.csv": {"type": "string", "minLength": 1},
-        "overview.html": {"type": "string", "minLength": 1},
+        "securities.csv": {"type": "string", "minLength": 1},
+        "explorer.html": {"type": "string", "minLength": 1},
         "summary.md": {"type": "string", "minLength": 1}
       },
       "additionalProperties": false

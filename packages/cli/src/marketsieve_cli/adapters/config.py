@@ -8,7 +8,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
-from marketsieve_cli.contracts import MatrixConfiguration
+from marketsieve_cli.contracts import MarketConfiguration, ResearchConfiguration
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,15 +43,20 @@ class SourceBinding:
 DEFAULT_DAILY_LOOKBACK_DAYS = 400
 DEFAULT_FINANCIAL_LOOKBACK_DAYS = 1500
 DEFAULT_WEEKLY_MAX_AGE_DAYS = 7
-DEFAULT_MATRIX_INDICES = ("dow30", "nasdaq100", "nikkei225", "sp500", "topix500")
-DEFAULT_MATRIX_HISTORY_DAYS = 1095
-DEFAULT_MATRIX_BATCH_SIZE = 50
-DEFAULT_MATRIX_PROFILE_WORKERS = 2
-DEFAULT_MATRIX_TIMEOUT_SECONDS = 30
-DEFAULT_MATRIX_MAX_RETRIES = 3
-DEFAULT_MATRIX_RETRY_BASE_SECONDS = 2.0
-DEFAULT_MATRIX_MINIMUM_OVERALL_PRICE_COVERAGE = Decimal("0.95")
-DEFAULT_MATRIX_MINIMUM_INDEX_PRICE_COVERAGE = Decimal("0.90")
+DEFAULT_MARKET_INDICES = ("dow30", "nasdaq100", "nikkei225", "sp500", "topix500")
+DEFAULT_MARKET_HISTORY_DAYS = 1095
+DEFAULT_MARKET_BATCH_SIZE = 50
+DEFAULT_MARKET_PROFILE_WORKERS = 2
+DEFAULT_MARKET_TIMEOUT_SECONDS = 30
+DEFAULT_MARKET_MAX_RETRIES = 3
+DEFAULT_MARKET_RETRY_BASE_SECONDS = 2.0
+DEFAULT_MARKET_MINIMUM_OVERALL_PRICE_COVERAGE = Decimal("0.95")
+DEFAULT_MARKET_MINIMUM_INDEX_PRICE_COVERAGE = Decimal("0.90")
+DEFAULT_RESEARCH_HISTORY_DAYS = 3653
+DEFAULT_RESEARCH_MINIMUM_PRICE_OBSERVATIONS = 252
+DEFAULT_RESEARCH_TIMEOUT_SECONDS = 30
+DEFAULT_RESEARCH_MAX_RETRIES = 3
+DEFAULT_RESEARCH_RETRY_BASE_SECONDS = 2.0
 
 
 class Configuration:
@@ -194,12 +199,12 @@ class Configuration:
             raise ValueError("weekly max_age_days must be an integer from 1 through 14")
         return maximum
 
-    def matrix_configuration(self) -> MatrixConfiguration:
-        """Return zero-configuration defaults or one validated matrix table."""
+    def market_configuration(self) -> MarketConfiguration:
+        """Return zero-configuration defaults or one validated market table."""
 
-        value = self._document().get("matrix", {})
+        value = self._document().get("market", {})
         if not isinstance(value, dict):
-            raise ValueError("matrix configuration must be a TOML table")
+            raise ValueError("market configuration must be a TOML table")
         allowed = {
             "indices",
             "history_days",
@@ -213,19 +218,19 @@ class Configuration:
         }
         if unknown := set(value) - allowed:
             raise ValueError(
-                f"matrix configuration contains unsupported settings: {sorted(unknown)}"
+                f"market configuration contains unsupported settings: {sorted(unknown)}"
             )
-        raw_indices = value.get("indices", list(DEFAULT_MATRIX_INDICES))
+        raw_indices = value.get("indices", list(DEFAULT_MARKET_INDICES))
         if (
             not isinstance(raw_indices, list)
             or not raw_indices
             or any(
-                not isinstance(item, str) or item not in DEFAULT_MATRIX_INDICES
+                not isinstance(item, str) or item not in DEFAULT_MARKET_INDICES
                 for item in raw_indices
             )
             or len(raw_indices) != len(set(raw_indices))
         ):
-            raise ValueError("matrix indices must be a unique non-empty list of built-in index IDs")
+            raise ValueError("market indices must be a unique non-empty list of built-in index IDs")
 
         def integer(name: str, default: int, minimum: int, maximum: int) -> int:
             result = value.get(name, default)
@@ -235,43 +240,93 @@ class Configuration:
                 or not minimum <= result <= maximum
             ):
                 raise ValueError(
-                    f"matrix {name} must be an integer from {minimum} through {maximum}"
+                    f"market {name} must be an integer from {minimum} through {maximum}"
                 )
             return result
 
-        retry_base = value.get("retry_base_seconds", DEFAULT_MATRIX_RETRY_BASE_SECONDS)
+        retry_base = value.get("retry_base_seconds", DEFAULT_MARKET_RETRY_BASE_SECONDS)
         if (
             not isinstance(retry_base, (int, float))
             or isinstance(retry_base, bool)
             or not 0 <= retry_base <= 60
         ):
-            raise ValueError("matrix retry_base_seconds must be a number from 0 through 60")
+            raise ValueError("market retry_base_seconds must be a number from 0 through 60")
 
         def coverage(name: str, default: Decimal) -> Decimal:
             try:
                 result = Decimal(str(value.get(name, default)))
             except (InvalidOperation, ValueError):
-                raise ValueError(f"matrix {name} must be a decimal ratio") from None
+                raise ValueError(f"market {name} must be a decimal ratio") from None
             if not result.is_finite():
-                raise ValueError(f"matrix {name} must be a finite decimal ratio")
+                raise ValueError(f"market {name} must be a finite decimal ratio")
             if not Decimal("0") <= result <= Decimal("1"):
-                raise ValueError(f"matrix {name} must be from 0 through 1")
+                raise ValueError(f"market {name} must be from 0 through 1")
             return result
 
-        return MatrixConfiguration(
+        return MarketConfiguration(
             indices=tuple(sorted(raw_indices)),
-            history_days=integer("history_days", DEFAULT_MATRIX_HISTORY_DAYS, 400, 4000),
-            batch_size=integer("batch_size", DEFAULT_MATRIX_BATCH_SIZE, 1, 250),
-            profile_workers=integer("profile_workers", DEFAULT_MATRIX_PROFILE_WORKERS, 1, 8),
-            timeout_seconds=integer("timeout_seconds", DEFAULT_MATRIX_TIMEOUT_SECONDS, 1, 120),
-            max_retries=integer("max_retries", DEFAULT_MATRIX_MAX_RETRIES, 1, 10),
+            history_days=integer("history_days", DEFAULT_MARKET_HISTORY_DAYS, 400, 4000),
+            batch_size=integer("batch_size", DEFAULT_MARKET_BATCH_SIZE, 1, 250),
+            profile_workers=integer("profile_workers", DEFAULT_MARKET_PROFILE_WORKERS, 1, 8),
+            timeout_seconds=integer("timeout_seconds", DEFAULT_MARKET_TIMEOUT_SECONDS, 1, 120),
+            max_retries=integer("max_retries", DEFAULT_MARKET_MAX_RETRIES, 1, 10),
             retry_base_seconds=float(retry_base),
             minimum_overall_price_coverage=coverage(
                 "minimum_overall_price_coverage",
-                DEFAULT_MATRIX_MINIMUM_OVERALL_PRICE_COVERAGE,
+                DEFAULT_MARKET_MINIMUM_OVERALL_PRICE_COVERAGE,
             ),
             minimum_index_price_coverage=coverage(
                 "minimum_index_price_coverage",
-                DEFAULT_MATRIX_MINIMUM_INDEX_PRICE_COVERAGE,
+                DEFAULT_MARKET_MINIMUM_INDEX_PRICE_COVERAGE,
             ),
+        )
+
+    def research_configuration(self) -> ResearchConfiguration:
+        """Return validated zero-key defaults for individual research."""
+
+        value = self._document().get("research", {})
+        if not isinstance(value, dict):
+            raise ValueError("research configuration must be a TOML table")
+        allowed = {
+            "history_days",
+            "minimum_price_observations",
+            "timeout_seconds",
+            "max_retries",
+            "retry_base_seconds",
+        }
+        if unknown := set(value) - allowed:
+            raise ValueError(
+                f"research configuration contains unsupported settings: {sorted(unknown)}"
+            )
+
+        def integer(name: str, default: int, minimum: int, maximum: int) -> int:
+            result = value.get(name, default)
+            if (
+                not isinstance(result, int)
+                or isinstance(result, bool)
+                or not minimum <= result <= maximum
+            ):
+                raise ValueError(
+                    f"research {name} must be an integer from {minimum} through {maximum}"
+                )
+            return result
+
+        retry_base = value.get("retry_base_seconds", DEFAULT_RESEARCH_RETRY_BASE_SECONDS)
+        if (
+            not isinstance(retry_base, (int, float))
+            or isinstance(retry_base, bool)
+            or not 0 <= retry_base <= 60
+        ):
+            raise ValueError("research retry_base_seconds must be a number from 0 through 60")
+        return ResearchConfiguration(
+            history_days=integer("history_days", DEFAULT_RESEARCH_HISTORY_DAYS, 365, 3653),
+            minimum_price_observations=integer(
+                "minimum_price_observations",
+                DEFAULT_RESEARCH_MINIMUM_PRICE_OBSERVATIONS,
+                1,
+                5000,
+            ),
+            timeout_seconds=integer("timeout_seconds", DEFAULT_RESEARCH_TIMEOUT_SECONDS, 1, 120),
+            max_retries=integer("max_retries", DEFAULT_RESEARCH_MAX_RETRIES, 1, 10),
+            retry_base_seconds=float(retry_base),
         )

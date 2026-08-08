@@ -4,38 +4,36 @@
 
 | Activity | Owner | Completion evidence |
 | --- | --- | --- |
-| Maintain built-in constituent assets | Maintainer | source URL, as-of date, count, and asset hash review |
-| Fetch yfinance observations | Automated | request fingerprint, source version, input snapshot, failures |
-| Calculate and store matrix | Automated | immutable object verifies and coverage is explicit |
-| List, query, read, or compare stored rows | Human or external agent | selected matrix ID and verified JSONL |
-| Interpret aggregate analysis | Human or external agent | claims trace to matrix summary and definitions |
-| Adopt a security-specific conclusion | Human decision | outside MarketSieve canonical state |
+| Maintain constituent assets | Maintainer | source URL, as-of date, count, and asset hash |
+| Build Market Snapshot | Automated | request fingerprint, source version, coverage, failures, verified object |
+| Read or filter saved market data | Human or external agent | exact Snapshot ID and canonical JSONL |
+| Build Security Research Pack | Automated | selected Snapshot security, source response, quality, verified object |
+| Interpret evidence | Human or external agent | claims trace to Snapshot or Research Pack files |
+| Adopt an investment conclusion | Human decision | outside MarketSieve canonical state |
 | Place an order or send a message | Unsupported | no product path exists |
 
 ## Development and release
 
 Work starts from `develop` on a `codex/` branch. The complete local gate and review evidence freeze a
 specific SHA before CI. A reviewed change is squash-merged to `develop`. Promotion from `develop` to
-`main` uses the Release Gate and a merge commit. Tags and public releases are separate explicit
-decisions.
+`main` uses the Release Gate and a merge commit. Tags and public releases are separate decisions.
 
 ## Data and analysis lifecycle
 
-1. A versioned built-in asset defines the requested index memberships.
-2. One yfinance batch request acquires prices, profiles, financials, and exact failure evidence.
-3. Pure calculations create the common row field set and index-relative measures.
-4. Canonical JSONL, definitions, manifest, summary, and failures determine the matrix identity.
-5. CSV, HTML, and Markdown are generated from that authority and verified on read.
-6. The matrix README and neutral summary make the directory understandable without external state.
-7. External interpretations remain outside the matrix object.
-8. A later refresh creates another object. It never rewrites an earlier object.
+1. Versioned assets define index memberships and fixed benchmarks.
+2. One yfinance request acquires broad prices, profiles, financials, and exact failures.
+3. Pure calculations create common fields and benchmark-relative measures.
+4. Canonical JSONL, definitions, market context, segments, quality, and failures define the Snapshot.
+5. CSV, HTML, and Markdown projections are generated and verified.
+6. An analyst or agent filters the Snapshot and selects a security.
+7. A focused yfinance request creates an immutable Research Pack for that Snapshot security.
+8. External interpretations stay outside both objects. Later acquisition creates new objects.
 
-Interrupted runs live separately from completed objects. Existing pre-0.9 local artifacts remain
-recoverable on disk but no current schema or command reads them. Current decision reports and
-watchlists use the isolated `.marketsieve/reports/v2` and `.marketsieve/watchlists/v2` roots.
+Interrupted Snapshot runs live separately from completed objects. Research builds publish only
+complete objects. Current commands do not load pre-0.11 market object schemas. Decision reports and
+watchlists retain their isolated storage roots.
 
 ## Documentation lifecycle
 
-Implemented system contracts live in `docs/design`. Planned outcomes live in `docs/roadmap.md`.
-Dated notes are temporary investigation and never become prerequisites for understanding current
-behavior. Root README files remain concise audience guides.
+Implemented contracts live in `docs/design`. Planned outcomes live in `docs/roadmap.md`. Dated notes
+are temporary investigation and never become prerequisites. Root README files remain concise guides.

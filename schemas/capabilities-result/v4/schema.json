@@ -1,11 +1,11 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:marketsieve:schema:capabilities-result:3.0.0",
+  "$id": "urn:marketsieve:schema:capabilities-result:4.0.0",
   "title": "MarketSieve CLI capabilities",
   "type": "object",
   "required": ["schema_version", "program", "version", "global_options", "commands", "streams", "exit_codes"],
   "properties": {
-    "schema_version": {"const": "3.0.0"},
+    "schema_version": {"const": "4.0.0"},
     "program": {"const": "marketsieve"},
     "version": {"type": "string", "minLength": 1},
     "global_options": {"$ref": "#/$defs/options"},
@@ -25,7 +25,7 @@
               "network": {"type": "boolean"}, "secrets": {"type": "boolean"},
               "optional_writes": {
                 "type": "array", "uniqueItems": true,
-                "items": {"enum": ["experiment", "log_file", "market_matrix", "matrix_run", "portfolio", "report", "snapshot", "watchlist"]}
+                "items": {"enum": ["experiment", "log_file", "market_snapshot", "market_snapshot_run", "portfolio", "report", "security_research", "snapshot", "watchlist"]}
               }
             },
             "additionalProperties": false

@@ -1,12 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:marketsieve:schema:market-matrix-manifest:2.0.0",
-  "title": "MarketSieve self-contained market matrix manifest",
+  "$id": "urn:marketsieve:schema:market-snapshot-manifest:2.0.0",
+  "title": "MarketSieve self-contained Market Snapshot manifest",
   "type": "object",
-  "required": ["schema", "matrix_id", "created_at", "request", "source", "input_snapshot_id", "universe_assets", "configuration", "row_count", "field_count", "failure_count", "coverage", "quality_status", "artifacts"],
+  "required": ["schema", "snapshot_id", "created_at", "request", "source", "input_snapshot_id", "universe_assets", "configuration", "row_count", "field_count", "failure_count", "coverage", "price_requirements_met", "artifacts"],
   "properties": {
-    "schema": {"const": "market-matrix-manifest/v2"},
-    "matrix_id": {"$ref": "#/$defs/digest"},
+    "schema": {"const": "market-snapshot-manifest/v2"},
+    "snapshot_id": {"$ref": "#/$defs/digest"},
     "created_at": {"type": "string", "format": "date-time"},
     "request": {"$ref": "#/$defs/request"},
     "source": {"$ref": "#/$defs/source"},
@@ -17,7 +17,7 @@
     "field_count": {"type": "integer", "minimum": 1},
     "failure_count": {"type": "integer", "minimum": 0},
     "coverage": {"$ref": "#/$defs/coverage"},
-    "quality_status": {"enum": ["ready", "partial"]},
+    "price_requirements_met": {"type": "boolean"},
     "artifacts": {"$ref": "#/$defs/artifacts"}
   },
   "$defs": {
@@ -28,7 +28,7 @@
       "required": ["fingerprint", "schema", "indices", "assets", "start", "end", "adjustment", "settings", "source"],
       "properties": {
         "fingerprint": {"$ref": "#/$defs/digest"},
-        "schema": {"const": "market-matrix-request/v1"},
+        "schema": {"const": "market-snapshot-request/v1"},
         "indices": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/indexName"}},
         "assets": {"type": "object"},
         "start": {"type": "string", "format": "date"},
@@ -40,7 +40,7 @@
           "required": ["name", "profile"],
           "properties": {
             "name": {"const": "yfinance"},
-            "profile": {"const": "matrix-yfinance"}
+            "profile": {"const": "market-yfinance"}
           },
           "additionalProperties": false
         }
@@ -83,17 +83,18 @@
     },
     "artifacts": {
       "type": "object",
-      "required": ["README.md", "manifest.json", "fields.json", "missing-reasons.json", "securities.jsonl", "index-summary.json", "failures.jsonl", "matrix.csv", "overview.html", "summary.md"],
+      "required": ["README.md", "manifest.json", "definitions.json", "quality.json", "market.json", "segments.jsonl", "securities.jsonl", "failures.jsonl", "securities.csv", "explorer.html", "summary.md"],
       "properties": {
         "README.md": {"$ref": "#/$defs/artifact"},
         "manifest.json": {"$ref": "#/$defs/artifact"},
-        "fields.json": {"$ref": "#/$defs/artifact"},
-        "missing-reasons.json": {"$ref": "#/$defs/artifact"},
+        "definitions.json": {"$ref": "#/$defs/artifact"},
+        "quality.json": {"$ref": "#/$defs/artifact"},
+        "market.json": {"$ref": "#/$defs/artifact"},
+        "segments.jsonl": {"$ref": "#/$defs/artifact"},
         "securities.jsonl": {"$ref": "#/$defs/artifact"},
-        "index-summary.json": {"$ref": "#/$defs/artifact"},
         "failures.jsonl": {"$ref": "#/$defs/artifact"},
-        "matrix.csv": {"$ref": "#/$defs/artifact"},
-        "overview.html": {"$ref": "#/$defs/artifact"},
+        "securities.csv": {"$ref": "#/$defs/artifact"},
+        "explorer.html": {"$ref": "#/$defs/artifact"},
         "summary.md": {"$ref": "#/$defs/artifact"}
       },
       "additionalProperties": false

@@ -7,6 +7,34 @@ will follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-08-08
+
+### Added
+
+- Broad Market Snapshot commands and schemas for refresh, history, filtering, saved-security reads,
+  and comparisons without using matrix terminology as the public product model.
+- Snapshot aggregates for all securities, JP and U.S. markets, indices, sectors, and industries,
+  with separated field definitions, quality evidence, and self-contained explorer projections.
+- On-demand yfinance Security Research Packs for one selected Snapshot security, including up to ten
+  years of adjusted prices, company facts, annual and quarterly statements, dividends, splits,
+  earnings events, exact failures, and matching market context.
+- English daily-use launch configurations and exhaustive Make-backed VS Code tasks for market,
+  research, routine, and developer workflows.
+
+### Changed
+
+- Public packages and compatible internal dependencies use version 0.11.0. Capabilities use v4.
+- Generated broad-market state now lives below `.marketsieve/market-snapshots`; focused research
+  lives below `.marketsieve/research`.
+- CLI application protocols are independent from Click and transport details so a future MCP adapter
+  can reuse them without introducing another provider or persistence path.
+
+### Removed
+
+- Public `matrix` commands, schemas, configuration name, filenames, and storage contract. The pure
+  SDK calculation module remains an internal implementation detail.
+- Legacy public schema files and compatibility loading for pre-0.11 market objects.
+
 ## [0.10.0] - 2026-08-08
 
 ### Added

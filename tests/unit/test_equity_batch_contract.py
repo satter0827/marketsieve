@@ -20,7 +20,7 @@ from marketsieve_extension_api import (
 def _request() -> EquityBatchRequest:
     item = EquityBatchInstrument(JP_INSTRUMENT, "7203.T", ("nikkei225", "topix500"))
     return EquityBatchRequest(
-        "matrix-yfinance",
+        "market-yfinance",
         (item,),
         date(2023, 8, 7),
         date(2026, 8, 7),

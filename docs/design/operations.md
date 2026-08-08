@@ -1,56 +1,52 @@
 # Operations
 
-## Supported matrix operation
-
-The normal broad-market workflow is:
+## Broad-to-deep workflow
 
 ```shell
 make sync
-make market-matrix
-uv run marketsieve matrix show latest
-uv run marketsieve matrix list
-uv run marketsieve matrix query --market jp --present close --fields close
+make market-snapshot
+uv run marketsieve market show latest
+uv run marketsieve market query --market jp --present close --fields close
+make security-research INSTRUMENT=XTKS:7203
+uv run marketsieve research show latest --security XTKS:7203
 ```
 
-No account, API key, or provider environment variable is required. The optional `[matrix]` table
-controls selected indices, history length, price batch size, company-information concurrency,
-timeout, retry policy, and coverage thresholds. Defaults are three years, batches of 50, two profile
-workers, 30 seconds, three attempts, two-second base backoff, 95% overall coverage, and 90% per
-index.
+No account, API key, or provider environment variable is required. `[market]` controls indices,
+three-year history, batching, profile concurrency, timeout, retries, and coverage thresholds.
+`[research]` controls ten-year history, minimum price observations, timeout, and retries.
 
-Network failures, rate limits, unavailable financial statements, and insufficient history remain in
-the row-level missing map and `failures.jsonl`. Operators may resume only a run whose request
-fingerprint matches. They may adjust yfinance symbols, batching, waits, or retries when coverage is
-low; another provider is not an allowed recovery.
+Network failures, rate limits, unavailable statements, and insufficient history remain explicit.
+Operators may adjust yfinance symbols, batching, waits, or retries. Another provider is not an
+allowed automatic recovery.
 
 ## Generated state
 
-Project-local caches, runs, matrices, reports, watchlists, snapshots, coverage, logs, and review
-evidence stay below `.marketsieve`. Immutable matrices are stored at
-`.marketsieve/matrices/objects/MATRIX_ID`. Decision reports and watchlists for the current schemas
-are stored below `.marketsieve/reports/v2` and `.marketsieve/watchlists/v2`. Matrix objects contain
-all files needed for handoff and do not refer to a separate analysis workspace.
+All local state stays below `.marketsieve`. Market Snapshots live at
+`.marketsieve/market-snapshots/objects/SNAPSHOT_ID`; transient runs live beside them under `runs`.
+Security Research Packs live at `.marketsieve/research/objects/RESEARCH_ID`. Decision reports and
+watchlists retain their existing `reports/v2` and `watchlists/v2` roots.
 
-Live matrix objects and analyses contain redistributable-provider-derived values and are local
-operational artifacts. They are not committed. yfinance use is limited to personal local research in
-accordance with its stated intended use.
+Market and research objects are immutable, self-contained handoff directories. Live provider data
+is not committed. yfinance use is limited to personal local research.
 
-## Reading and comparing
+## Reading evidence
 
-`matrix list`, `matrix query`, `matrix row`, and `matrix compare` are offline views over the
-authoritative JSONL. Use an explicit matrix ID for a reproducible historical cross-section. Use `fields.json`
-to interpret names, units, formulas, periods, and missingness. Use `overview.html` for local search,
-sorting, and classification filtering; it has no external CDN or runtime data request.
+Use an exact Snapshot ID for a reproducible historical cross-section. `securities.jsonl` is the
+security authority, `definitions.json` explains fields and missing values, `market.json` and
+`segments.jsonl` provide aggregate context, and `explorer.html` is an offline browser view.
+
+Start broad analysis with the Snapshot. Build a Research Pack only after selecting a Snapshot
+security. Read `market-context.json` before comparing the security with its market, index, sector,
+or industry. Company and financial values without provider publication timestamps are marked as
+retrieval-time knowledge and must not be treated as a historical point-in-time reconstruction.
 
 ## Other operations
 
-`make setup-config`, portfolio import, watchlist maintenance, daily analysis, weekly reporting, and
-experiment replay remain supported. They do not mutate or substitute the market matrix. Daily
-provider credentials remain in the invoking environment and are unrelated to yfinance matrix use.
+Portfolio import, watchlist maintenance, daily analysis, weekly reporting, generic snapshots, and
+experiments remain independent. They do not mutate or substitute Market Snapshot or Security
+Research objects.
 
 ## Development and review
-
-Run focused tests while editing and the shared gates before handoff:
 
 ```shell
 make format-check
@@ -61,5 +57,5 @@ make check
 make build
 ```
 
-The review SHA is frozen before CI. Generated review evidence is stored below `.marketsieve` and is
-not a substitute for the tested source contract.
+The review SHA is frozen before CI. Review evidence stays below `.marketsieve` and does not replace
+the tested source contract.

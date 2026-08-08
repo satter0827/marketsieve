@@ -23,9 +23,13 @@ from marketsieve.matrix import (
     field_definitions,
 )
 from marketsieve.synthetic.daily import JP_INSTRUMENT, US_INSTRUMENT, fixture_bars
-from marketsieve_cli.adapters.matrices import MatrixStore, _json_bytes, _row_document
-from marketsieve_cli.application.matrix import (
-    MatrixService,
+from marketsieve_cli.adapters.market_snapshots import (
+    MarketSnapshotStore,
+    _json_bytes,
+    _row_document,
+)
+from marketsieve_cli.application.market import (
+    MarketService,
     _configuration_document,
     _load_universe,
     _median,
@@ -33,7 +37,7 @@ from marketsieve_cli.application.matrix import (
     _provider_failure_fields,
     _summary,
 )
-from marketsieve_cli.contracts import MatrixConfiguration
+from marketsieve_cli.contracts import MarketConfiguration
 from marketsieve_extension_api import (
     EquityAcquisitionFailure,
     EquityBatchFetcher,
@@ -100,8 +104,8 @@ def _security(
     )
 
 
-def _configuration(indices: tuple[str, ...] = ("sp500",)) -> MatrixConfiguration:
-    return MatrixConfiguration(
+def _configuration(indices: tuple[str, ...] = ("sp500",)) -> MarketConfiguration:
+    return MarketConfiguration(
         indices,
         1095,
         50,
@@ -218,7 +222,7 @@ def test_matrix_boundaries_preserve_missing_reasons_and_zero_denominators() -> N
     empty_row = build_matrix_row(empty, {})
     assert dict(empty_row.missing)["close"] == "history_empty"
     row_schema = json.loads(
-        (Path(__file__).parents[2] / "schemas/market-matrix-security/v1/schema.json").read_text(
+        (Path(__file__).parents[2] / "schemas/market-snapshot-security/v1/schema.json").read_text(
             encoding="utf-8"
         )
     )
@@ -385,7 +389,9 @@ def test_summary_omits_distributions_without_observations() -> None:
     assert distributions["trailing_pe"]["count"] == 1
 
 
-def _stored_matrix(tmp_path: Path) -> tuple[MatrixStore, dict[str, object], tuple[MatrixRow, ...]]:
+def _stored_matrix(
+    tmp_path: Path,
+) -> tuple[MarketSnapshotStore, dict[str, object], tuple[MatrixRow, ...]]:
     first = build_matrix_row(_security(), {"sp500": _bars(US_INSTRUMENT)})
     jp_security = _security(
         JP_INSTRUMENT,
@@ -398,16 +404,16 @@ def _stored_matrix(tmp_path: Path) -> tuple[MatrixStore, dict[str, object], tupl
         _configuration(("nikkei225", "sp500", "topix500")),
         datetime(2026, 8, 7, tzinfo=UTC),
     )
-    store = MatrixStore(tmp_path / "matrices")
+    store = MarketSnapshotStore(tmp_path / "matrices")
     request = {
-        "schema": "market-matrix-request/v1",
+        "schema": "market-snapshot-request/v1",
         "indices": ["nikkei225", "sp500", "topix500"],
         "assets": {},
         "start": "2023-08-08",
         "end": "2026-08-07",
         "adjustment": "adjusted",
         "settings": {},
-        "source": {"name": "yfinance", "profile": "matrix-yfinance"},
+        "source": {"name": "yfinance", "profile": "market-yfinance"},
     }
     request_fingerprint = _request_fingerprint(request)
     run_id = store.begin_run(request_fingerprint, request, resume=None)
@@ -431,7 +437,7 @@ def _stored_matrix(tmp_path: Path) -> tuple[MatrixStore, dict[str, object], tupl
                 reason != "not_applicable" for row in rows for _, reason in row.missing
             ),
             "coverage": summary["coverage"],
-            "quality_status": summary["quality_status"],
+            "price_requirements_met": summary["price_requirements_met"],
         },
         fields=field_definitions(),
         rows=rows,
@@ -439,7 +445,7 @@ def _stored_matrix(tmp_path: Path) -> tuple[MatrixStore, dict[str, object], tupl
         failures=tuple(
             {
                 "instrument_id": f"{row.security.instrument.mic}:{row.security.instrument.symbol}",
-                "stage": "matrix",
+                "stage": "calculation",
                 "field": field,
                 "reason": reason,
             }
@@ -453,20 +459,20 @@ def _stored_matrix(tmp_path: Path) -> tuple[MatrixStore, dict[str, object], tupl
 
 def test_matrix_store_projects_self_contained_artifacts_and_offline_views(tmp_path: Path) -> None:
     store, document, rows = _stored_matrix(tmp_path)
-    matrix_id = str(document["matrix_id"])
-    path = tmp_path / "matrices" / "objects" / matrix_id
+    snapshot_id = str(document["snapshot_id"])
+    path = tmp_path / "matrices" / "objects" / snapshot_id
 
-    assert store.show("latest")["matrix_id"] == matrix_id
+    assert store.show("latest")["snapshot_id"] == snapshot_id
     schema_root = Path(__file__).parents[2] / "schemas"
     stored_manifest = json.loads((path / "manifest.json").read_text(encoding="utf-8"))
     stored_manifest_schema = json.loads(
-        (schema_root / "market-matrix-manifest/v2/schema.json").read_text(encoding="utf-8")
+        (schema_root / "market-snapshot-manifest/v2/schema.json").read_text(encoding="utf-8")
     )
     Draft202012Validator(stored_manifest_schema, format_checker=FormatChecker()).validate(
         stored_manifest
     )
     projection_schema = json.loads(
-        (schema_root / "market-matrix/v2/schema.json").read_text(encoding="utf-8")
+        (schema_root / "market-snapshot/v2/schema.json").read_text(encoding="utf-8")
     )
     Draft202012Validator(projection_schema, format_checker=FormatChecker()).validate(document)
     for incomplete in (
@@ -484,7 +490,7 @@ def test_matrix_store_projects_self_contained_artifacts_and_offline_views(tmp_pa
     ).is_valid({**stored_manifest, "coverage": {}})
     json_rows = [json.loads(line) for line in (path / "securities.jsonl").read_text().splitlines()]
     assert len(json_rows) == len(rows)
-    with (path / "matrix.csv").open(encoding="utf-8", newline="") as stream:
+    with (path / "securities.csv").open(encoding="utf-8", newline="") as stream:
         csv_rows = list(csv.DictReader(stream))
     assert len(csv_rows) == len(rows)
     assert set(field.name for field in field_definitions()).issubset(csv_rows[0])
@@ -496,16 +502,16 @@ def test_matrix_store_projects_self_contained_artifacts_and_offline_views(tmp_pa
             csv_row[field.name] == json_row["values"].get(field.name, "")
             for field in field_definitions()
         )
-    html = (path / "overview.html").read_text(encoding="utf-8")
+    html = (path / "explorer.html").read_text(encoding="utf-8")
     assert "https://" not in html and "http://" not in html
     assert "data-column" in html and 'id="index"' in html and 'id="market"' in html
     assert "free_cash_flow_yield" in html
     readme = (path / "README.md").read_text(encoding="utf-8")
     summary_markdown = (path / "summary.md").read_text(encoding="utf-8")
-    missing_reasons = json.loads((path / "missing-reasons.json").read_text())
+    definitions = json.loads((path / "definitions.json").read_text())
     assert "securities.jsonl" in readme and "One row represents one security" in readme
     assert "Price coverage" in summary_markdown
-    assert any(item["category"] == "expected" for item in missing_reasons)
+    assert any(item["category"] == "expected" for item in definitions["missing_reasons"])
     assert all(item["path"] == name for name, item in stored_manifest["artifacts"].items())
     assert not (path / "analysis.md").exists()
     assert not list(path.glob("*.xlsx"))
@@ -514,19 +520,19 @@ def test_matrix_store_projects_self_contained_artifacts_and_offline_views(tmp_pa
     second_id = f"{rows[1].security.instrument.mic}:{rows[1].security.instrument.symbol}"
     row_projection = store.row("latest", first_id)
     assert row_projection["instrument_id"] == first_id
-    assert row_projection["matrix_id"] == matrix_id
+    assert row_projection["snapshot_id"] == snapshot_id
     row_schema = json.loads(
-        (Path(__file__).parents[2] / "schemas/market-matrix-row/v1/schema.json").read_text(
-            encoding="utf-8"
-        )
+        (
+            Path(__file__).parents[2] / "schemas/market-snapshot-security-result/v1/schema.json"
+        ).read_text(encoding="utf-8")
     )
     Draft202012Validator(row_schema, format_checker=FormatChecker()).validate(row_projection)
     comparison = store.compare("latest", (first_id, second_id), ("close", "trailing_pe"))
-    assert comparison["schema"] == "market-matrix-comparison/v1"
+    assert comparison["schema"] == "market-snapshot-comparison/v1"
     assert comparison["fields"] == ["close", "trailing_pe"]
     complete_comparison = store.compare("latest", (first_id, second_id), ())
     comparison_schema = json.loads(
-        (Path(__file__).parents[2] / "schemas/market-matrix-comparison/v1/schema.json").read_text(
+        (Path(__file__).parents[2] / "schemas/market-snapshot-comparison/v1/schema.json").read_text(
             encoding="utf-8"
         )
     )
@@ -536,7 +542,7 @@ def test_matrix_store_projects_self_contained_artifacts_and_offline_views(tmp_pa
             complete_comparison["fields"]
         )
         assert not set(projected["values"]) & set(projected["missing"])
-    with pytest.raises(ValueError, match="unknown matrix fields"):
+    with pytest.raises(ValueError, match="unknown market snapshot fields"):
         store.compare("latest", (first_id, second_id), ("unknown",))
     with pytest.raises(ValueError, match="fields must be unique"):
         store.compare("latest", (first_id, second_id), ("close", "close"))
@@ -545,14 +551,14 @@ def test_matrix_store_projects_self_contained_artifacts_and_offline_views(tmp_pa
 def test_matrix_store_lists_history_and_queries_saved_rows(tmp_path: Path) -> None:
     store, document, rows = _stored_matrix(tmp_path)
     request = {
-        "schema": "market-matrix-request/v1",
+        "schema": "market-snapshot-request/v1",
         "indices": ["nikkei225", "sp500", "topix500"],
         "assets": {},
         "start": "2023-08-09",
         "end": "2026-08-08",
         "adjustment": "adjusted",
         "settings": {},
-        "source": {"name": "yfinance", "profile": "matrix-yfinance"},
+        "source": {"name": "yfinance", "profile": "market-yfinance"},
     }
     fingerprint = _request_fingerprint(request)
     run_id = store.begin_run(fingerprint, request, resume=None)
@@ -564,7 +570,7 @@ def test_matrix_store_lists_history_and_queries_saved_rows(tmp_path: Path) -> No
     failures = tuple(
         {
             "instrument_id": f"{row.security.instrument.mic}:{row.security.instrument.symbol}",
-            "stage": "matrix",
+            "stage": "calculation",
             "field": field,
             "reason": reason,
         }
@@ -590,7 +596,7 @@ def test_matrix_store_lists_history_and_queries_saved_rows(tmp_path: Path) -> No
             "field_count": len(field_definitions()),
             "failure_count": len(failures),
             "coverage": summary["coverage"],
-            "quality_status": summary["quality_status"],
+            "price_requirements_met": summary["price_requirements_met"],
         },
         fields=field_definitions(),
         rows=rows,
@@ -599,14 +605,14 @@ def test_matrix_store_lists_history_and_queries_saved_rows(tmp_path: Path) -> No
     )
 
     listing = store.list()
-    assert listing["schema"] == "market-matrix-list/v1"
-    assert [item["matrix_id"] for item in listing["matrices"]] == [
-        newer["matrix_id"],
-        document["matrix_id"],
+    assert listing["schema"] == "market-snapshot-list/v1"
+    assert [item["snapshot_id"] for item in listing["snapshots"]] == [
+        newer["snapshot_id"],
+        document["snapshot_id"],
     ]
 
     result = store.query(
-        str(document["matrix_id"]),
+        str(document["snapshot_id"]),
         filters={"market": ("jp",), "index": ("nikkei225", "dow30")},
         minimums={"close": Decimal("300")},
         maximums={"close": Decimal("400")},
@@ -615,7 +621,7 @@ def test_matrix_store_lists_history_and_queries_saved_rows(tmp_path: Path) -> No
         fields=("close", "trailing_pe", "forward_pe"),
     )
 
-    assert result["schema"] == "matrix-query-result/v1"
+    assert result["schema"] == "market-snapshot-query-result/v1"
     assert result["matched_count"] == 1
     assert [row["instrument_id"] for row in result["rows"]] == ["XTKS:7203"]
     assert result["rows"][0]["missing"] == {"forward_pe": "field_absent"}
@@ -630,7 +636,7 @@ def test_matrix_store_lists_history_and_queries_saved_rows(tmp_path: Path) -> No
             missing=(),
             fields=(),
         )
-    with pytest.raises(ValueError, match="unknown matrix fields"):
+    with pytest.raises(ValueError, match="unknown market snapshot fields"):
         store.query(
             "latest",
             filters={},
@@ -640,7 +646,7 @@ def test_matrix_store_lists_history_and_queries_saved_rows(tmp_path: Path) -> No
             missing=(),
             fields=(),
         )
-    with pytest.raises(ValueError, match="unknown matrix indices"):
+    with pytest.raises(ValueError, match="unknown market snapshot indices"):
         store.query(
             "latest",
             filters={"index": ("bogus",)},
@@ -663,9 +669,9 @@ def test_matrix_store_lists_history_and_queries_saved_rows(tmp_path: Path) -> No
 
 
 def test_matrix_store_lists_empty_history(tmp_path: Path) -> None:
-    assert MatrixStore(tmp_path / "matrices").list() == {
-        "schema": "market-matrix-list/v1",
-        "matrices": [],
+    assert MarketSnapshotStore(tmp_path / "matrices").list() == {
+        "schema": "market-snapshot-list/v1",
+        "snapshots": [],
     }
 
 
@@ -674,28 +680,28 @@ def test_matrix_store_list_ignores_legacy_objects(tmp_path: Path) -> None:
     legacy = tmp_path / "matrices" / "objects" / ("f" * 64)
     legacy.mkdir()
     legacy.joinpath("manifest.json").write_bytes(
-        _json_bytes({"schema": "market-matrix-manifest/v1", "matrix_id": "f" * 64})
+        _json_bytes({"schema": "market-matrix-manifest/v1", "snapshot_id": "f" * 64})
     )
 
     listing = store.list()
 
-    assert [item["matrix_id"] for item in listing["matrices"]] == [document["matrix_id"]]
+    assert [item["snapshot_id"] for item in listing["snapshots"]] == [document["snapshot_id"]]
 
 
 def test_matrix_store_keeps_published_object_when_run_cleanup_fails(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     store, previous, rows = _stored_matrix(tmp_path)
-    previous_id = str(previous["matrix_id"])
+    previous_id = str(previous["snapshot_id"])
     request = {
-        "schema": "market-matrix-request/v1",
+        "schema": "market-snapshot-request/v1",
         "indices": ["nikkei225", "sp500", "topix500"],
         "assets": {},
         "start": "2023-08-09",
         "end": "2026-08-08",
         "adjustment": "adjusted",
         "settings": {},
-        "source": {"name": "yfinance", "profile": "matrix-yfinance"},
+        "source": {"name": "yfinance", "profile": "market-yfinance"},
     }
     request_fingerprint = _request_fingerprint(request)
     run_id = store.begin_run(request_fingerprint, request, resume=None)
@@ -708,7 +714,7 @@ def test_matrix_store_keeps_published_object_when_run_cleanup_fails(
     failures = tuple(
         {
             "instrument_id": f"{row.security.instrument.mic}:{row.security.instrument.symbol}",
-            "stage": "matrix",
+            "stage": "calculation",
             "field": field,
             "reason": reason,
         }
@@ -743,7 +749,7 @@ def test_matrix_store_keeps_published_object_when_run_cleanup_fails(
             "field_count": len(field_definitions()),
             "failure_count": len(failures),
             "coverage": summary["coverage"],
-            "quality_status": summary["quality_status"],
+            "price_requirements_met": summary["price_requirements_met"],
         },
         fields=field_definitions(),
         rows=rows,
@@ -752,8 +758,8 @@ def test_matrix_store_keeps_published_object_when_run_cleanup_fails(
     )
 
     monkeypatch.undo()
-    assert published["matrix_id"] != previous_id
-    assert store.show("latest")["matrix_id"] == published["matrix_id"]
+    assert published["snapshot_id"] != previous_id
+    assert store.show("latest")["snapshot_id"] == published["snapshot_id"]
     assert run_path.is_dir()
 
 
@@ -761,16 +767,16 @@ def test_matrix_store_preserves_run_when_latest_publication_fails(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     store, previous, rows = _stored_matrix(tmp_path)
-    previous_id = str(previous["matrix_id"])
+    previous_id = str(previous["snapshot_id"])
     request = {
-        "schema": "market-matrix-request/v1",
+        "schema": "market-snapshot-request/v1",
         "indices": ["nikkei225", "sp500", "topix500"],
         "assets": {},
         "start": "2023-08-09",
         "end": "2026-08-08",
         "adjustment": "adjusted",
         "settings": {},
-        "source": {"name": "yfinance", "profile": "matrix-yfinance"},
+        "source": {"name": "yfinance", "profile": "market-yfinance"},
     }
     request_fingerprint = _request_fingerprint(request)
     run_id = store.begin_run(request_fingerprint, request, resume=None)
@@ -783,7 +789,7 @@ def test_matrix_store_preserves_run_when_latest_publication_fails(
     failures = tuple(
         {
             "instrument_id": f"{row.security.instrument.mic}:{row.security.instrument.symbol}",
-            "stage": "matrix",
+            "stage": "calculation",
             "field": field,
             "reason": reason,
         }
@@ -819,7 +825,7 @@ def test_matrix_store_preserves_run_when_latest_publication_fails(
                 "field_count": len(field_definitions()),
                 "failure_count": len(failures),
                 "coverage": summary["coverage"],
-                "quality_status": summary["quality_status"],
+                "price_requirements_met": summary["price_requirements_met"],
             },
             fields=field_definitions(),
             rows=rows,
@@ -828,7 +834,7 @@ def test_matrix_store_preserves_run_when_latest_publication_fails(
         )
 
     monkeypatch.undo()
-    assert store.show("latest")["matrix_id"] == previous_id
+    assert store.show("latest")["snapshot_id"] == previous_id
     assert run_path.is_dir()
     assert not list((tmp_path / "matrices").glob(".latest.*.tmp"))
 
@@ -855,13 +861,13 @@ def test_matrix_store_verifies_content_and_resume_fingerprint(tmp_path: Path) ->
     path = Path(artifacts["securities.jsonl"])
     path.write_text(path.read_text().replace("Fixture Corp", "Tampered Corp", 1))
     with pytest.raises(ValueError, match="content identity"):
-        store.show(str(document["matrix_id"]))
+        store.show(str(document["snapshot_id"]))
 
 
 def test_matrix_store_does_not_expose_a_partially_initialized_run(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    store = MatrixStore(tmp_path / "matrices")
+    store = MarketSnapshotStore(tmp_path / "matrices")
     request = {"schema": "fixture-request/v1"}
     fingerprint = _request_fingerprint(request)
 
@@ -882,28 +888,28 @@ def test_matrix_store_does_not_expose_a_partially_initialized_run(
     "artifact",
     (
         "manifest.json",
-        "fields.json",
-        "missing-reasons.json",
-        "index-summary.json",
+        "definitions.json",
+        "quality.json",
+        "market.json",
         "securities.jsonl",
         "failures.jsonl",
     ),
 )
 def test_matrix_store_rejects_noncanonical_evidence(tmp_path: Path, artifact: str) -> None:
     store, document, _ = _stored_matrix(tmp_path)
-    matrix_id = str(document["matrix_id"])
-    path = tmp_path / "matrices" / "objects" / matrix_id / artifact
+    snapshot_id = str(document["snapshot_id"])
+    path = tmp_path / "matrices" / "objects" / snapshot_id / artifact
     path.write_bytes(path.read_bytes().replace(b"{", b"{ ", 1))
 
     with pytest.raises(ValueError, match="not canonical"):
-        store.show(matrix_id)
+        store.show(snapshot_id)
 
 
 @pytest.mark.parametrize(
     ("artifact", "message"),
     (
-        ("matrix.csv", "CSV projection"),
-        ("overview.html", "HTML projection"),
+        ("securities.csv", "CSV projection"),
+        ("explorer.html", "HTML projection"),
         ("README.md", "README projection"),
         ("summary.md", "summary projection"),
     ),
@@ -912,15 +918,25 @@ def test_matrix_store_rejects_tampered_projections(
     tmp_path: Path, artifact: str, message: str
 ) -> None:
     store, document, rows = _stored_matrix(tmp_path)
-    matrix_id = str(document["matrix_id"])
-    path = tmp_path / "matrices" / "objects" / matrix_id / artifact
+    snapshot_id = str(document["snapshot_id"])
+    path = tmp_path / "matrices" / "objects" / snapshot_id / artifact
     path.write_bytes(path.read_bytes() + b"tampered")
 
     with pytest.raises(ValueError, match=message):
-        store.show(matrix_id)
+        store.show(snapshot_id)
     instrument = rows[0].security.instrument
     with pytest.raises(ValueError, match=message):
-        store.row(matrix_id, f"{instrument.mic}:{instrument.symbol}")
+        store.row(snapshot_id, f"{instrument.mic}:{instrument.symbol}")
+
+
+def test_matrix_store_rejects_an_unlisted_file(tmp_path: Path) -> None:
+    store, document, _ = _stored_matrix(tmp_path)
+    snapshot_id = str(document["snapshot_id"])
+    path = tmp_path / "matrices" / "objects" / snapshot_id
+    (path / "analysis.md").write_text("external interpretation\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="inventory"):
+        store.show(snapshot_id)
 
 
 def test_built_in_universe_deduplicates_overlapping_memberships() -> None:
@@ -1095,16 +1111,16 @@ class _SiblingFailureFetcher(_Fetcher):
 
 
 class _Configuration:
-    def matrix_configuration(self) -> MatrixConfiguration:
+    def market_configuration(self) -> MarketConfiguration:
         return _configuration(("dow30",))
 
 
 def test_matrix_service_builds_every_constituent_with_authoritative_asset_identity(
     tmp_path: Path,
 ) -> None:
-    service = MatrixService(
+    service = MarketService(
         _Registry(_Fetcher()),
-        MatrixStore(tmp_path / "matrices"),
+        MarketSnapshotStore(tmp_path / "matrices"),
         _Configuration(),
         today=lambda: date(2026, 8, 7),
     )
@@ -1112,7 +1128,7 @@ def test_matrix_service_builds_every_constituent_with_authoritative_asset_identi
     document = service.refresh()
 
     assert document["row_count"] == 30
-    assert document["quality_status"] == "ready"
+    assert document["price_requirements_met"] is True
     assert document["coverage"]["overall"] == "1"
     assert document["request"]["fingerprint"]
     assert document["request"]["start"] == "2023-08-08"
@@ -1122,7 +1138,7 @@ def test_matrix_service_builds_every_constituent_with_authoritative_asset_identi
     assert len(rows) == 30
     assert any(row["instrument_id"] == "XNAS:AAPL" for row in rows)
     assert any(row["instrument_id"] == "XNYS:JPM" for row in rows)
-    assert all(row["schema"] == "market-matrix-security/v1" for row in rows)
+    assert all(row["schema"] == "market-snapshot-security/v1" for row in rows)
     assert all(
         set(row["values"]) | set(row["missing"]) == {f.name for f in field_definitions()}
         for row in rows
@@ -1147,8 +1163,8 @@ def test_built_in_universe_names_are_well_formed() -> None:
 def test_matrix_service_resumes_only_the_persisted_request(tmp_path: Path) -> None:
     fetcher = _InterruptedFetcher()
     root = tmp_path / "matrices"
-    store = MatrixStore(root)
-    service = MatrixService(
+    store = MarketSnapshotStore(root)
+    service = MarketService(
         _Registry(fetcher), store, _Configuration(), today=lambda: date(2026, 8, 7)
     )
 
@@ -1157,7 +1173,7 @@ def test_matrix_service_resumes_only_the_persisted_request(tmp_path: Path) -> No
     run_ids = [path.name for path in (root / "runs").iterdir()]
     assert len(run_ids) == 1
 
-    resumed_service = MatrixService(
+    resumed_service = MarketService(
         _Registry(fetcher), store, _Configuration(), today=lambda: date(2026, 8, 7)
     )
     document = resumed_service.refresh(resume=run_ids[0])
@@ -1174,15 +1190,15 @@ def test_matrix_service_rejects_resume_after_the_original_acquisition_date(
 ) -> None:
     fetcher = _InterruptedFetcher()
     root = tmp_path / "matrices"
-    store = MatrixStore(root)
-    service = MatrixService(
+    store = MarketSnapshotStore(root)
+    service = MarketService(
         _Registry(fetcher), store, _Configuration(), today=lambda: date(2026, 8, 7)
     )
 
     with pytest.raises(RuntimeError, match="fixture interruption"):
         service.refresh()
     run_id = next((root / "runs").iterdir()).name
-    delayed = MatrixService(
+    delayed = MarketService(
         _Registry(fetcher), store, _Configuration(), today=lambda: date(2026, 8, 8)
     )
 
@@ -1198,8 +1214,8 @@ def test_matrix_service_rejects_acquisition_that_crosses_the_local_date(
 ) -> None:
     dates = iter((date(2026, 8, 7), date(2026, 8, 8)))
     root = tmp_path / "matrices"
-    store = MatrixStore(root)
-    service = MatrixService(
+    store = MarketSnapshotStore(root)
+    service = MarketService(
         _Registry(_Fetcher()),
         store,
         _Configuration(),
@@ -1215,14 +1231,14 @@ def test_matrix_service_rejects_acquisition_that_crosses_the_local_date(
 
 
 def test_matrix_service_rejects_a_batch_for_a_different_request(tmp_path: Path) -> None:
-    service = MatrixService(
+    service = MarketService(
         _Registry(_MismatchedRequestFetcher()),
-        MatrixStore(tmp_path / "matrices"),
+        MarketSnapshotStore(tmp_path / "matrices"),
         _Configuration(),
         today=lambda: date(2026, 8, 7),
     )
 
-    with pytest.raises(ValueError, match="exact matrix request"):
+    with pytest.raises(ValueError, match="exact market request"):
         service.refresh()
 
 
@@ -1235,20 +1251,20 @@ def test_matrix_store_rejects_symlinked_root_and_run_directory(tmp_path: Path) -
     linked_root = tmp_path / "linked-matrices"
     linked_root.symlink_to(outside, target_is_directory=True)
     with pytest.raises(ValueError, match="real directory"):
-        MatrixStore(linked_root).begin_run(fingerprint, request, resume=None)
+        MarketSnapshotStore(linked_root).begin_run(fingerprint, request, resume=None)
 
     external_state = tmp_path / "external-state"
     external_state.mkdir()
     linked_state = tmp_path / ".marketsieve"
     linked_state.symlink_to(external_state, target_is_directory=True)
     with pytest.raises(ValueError, match="real directory"):
-        MatrixStore(linked_state / "matrices").begin_run(fingerprint, request, resume=None)
+        MarketSnapshotStore(linked_state / "matrices").begin_run(fingerprint, request, resume=None)
 
     root = tmp_path / "matrices"
     root.mkdir()
     (root / "runs").symlink_to(outside, target_is_directory=True)
     with pytest.raises(ValueError, match="real directory"):
-        MatrixStore(root).begin_run(fingerprint, request, resume=None)
+        MarketSnapshotStore(root).begin_run(fingerprint, request, resume=None)
 
 
 def test_matrix_store_rejects_symlinked_object_directory(tmp_path: Path) -> None:
@@ -1261,10 +1277,10 @@ def test_matrix_store_rejects_symlinked_object_directory(tmp_path: Path) -> None
     objects.symlink_to(outside, target_is_directory=True)
 
     with pytest.raises(LookupError, match="storage directory"):
-        store.show(str(document["matrix_id"]))
+        store.show(str(document["snapshot_id"]))
     with pytest.raises(LookupError, match="storage directory"):
         store.query(
-            str(document["matrix_id"]),
+            str(document["snapshot_id"]),
             filters={},
             minimums={},
             maximums={},
@@ -1278,14 +1294,14 @@ def test_matrix_store_rejects_an_invalid_latest_reference(tmp_path: Path) -> Non
     store, _, _ = _stored_matrix(tmp_path)
     (tmp_path / "matrices" / "latest.json").write_text('{"unexpected":"value"}\n')
 
-    with pytest.raises(ValueError, match="market matrix latest reference is invalid"):
+    with pytest.raises(ValueError, match="market snapshot latest reference is invalid"):
         store.show("latest")
 
 
 def test_matrix_service_propagates_provider_failures_to_empty_cells(tmp_path: Path) -> None:
-    service = MatrixService(
+    service = MarketService(
         _Registry(_FailureFetcher()),
-        MatrixStore(tmp_path / "matrices"),
+        MarketSnapshotStore(tmp_path / "matrices"),
         _Configuration(),
     )
 
@@ -1309,9 +1325,9 @@ def test_matrix_service_propagates_provider_failures_to_empty_cells(tmp_path: Pa
 
 
 def test_matrix_service_preserves_values_acquired_from_a_sibling_endpoint(tmp_path: Path) -> None:
-    service = MatrixService(
+    service = MarketService(
         _Registry(_SiblingFailureFetcher()),
-        MatrixStore(tmp_path / "matrices"),
+        MarketSnapshotStore(tmp_path / "matrices"),
         _Configuration(),
     )
 

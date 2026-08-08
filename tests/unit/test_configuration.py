@@ -108,8 +108,8 @@ def test_weekly_routine_age_has_a_low_burden_default_and_bounds(tmp_path: Path) 
         Configuration(path).weekly_max_age_days()
 
 
-def test_matrix_configuration_has_complete_zero_key_defaults(tmp_path: Path) -> None:
-    defaults = Configuration(None).matrix_configuration()
+def test_market_configuration_has_complete_zero_key_defaults(tmp_path: Path) -> None:
+    defaults = Configuration(None).market_configuration()
 
     assert defaults.indices == ("dow30", "nasdaq100", "nikkei225", "sp500", "topix500")
     assert defaults.history_days == 1095
@@ -121,9 +121,9 @@ def test_matrix_configuration_has_complete_zero_key_defaults(tmp_path: Path) -> 
     assert str(defaults.minimum_overall_price_coverage) == "0.95"
     assert str(defaults.minimum_index_price_coverage) == "0.90"
 
-    path = tmp_path / "matrix.toml"
+    path = tmp_path / "market.toml"
     path.write_text(
-        "[matrix]\n"
+        "[market]\n"
         'indices = ["sp500", "dow30"]\n'
         "history_days = 400\n"
         "batch_size = 1\n"
@@ -135,7 +135,7 @@ def test_matrix_configuration_has_complete_zero_key_defaults(tmp_path: Path) -> 
         "minimum_index_price_coverage = 1\n",
         encoding="utf-8",
     )
-    configured = Configuration(path).matrix_configuration()
+    configured = Configuration(path).market_configuration()
     assert configured.indices == ("dow30", "sp500")
     assert configured.minimum_overall_price_coverage == 0
     assert configured.minimum_index_price_coverage == 1
@@ -144,34 +144,65 @@ def test_matrix_configuration_has_complete_zero_key_defaults(tmp_path: Path) -> 
 @pytest.mark.parametrize(
     ("document", "message"),
     (
-        ("matrix = 1\n", "must be a TOML table"),
-        ("[matrix]\nunknown = 1\n", "unsupported settings"),
-        ("[matrix]\nindices = []\n", "unique non-empty"),
-        ('[matrix]\nindices = ["unknown"]\n', "unique non-empty"),
-        ('[matrix]\nindices = ["sp500", "sp500"]\n', "unique non-empty"),
-        ("[matrix]\nhistory_days = true\n", "history_days must be an integer"),
-        ("[matrix]\nbatch_size = 0\n", "batch_size must be an integer"),
-        ("[matrix]\nprofile_workers = 9\n", "profile_workers must be an integer"),
-        ("[matrix]\ntimeout_seconds = 0\n", "timeout_seconds must be an integer"),
-        ("[matrix]\nmax_retries = 0\n", "max_retries must be an integer"),
-        ("[matrix]\nretry_base_seconds = false\n", "retry_base_seconds must be a number"),
-        ("[matrix]\nretry_base_seconds = 61\n", "retry_base_seconds must be a number"),
+        ("market = 1\n", "must be a TOML table"),
+        ("[market]\nunknown = 1\n", "unsupported settings"),
+        ("[market]\nindices = []\n", "unique non-empty"),
+        ('[market]\nindices = ["unknown"]\n', "unique non-empty"),
+        ('[market]\nindices = ["sp500", "sp500"]\n', "unique non-empty"),
+        ("[market]\nhistory_days = true\n", "history_days must be an integer"),
+        ("[market]\nbatch_size = 0\n", "batch_size must be an integer"),
+        ("[market]\nprofile_workers = 9\n", "profile_workers must be an integer"),
+        ("[market]\ntimeout_seconds = 0\n", "timeout_seconds must be an integer"),
+        ("[market]\nmax_retries = 0\n", "max_retries must be an integer"),
+        ("[market]\nretry_base_seconds = false\n", "retry_base_seconds must be a number"),
+        ("[market]\nretry_base_seconds = 61\n", "retry_base_seconds must be a number"),
         (
-            '[matrix]\nminimum_overall_price_coverage = "invalid"\n',
+            '[market]\nminimum_overall_price_coverage = "invalid"\n',
             "must be a decimal ratio",
         ),
-        ('[matrix]\nminimum_overall_price_coverage = "NaN"\n', "finite decimal ratio"),
-        ("[matrix]\nminimum_index_price_coverage = 1.1\n", "must be from 0 through 1"),
+        ('[market]\nminimum_overall_price_coverage = "NaN"\n', "finite decimal ratio"),
+        ("[market]\nminimum_index_price_coverage = 1.1\n", "must be from 0 through 1"),
     ),
 )
-def test_matrix_configuration_rejects_invalid_shapes(
+def test_market_configuration_rejects_invalid_shapes(
     tmp_path: Path, document: str, message: str
 ) -> None:
-    path = tmp_path / "invalid-matrix.toml"
+    path = tmp_path / "invalid-market.toml"
     path.write_text(document, encoding="utf-8")
 
     with pytest.raises(ValueError, match=message):
-        Configuration(path).matrix_configuration()
+        Configuration(path).market_configuration()
+
+
+def test_research_configuration_has_bounded_zero_key_defaults(tmp_path: Path) -> None:
+    defaults = Configuration(None).research_configuration()
+    assert defaults.history_days == 3653
+    assert defaults.minimum_price_observations == 252
+    assert defaults.timeout_seconds == 30
+    assert defaults.max_retries == 3
+    assert defaults.retry_base_seconds == 2
+
+    path = tmp_path / "research.toml"
+    path.write_text(
+        "[research]\n"
+        "history_days = 3653\n"
+        "minimum_price_observations = 5000\n"
+        "timeout_seconds = 120\n"
+        "max_retries = 10\n"
+        "retry_base_seconds = 0\n",
+        encoding="utf-8",
+    )
+    configured = Configuration(path).research_configuration()
+    assert configured.history_days == 3653
+    assert configured.minimum_price_observations == 5000
+
+    path.write_text("[research]\nhistory_days = 364\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="365 through 3653"):
+        Configuration(path).research_configuration()
+
+    path.write_text("[research]\nhistory_days = 3654\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="365 through 3653"):
+        Configuration(path).research_configuration()
 
 
 def test_universe_source_requires_explicit_operation(tmp_path: Path) -> None:
