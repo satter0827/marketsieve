@@ -42,6 +42,13 @@ class DiagnosticsService:
             application_version = "not installed"
             application_installed = False
 
+        try:
+            source_version = version("marketsieve-source-yfinance")
+            source_installed = True
+        except PackageNotFoundError:
+            source_version = "not installed"
+            source_installed = False
+
         checks = (
             DiagnosticCheck(
                 name="Python",
@@ -57,6 +64,12 @@ class DiagnosticsService:
                 detail=application_version,
                 passed=application_installed,
                 action=None if application_installed else "Run make sync.",
+            ),
+            DiagnosticCheck(
+                name="yfinance source",
+                detail=source_version,
+                passed=source_installed,
+                action=None if source_installed else "Run make sync.",
             ),
         )
         self.logger.info(

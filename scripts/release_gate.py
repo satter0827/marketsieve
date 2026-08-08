@@ -129,7 +129,7 @@ def write_wheelhouse_assets(dist_dir: Path, version: str) -> None:
         "Extract this archive, then install without an index:\n\n"
         "```shell\n"
         "python -m pip install --no-index --find-links ./marketsieve-wheelhouse "
-        '"marketsieve-cli[all-sources]"\n'
+        '"marketsieve-cli"\n'
         "```\n\n"
         "Verify downloaded release assets against `release.json` before installation.\n",
         encoding="utf-8",

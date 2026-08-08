@@ -21,6 +21,7 @@ ARTIFACTS = (
     "company.json",
     "market-context.json",
     "prices.jsonl",
+    "benchmarks.jsonl",
     "financials.jsonl",
     "events.jsonl",
     "failures.jsonl",
@@ -149,6 +150,9 @@ class ResearchStore:
         context: dict[str, Any],
         *,
         minimum_price_observations: int,
+        runtime_settings: dict[str, Any],
+        runtime_settings_hash: str,
+        benchmarks: Any | None,
     ) -> dict[str, Any]:
         instrument_id = f"{imported.request.instrument.mic}:{imported.request.instrument.symbol}"
         snapshot_definitions = context.get("definitions")
@@ -176,6 +180,18 @@ class ResearchStore:
                 "missing": {"volume": "field_absent"} if bar.volume == 0 else {},
             }
             for bar in imported.bars
+        )
+        benchmark_prices = tuple(
+            {
+                "schema": "security-research-benchmark-price/v1",
+                "benchmark": observation.requested.memberships[0],
+                "provider_symbol": observation.requested.provider_symbol,
+                "date": bar.trading_date.isoformat(),
+                "close": str(bar.close),
+                "adjustment": bar.adjustment.value,
+            }
+            for observation in (() if benchmarks is None else benchmarks.observations)
+            for bar in observation.bars
         )
         financials = tuple(
             {
@@ -211,15 +227,26 @@ class ResearchStore:
                 "reason": failure.reason,
             }
             for failure in imported.failures
+        ) + tuple(
+            {
+                "schema": "security-research-failure/v1",
+                "instrument_id": (f"{failure.instrument.mic}:{failure.instrument.symbol}"),
+                "stage": "benchmark",
+                "field": failure.field,
+                "reason": failure.reason,
+            }
+            for failure in (() if benchmarks is None else benchmarks.failures)
         )
-        requirements_met = len(prices) >= minimum_price_observations
+        price_requested = "price" in imported.request.evidence
+        requirements_met = (not price_requested) or len(prices) >= minimum_price_observations
         failures_by_reason: dict[str, int] = {}
         failures_by_stage: dict[str, int] = {}
         for failure in failures:
             failures_by_reason[failure["reason"]] = failures_by_reason.get(failure["reason"], 0) + 1
             failures_by_stage[failure["stage"]] = failures_by_stage.get(failure["stage"], 0) + 1
         quality = {
-            "schema": "security-research-quality/v1",
+            "schema": "security-research-quality/v2",
+            "requested_evidence": list(imported.request.evidence),
             "minimum_price_observations": minimum_price_observations,
             "price_observations": len(prices),
             "price_requirements_met": requirements_met,
@@ -230,6 +257,7 @@ class ResearchStore:
                 for period in ("annual", "quarterly")
             },
             "events": len(events),
+            "benchmark_observations": len(benchmark_prices),
             "failures": len(failures),
             "failures_by_reason": dict(sorted(failures_by_reason.items())),
             "failures_by_stage": dict(sorted(failures_by_stage.items())),
@@ -239,7 +267,7 @@ class ResearchStore:
             },
         }
         definitions = {
-            "schema": "security-research-definitions/v1",
+            "schema": "security-research-definitions/v2",
             "availability_basis": {
                 "retrieval": (
                     "The provider did not expose publication time; "
@@ -324,16 +352,14 @@ class ResearchStore:
                 "version": imported.source_version,
                 "response_hash": imported.response_hash,
             },
-            "request": {
-                "source_profile": imported.request.source_profile,
+            "inputs": {
                 "start": imported.request.start.isoformat(),
                 "end": imported.request.end.isoformat(),
                 "adjustment": imported.request.adjustment.value,
-                "minimum_price_observations": minimum_price_observations,
-                "timeout_seconds": imported.request.timeout_seconds,
-                "max_retries": imported.request.max_retries,
-                "retry_base_seconds": imported.request.retry_base_seconds,
+                "evidence": list(imported.request.evidence),
             },
+            "runtime_settings": runtime_settings,
+            "runtime_settings_hash": runtime_settings_hash,
             "price_requirements_met": requirements_met,
             "artifacts": {name: name for name in ARTIFACTS},
         }
@@ -343,6 +369,7 @@ class ResearchStore:
             "company": company,
             "market_context": market_context,
             "prices": prices,
+            "benchmarks": benchmark_prices,
             "financials": financials,
             "events": events,
             "failures": failures,
@@ -350,7 +377,7 @@ class ResearchStore:
         }
         research_id = hashlib.sha256(_json_bytes(semantic)).hexdigest()
         manifest = {
-            "schema": "security-research-manifest/v1",
+            "schema": "security-research-manifest/v2",
             "research_id": research_id,
             **manifest_body,
         }
@@ -369,6 +396,7 @@ class ResearchStore:
                 (pending / "company.json").write_bytes(_json_bytes(company))
                 (pending / "market-context.json").write_bytes(_json_bytes(market_context))
                 _write_jsonl(pending / "prices.jsonl", prices)
+                _write_jsonl(pending / "benchmarks.jsonl", benchmark_prices)
                 _write_jsonl(pending / "financials.jsonl", financials)
                 _write_jsonl(pending / "events.jsonl", events)
                 _write_jsonl(pending / "failures.jsonl", failures)
@@ -378,7 +406,16 @@ class ResearchStore:
                     self._summary(manifest, quality), encoding="utf-8"
                 )
                 (pending / "explorer.html").write_text(
-                    self._html(manifest, company, quality, financials, events), encoding="utf-8"
+                    self._html(
+                        manifest,
+                        company,
+                        quality,
+                        prices,
+                        benchmark_prices,
+                        financials,
+                        events,
+                    ),
+                    encoding="utf-8",
                 )
                 pending.rename(destination)
             except BaseException:
@@ -398,7 +435,7 @@ class ResearchStore:
         manifest = self._read_json(path / "manifest.json")
         return {
             **manifest,
-            "schema": "security-research/v1",
+            "schema": "security-research/v2",
             "quality": self._read_json(path / "quality.json"),
             "artifacts": {name: str(path / name) for name in ARTIFACTS},
         }
@@ -416,7 +453,7 @@ class ResearchStore:
         self, *, snapshot_id: str | None = None, instrument_id: str | None = None
     ) -> dict[str, Any]:
         if not self.objects.exists():
-            return {"schema": "security-research-list/v1", "research": []}
+            return {"schema": "security-research-list/v2", "research": []}
         self._require_directory(self.objects)
         items = []
         for path in self.objects.iterdir():
@@ -441,7 +478,7 @@ class ResearchStore:
             key=lambda item: (datetime.fromisoformat(item["created_at"]), item["research_id"]),
             reverse=True,
         )
-        return {"schema": "security-research-list/v1", "research": items}
+        return {"schema": "security-research-list/v2", "research": items}
 
     @staticmethod
     def _readme(manifest: dict[str, Any]) -> str:
@@ -477,6 +514,8 @@ class ResearchStore:
         manifest: dict[str, Any],
         company: dict[str, Any],
         quality: dict[str, Any],
+        prices: tuple[dict[str, Any], ...],
+        benchmarks: tuple[dict[str, Any], ...],
         financials: tuple[dict[str, Any], ...],
         events: tuple[dict[str, Any], ...],
     ) -> str:
@@ -502,24 +541,62 @@ class ResearchStore:
             "</tr>"
             for row in events
         )
+        data = json.dumps(
+            {"prices": prices, "benchmarks": benchmarks},
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).replace("<", "\\u003c")
         return (
-            '<!doctype html><html lang="en"><meta charset="utf-8">'
+            '<!doctype html><html lang="en"><head><meta charset="utf-8">'
             '<meta name="viewport" content="width=device-width,initial-scale=1">'
             "<title>MarketSieve Security Research</title>"
-            "<style>body{font:14px system-ui;margin:2rem}"
+            "<style>body{font:14px system-ui;margin:2rem;color:#17212b;background:#fff}"
+            ".cards{display:flex;gap:1rem;flex-wrap:wrap}.card{border:1px solid #ccd6df;"
+            "border-radius:.5rem;padding:.75rem;min-width:10rem}figure{margin:1rem 0}"
+            "svg{width:100%;height:320px;border:1px solid #ccd6df;background:#fff}"
             "table{border-collapse:collapse;width:100%;margin:1rem 0}"
-            "th,td{border-bottom:1px solid #888;padding:.45rem;text-align:left}</style>"
+            "th,td{border-bottom:1px solid #ccd6df;padding:.45rem;text-align:left}"
+            ".muted{color:#52606d}</style></head><body>"
             f"<h1>{manifest['instrument_id']}</h1>"
-            f"<p>Research {manifest['research_id']} · {manifest['created_at']}</p>"
-            f"<p>Prices {quality['price_observations']} · "
-            f"Financial facts {quality['financial_facts']} · Events {quality['events']} · "
-            f"Failures {quality['failures']}</p>"
+            f"<p class=muted>Research {manifest['research_id']} · {manifest['created_at']}</p>"
+            '<div class="cards">'
+            f'<div class="card"><strong>Prices</strong><br>{quality["price_observations"]}</div>'
+            '<div class="card"><strong>Benchmarks</strong><br>'
+            f"{quality['benchmark_observations']}</div>"
+            '<div class="card"><strong>Financial facts</strong><br>'
+            f"{quality['financial_facts']}</div>"
+            f'<div class="card"><strong>Events</strong><br>{quality["events"]}</div>'
+            f'<div class="card"><strong>Failures</strong><br>{quality["failures"]}</div></div>'
+            "<figure><figcaption>Normalized adjusted price and benchmarks</figcaption>"
+            '<svg id="price-chart" role="img" aria-label="Normalized price history"></svg></figure>'
             f"<h2>Company</h2><table>{company_rows}</table>"
             "<h2>Financial history</h2><table><tr><th>Period end</th>"
             "<th>Period</th><th>Concept</th><th>Value</th><th>Currency</th></tr>"
             f"{financial_rows}</table>"
             "<h2>Events</h2><table><tr><th>Date</th><th>Type</th><th>Values</th></tr>"
-            f"{event_rows}</table></html>"
+            f"{event_rows}</table>"
+            f'<script id="chart-data" type="application/json">{data}</script>'
+            "<script>(()=>{const d=JSON.parse(document.getElementById('chart-data').textContent);"
+            "const groups={security:d.prices.map(x=>[x.date,+x.close])};"
+            "for(const x of d.benchmarks)(groups[x.benchmark]??=[]).push([x.date,+x.close]);"
+            "const all=Object.values(groups).flat();if(!all.length)return;"
+            "const dates=[...new Set(all.map(x=>x[0]))].sort(),w=1000,h=300,p=32;"
+            "const svg=document.getElementById('price-chart'),ns='http://www.w3.org/2000/svg';"
+            "const colors=['#1769aa','#d97706','#0f766e','#7c3aed','#be123c'];let i=0;"
+            "for(const [name,rows] of Object.entries(groups)){if(!rows.length)continue;"
+            "const base=rows[0][1],pts=rows.map(x=>{const xi=p+"
+            "(dates.indexOf(x[0])/(Math.max(1,dates.length-1)))*(w-2*p);"
+            "const yv=x[1]/base*100;return [xi,yv]}),ys=Object.values(groups)"
+            ".flatMap(g=>g.length?g.map(x=>x[1]/g[0][1]*100):[]);"
+            "const lo=Math.min(...ys),hi=Math.max(...ys),poly="
+            "document.createElementNS(ns,'polyline');"
+            "poly.setAttribute('points',pts.map(x=>`${x[0]},${h-p-(x[1]-lo)/"
+            "(Math.max(.0001,hi-lo))*(h-2*p)}`).join(' '));"
+            "poly.setAttribute('fill','none');poly.setAttribute('stroke',colors[i++%colors.length]);"
+            "poly.setAttribute('stroke-width','2');const title="
+            "document.createElementNS(ns,'title');"
+            "title.textContent=name;poly.appendChild(title);svg.appendChild(poly)}})();</script></body></html>"
         )
 
     @classmethod
@@ -532,7 +609,7 @@ class ResearchStore:
             raise ValueError("security research object is incomplete")
         manifest = cls._read_json(path / "manifest.json")
         if (
-            manifest.get("schema") != "security-research-manifest/v1"
+            manifest.get("schema") != "security-research-manifest/v2"
             or manifest.get("research_id") != research_id
         ):
             raise ValueError("security research manifest identity is invalid")
@@ -546,6 +623,7 @@ class ResearchStore:
             "company": cls._read_json(path / "company.json"),
             "market_context": cls._read_json(path / "market-context.json"),
             "prices": tuple(cls._read_jsonl(path / "prices.jsonl")),
+            "benchmarks": tuple(cls._read_jsonl(path / "benchmarks.jsonl")),
             "financials": tuple(cls._read_jsonl(path / "financials.jsonl")),
             "events": tuple(cls._read_jsonl(path / "events.jsonl")),
             "failures": tuple(cls._read_jsonl(path / "failures.jsonl")),
@@ -557,6 +635,8 @@ class ResearchStore:
         company = semantic["company"]
         financials = semantic["financials"]
         events = semantic["events"]
+        prices = semantic["prices"]
+        benchmarks = semantic["benchmarks"]
         if (path / "README.md").read_text(encoding="utf-8") != cls._readme(manifest):
             raise ValueError("security research README projection is invalid")
         if (path / "summary.md").read_text(encoding="utf-8") != cls._summary(manifest, quality):
@@ -565,6 +645,8 @@ class ResearchStore:
             manifest,
             company,
             quality,
+            prices,
+            benchmarks,
             financials,
             events,
         ):

@@ -1,0 +1,8 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:marketsieve:schema:market-snapshot-list:2.0.0",
+  "type": "object",
+  "required": ["schema", "snapshots"],
+  "properties": {"schema": {"const": "market-snapshot-list/v2"}, "snapshots": {"type": "array", "items": {"type": "object", "required": ["snapshot_id", "created_at", "row_count", "field_count", "coverage", "price_requirements_met"], "properties": {"snapshot_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "created_at": {"type": "string", "format": "date-time"}, "row_count": {"type": "integer", "minimum": 1}, "field_count": {"type": "integer", "minimum": 1}, "coverage": {"type": "object", "required": ["overall", "indices"]}, "price_requirements_met": {"type": "boolean"}}, "additionalProperties": false}}},
+  "additionalProperties": false
+}
