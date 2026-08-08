@@ -2,6 +2,7 @@ SHELL := /bin/sh
 .DEFAULT_GOAL := help
 
 STATE_DIR ?= .marketsieve
+GATE_JOBS ?= 0
 TEST ?=
 SETTINGS ?= marketsieve.settings.toml
 SCOPE ?= --all
@@ -119,8 +120,8 @@ test: ## Run all tests, or TEST=<path> for a focused test.
 secret-check: ## Scan tracked files and the current diff without printing values.
 	uv run python scripts/secret_gate.py --base "$(BASE_SHA)"
 
-check: ## Run the complete development gate.
-	BASE_SHA="$(BASE_SHA)" EVIDENCE_DIR="$(EVIDENCE_DIR)" uv run python -m scripts.develop_gate check all
+check: ## Run the complete development gate with bounded parallel workers.
+	BASE_SHA="$(BASE_SHA)" EVIDENCE_DIR="$(EVIDENCE_DIR)" GATE_JOBS="$(GATE_JOBS)" uv run python -m scripts.develop_gate check all --jobs "$(GATE_JOBS)"
 
 capabilities-json: ## Describe the CLI machine contract.
 	uv run marketsieve capabilities --output json

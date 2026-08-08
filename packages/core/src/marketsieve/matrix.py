@@ -296,7 +296,7 @@ def field_definitions() -> tuple[MatrixField, ...]:
             _field(
                 "position_52w",
                 "trend",
-                unit="ratio",
+                unit="bounded_ratio",
                 definition="Latest close position between 252-observation low and high.",
                 formula="(close - low_52w) / (high_52w - low_52w)",
                 period="252 observations",
@@ -590,6 +590,14 @@ def field_definitions() -> tuple[MatrixField, ...]:
         "enterprise_to_revenue",
         "enterprise_to_ebitda",
     }
+    multiple_financials = {
+        "trailing_pe",
+        "forward_pe",
+        "price_to_book",
+        "price_to_sales",
+        "enterprise_to_revenue",
+        "enterprise_to_ebitda",
+    }
     for name in provider_financials:
         financial_period = (
             "trailing twelve months"
@@ -635,7 +643,13 @@ def field_definitions() -> tuple[MatrixField, ...]:
             _field(
                 name,
                 "financial" if name in monetary_financials else "fundamental",
-                unit="financial_currency" if name in monetary_financials else "ratio",
+                unit=(
+                    "financial_currency"
+                    if name in monetary_financials
+                    else "multiple"
+                    if name in multiple_financials
+                    else "ratio"
+                ),
                 source="yfinance",
                 definition=definition,
                 formula=formula,

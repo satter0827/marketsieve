@@ -57,19 +57,21 @@ def test_complete_gate_scans_before_and_after_execution(
     monkeypatch.setattr(develop_gate, "check_quality", lambda: events.append("quality"))
     monkeypatch.setattr(develop_gate, "check_tests", lambda _path: events.append("tests"))
     monkeypatch.setattr(develop_gate, "validate_schemas", lambda: events.append("schemas"))
-    monkeypatch.setattr(develop_gate, "check_smoke", lambda _path: events.append("smoke"))
-    monkeypatch.setattr(develop_gate, "check_package", lambda _path: events.append("package"))
+    monkeypatch.setattr(develop_gate, "check_smoke", lambda _path, jobs: events.append("smoke"))
+    monkeypatch.setattr(develop_gate, "check_package", lambda _path, jobs: events.append("package"))
+    monkeypatch.setattr(develop_gate, "_write_timings", lambda *_: events.append("timings"))
 
-    develop_gate.check_all()
+    develop_gate.check_all(1)
 
     assert events == [
         "reset",
         "secrets",
         "quality",
-        "tests",
         "schemas",
-        "smoke",
+        "tests",
         "package",
+        "smoke",
+        "timings",
         "secrets",
     ]
 

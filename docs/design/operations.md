@@ -2,7 +2,9 @@
 
 Run `make sync` once and `make doctor` after environment changes. Normal operation is
 `make market-capture MARKET=jp` and `make market-capture MARKET=us` after their respective closes,
-followed by `make market-preview` or `make market-query`. Build focused evidence
+followed by `make market-preview` or `make market-query`. Explorer files are object-local but use
+browser fetch APIs, so `market-preview` and `research-preview` are the supported viewing paths;
+opening `explorer.html` directly with `file://` is not. Build focused evidence
 with `make research-build INSTRUMENTS='MIC:SYMBOL ...'` only after selecting a Snapshot.
 
 `make market-build` remains the explicit combined-scope acquisition command. Direct CLI arguments select one

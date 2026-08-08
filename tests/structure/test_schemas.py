@@ -21,6 +21,7 @@ def test_public_schemas_are_current_and_valid() -> None:
         "capture-run",
         "cli-error",
         "doctor-result",
+        "explorer-data",
         "log-record",
         "market-snapshot",
         "market-snapshot-comparison",
@@ -61,11 +62,11 @@ def test_removed_feature_schemas_do_not_exist() -> None:
 @pytest.mark.parametrize(
     ("name", "version", "document"),
     (
-        ("market-snapshot", "v6", {"schema": "market-snapshot/v6", "market": {}}),
+        ("market-snapshot", "v7", {"schema": "market-snapshot/v7", "market": {}}),
         (
             "market-snapshot-manifest",
-            "v6",
-            {"schema": "market-snapshot-manifest/v6", "artifacts": {}},
+            "v7",
+            {"schema": "market-snapshot-manifest/v7", "artifacts": {}},
         ),
         ("market-snapshot-list", "v2", {"schema": "market-snapshot-list/v2", "snapshots": [{}]}),
         (

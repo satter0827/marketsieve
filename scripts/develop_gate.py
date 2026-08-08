@@ -12,13 +12,15 @@ import sys
 import tarfile
 import tempfile
 import zipfile
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
+from functools import partial
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 from jsonschema import Draft202012Validator, FormatChecker
 
 from scripts.package_catalog import PackageSpec, load_package_catalog
+from scripts.parallel import Task, TaskGroupError, run_tasks, worker_count
 
 ROOT = Path(__file__).parents[1]
 STATE_ROOT = ROOT / ".marketsieve"
@@ -197,15 +199,51 @@ def validate_schemas() -> None:
         Draft202012Validator.check_schema(schema)
 
 
-def check_smoke(path: Path) -> None:
-    version = capture(("uv", "run", "marketsieve", "--version"))
-    doctor = capture(
-        ("uv", "run", "marketsieve", "--log-level", "INFO", "doctor", "--output", "json")
+def check_smoke(path: Path, *, jobs: int = 1) -> None:
+    commands = {
+        "version": ("uv", "run", "marketsieve", "--version"),
+        "doctor": (
+            "uv",
+            "run",
+            "marketsieve",
+            "--log-level",
+            "INFO",
+            "doctor",
+            "--output",
+            "json",
+        ),
+        "module": (
+            "uv",
+            "run",
+            "python",
+            "-m",
+            "marketsieve_cli",
+            "doctor",
+            "--output",
+            "json",
+        ),
+        "capabilities": ("uv", "run", "marketsieve", "capabilities", "--output", "json"),
+        "market_help": ("uv", "run", "marketsieve", "market", "build", "--help"),
+        "research_help": ("uv", "run", "marketsieve", "research", "build", "--help"),
+    }
+    captured: dict[str, subprocess.CompletedProcess[str]] = {}
+
+    def operation(name: str, command: tuple[str, ...]) -> Callable[[], None]:
+        def execute() -> None:
+            captured[name] = capture(command)
+
+        return execute
+
+    run_tasks(
+        [Task(name, operation(name, command)) for name, command in commands.items()],
+        jobs=jobs,
     )
-    module = capture(("uv", "run", "python", "-m", "marketsieve_cli", "doctor", "--output", "json"))
-    capabilities = capture(("uv", "run", "marketsieve", "capabilities", "--output", "json"))
-    market_help = capture(("uv", "run", "marketsieve", "market", "build", "--help"))
-    research_help = capture(("uv", "run", "marketsieve", "research", "build", "--help"))
+    version = captured["version"]
+    doctor = captured["doctor"]
+    module = captured["module"]
+    capabilities = captured["capabilities"]
+    market_help = captured["market_help"]
+    research_help = captured["research_help"]
     documents = {
         "doctor-result": json.loads(doctor.stdout),
         "capabilities-result": json.loads(capabilities.stdout),
@@ -314,12 +352,38 @@ def verify_isolated_target(
     run((str(isolated), "-c", import_statement))
 
 
-def check_package(path: Path) -> None:
+def check_package(path: Path, *, jobs: int = 1) -> None:
     catalog = load_package_catalog()
     dist = (path / "dist").resolve()
     dist.mkdir()
+    build_roots = {
+        spec.distribution: path / "package-build" / spec.artifact_stem for spec in catalog
+    }
+    for build_root in build_roots.values():
+        build_root.mkdir(parents=True)
+    run_tasks(
+        [
+            Task(
+                f"build:{spec.distribution}",
+                partial(
+                    run,
+                    (
+                        "uv",
+                        "build",
+                        "--package",
+                        spec.distribution,
+                        "--out-dir",
+                        str(build_roots[spec.distribution]),
+                    ),
+                ),
+            )
+            for spec in catalog
+        ],
+        jobs=jobs,
+    )
     for spec in catalog:
-        run(("uv", "build", "--package", spec.distribution, "--out-dir", str(dist)))
+        for artifact in sorted(build_roots[spec.distribution].iterdir()):
+            shutil.copy2(artifact, dist / artifact.name)
     wheels = tuple(dist.glob("*.whl"))
     sdists = tuple(dist.glob("*.tar.gz"))
     if len(wheels) != len(catalog) or len(sdists) != len(catalog):
@@ -340,13 +404,22 @@ def check_package(path: Path) -> None:
     with tempfile.TemporaryDirectory(prefix="marketsieve-install-") as temp_dir:
         temporary_root = Path(temp_dir)
         isolated_targets = tuple((spec.wheel(dist), f"import {spec.module}") for spec in catalog)
-        for target, statement in isolated_targets:
-            verify_isolated_target(
-                temporary_root,
-                target=target,
-                dist=dist,
-                import_statement=statement,
-            )
+        run_tasks(
+            [
+                Task(
+                    f"install:{target.name}",
+                    partial(
+                        verify_isolated_target,
+                        temporary_root,
+                        target=target,
+                        dist=dist,
+                        import_statement=statement,
+                    ),
+                )
+                for target, statement in isolated_targets
+            ],
+            jobs=jobs,
+        )
         venv = temporary_root / "integrated"
         run((sys.executable, "-m", "venv", str(venv)))
         isolated = python_in_venv(venv)
@@ -402,15 +475,48 @@ def check_secrets(path: Path) -> None:
     run(tuple(command))
 
 
-def check_all() -> None:
+def check_quality_and_schemas() -> None:
+    """Run static source checks followed by schema validation in one lane."""
+
+    check_quality()
+    validate_schemas()
+
+
+def _write_timings(path: Path, jobs: int, results: list[dict[str, Any]]) -> None:
+    configuration = (ROOT / "pyproject.toml").read_bytes()
+    (path / "timings.json").write_text(
+        json.dumps(
+            {
+                "commit_sha": head_sha(),
+                "configuration_hash": hashlib.sha256(configuration).hexdigest(),
+                "requested_jobs": jobs,
+                "resolved_jobs": worker_count(jobs),
+                "tasks": results,
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+
+def check_all(jobs: int) -> None:
     path = evidence_dir()
     reset_evidence(path)
     check_secrets(path)
-    check_quality()
-    check_tests(path)
-    validate_schemas()
-    check_smoke(path)
-    check_package(path)
+    tasks = (
+        Task("quality", check_quality_and_schemas),
+        Task("tests", partial(check_tests, path)),
+        Task("package", partial(check_package, path, jobs=jobs)),
+        Task("smoke", partial(check_smoke, path, jobs=jobs)),
+    )
+    try:
+        timings = run_tasks(tasks, jobs=jobs)
+    except TaskGroupError as error:
+        _write_timings(path, jobs, error.results)
+        raise
+    _write_timings(path, jobs, timings)
     check_secrets(path)
 
 
@@ -421,21 +527,28 @@ def parse_args() -> argparse.Namespace:
     check_parser.add_argument(
         "scope", choices=("quality", "structure", "tests", "smoke", "package", "all")
     )
+    check_parser.add_argument(
+        "--jobs",
+        type=int,
+        default=int(os.environ.get("GATE_JOBS", "0")),
+        help="bounded parallel workers; zero selects up to four automatically",
+    )
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
+    worker_count(args.jobs)
     path = evidence_dir()
     if args.scope in {"tests", "smoke", "package"}:
         path.mkdir(parents=True, exist_ok=True)
-    checks = {
+    checks: dict[str, Callable[[], object]] = {
         "quality": check_quality,
         "structure": check_structure,
         "tests": lambda: check_tests(path),
-        "smoke": lambda: check_smoke(path),
-        "package": lambda: check_package(path),
-        "all": check_all,
+        "smoke": lambda: check_smoke(path, jobs=args.jobs),
+        "package": lambda: check_package(path, jobs=args.jobs),
+        "all": lambda: check_all(args.jobs),
     }
     checks[args.scope]()
 

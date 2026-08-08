@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import re
 import shutil
@@ -18,7 +19,7 @@ from typing import Any
 
 from marketsieve.matrix import INDEX_BENCHMARKS, MatrixField, MatrixRow
 
-from .explorer import build_snapshot_explorer_data, render_explorer
+from .explorer_v2 import build_snapshot_explorer_data, render_explorer
 
 ARTIFACT_ROLES = {
     "README.md": "Self-contained description of the dataset and files.",
@@ -29,8 +30,8 @@ ARTIFACT_ROLES = {
     "securities.jsonl": "Authoritative one-security-per-line observations.",
     "failures.jsonl": "Observed source, history, and calculation failures.",
     "market-indicators.jsonl": "Versioned yfinance macro and cross-asset observations.",
-    "explorer.html": "Self-contained interactive Market Explorer.",
-    "explorer-data.json": "Chart-neutral deterministic Explorer projection.",
+    "explorer.html": "Object-local interactive Market Explorer renderer.",
+    "explorer-data.json": "Reference-only deterministic Explorer view contract.",
     "summary.md": "Compact neutral projection of market and segment aggregates.",
 }
 
@@ -140,9 +141,10 @@ def _projection_documents(
     missing_reason_documents: list[dict[str, str]],
     row_documents: tuple[dict[str, Any], ...],
     summary: dict[str, Any],
+    failures: tuple[dict[str, str], ...],
 ) -> tuple[dict[str, Any], dict[str, Any], tuple[dict[str, Any], ...], dict[str, Any]]:
     definitions = {
-        "schema": "market-snapshot-definitions/v2",
+        "schema": "market-snapshot-definitions/v3",
         "fields": list(field_documents),
         "missing_reasons": missing_reason_documents,
     }
@@ -227,19 +229,30 @@ def _projection_documents(
                 row for row in row_documents if row["values"].get(classification) == value
             )
 
+    bounded_ratio_fields = {
+        name for name, definition in fields_by_name.items() if definition["unit"] == "bounded_ratio"
+    }
     ratio_fields = {
-        name for name, definition in fields_by_name.items() if definition["unit"] == "ratio"
+        name
+        for name, definition in fields_by_name.items()
+        if definition["unit"] in {"ratio", "annualized_ratio"}
+    }
+    multiple_fields = {
+        name for name, definition in fields_by_name.items() if definition["unit"] == "multiple"
     }
     unit_issues: list[dict[str, str]] = []
     outlier_candidates: list[dict[str, str]] = []
     for row in row_documents:
-        for name in ratio_fields & row["values"].keys():
+        checked_fields = bounded_ratio_fields | ratio_fields | multiple_fields
+        for name in checked_fields & row["values"].keys():
             number = Decimal(row["values"][name])
             if not number.is_finite():
                 unit_issues.append(
                     {"instrument_id": row["instrument_id"], "field": name, "code": "non_finite"}
                 )
-            elif name == "dividend_yield" and not Decimal(0) <= number <= Decimal(1):
+            elif (name in bounded_ratio_fields or name == "dividend_yield") and not Decimal(
+                0
+            ) <= number <= Decimal(1):
                 unit_issues.append(
                     {
                         "instrument_id": row["instrument_id"],
@@ -247,16 +260,65 @@ def _projection_documents(
                         "code": "ratio_out_of_unit_range",
                     }
                 )
-            elif abs(number) > Decimal(10):
+            elif name in multiple_fields and abs(number) > Decimal(1000):
                 outlier_candidates.append(
                     {
+                        "rule_id": "multiple_absolute_value_gt_1000",
                         "instrument_id": row["instrument_id"],
                         "field": name,
                         "value": row["values"][name],
+                        "market": "jp" if row["instrument"]["mic"] == "XTKS" else "us",
+                        "comparison_population": "same_market",
+                        "threshold": "1000",
+                        "severity": "warning",
                     }
                 )
+            elif name in ratio_fields and abs(number) > Decimal(10):
+                outlier_candidates.append(
+                    {
+                        "rule_id": "ratio_absolute_value_gt_10",
+                        "instrument_id": row["instrument_id"],
+                        "field": name,
+                        "value": row["values"][name],
+                        "market": "jp" if row["instrument"]["mic"] == "XTKS" else "us",
+                        "comparison_population": "same_market",
+                        "threshold": "10",
+                        "severity": "warning",
+                    }
+                )
+    failure_instruments = {failure["instrument_id"] for failure in failures}
+    completely_failed = {
+        row["instrument_id"] for row in row_documents if "close" not in row["values"]
+    }
+    failure_groups: dict[str, dict[str, int]] = {key: {} for key in ("stage", "reason", "field")}
+    for failure in failures:
+        for key, target in failure_groups.items():
+            value = failure[key]
+            target[value] = target.get(value, 0) + 1
+
+    def freshness(values: list[int]) -> dict[str, int | None]:
+        if not values:
+            return {"observation_count": 0, "median": None, "p95": None, "maximum": None}
+        ordered = sorted(values)
+        return {
+            "observation_count": len(ordered),
+            "median": ordered[(len(ordered) - 1) // 2],
+            "p95": ordered[min(len(ordered) - 1, math.ceil(len(ordered) * 0.95) - 1)],
+            "maximum": ordered[-1],
+        }
+
+    price_ages = [
+        row["temporal"]["price_age_days"]
+        for row in row_documents
+        if row["temporal"]["price_age_days"] is not None
+    ]
+    financial_ages = [
+        row["temporal"]["financial_age_days"]
+        for row in row_documents
+        if row["temporal"]["financial_age_days"] is not None
+    ]
     quality = {
-        "schema": "market-snapshot-quality/v2",
+        "schema": "market-snapshot-quality/v3",
         "price_requirements_met": summary["price_requirements_met"],
         "price_coverage": summary["coverage"],
         "domains": {
@@ -273,26 +335,17 @@ def _projection_documents(
         "fields": field_coverage,
         "segments": {name: coverage(rows) for name, rows in sorted(segment_rows.items())},
         "freshness": {
-            "price_age_days": {
-                "maximum": max(
-                    (
-                        row["temporal"]["price_age_days"]
-                        for row in row_documents
-                        if row["temporal"]["price_age_days"] is not None
-                    ),
-                    default=None,
-                )
-            },
-            "financial_age_days": {
-                "maximum": max(
-                    (
-                        row["temporal"]["financial_age_days"]
-                        for row in row_documents
-                        if row["temporal"]["financial_age_days"] is not None
-                    ),
-                    default=None,
-                )
-            },
+            "price_age_days": freshness(price_ages),
+            "financial_age_days": freshness(financial_ages),
+        },
+        "failures": {
+            "record_count": len(failures),
+            "affected_security_count": len(failure_instruments),
+            "complete_failure_security_count": len(completely_failed),
+            "partial_failure_security_count": len(failure_instruments - completely_failed),
+            "by_stage": dict(sorted(failure_groups["stage"].items())),
+            "by_reason": dict(sorted(failure_groups["reason"].items())),
+            "by_field": dict(sorted(failure_groups["field"].items())),
         },
         "unit_checks": {"issue_count": len(unit_issues), "issues": unit_issues},
         "outlier_candidates": outlier_candidates,
@@ -415,7 +468,7 @@ class MarketSnapshotStore:
         field_documents = tuple(_field_document(field) for field in fields)
         missing_reason_documents = _missing_reason_documents()
         definitions, market, segments, quality = _projection_documents(
-            field_documents, missing_reason_documents, row_documents, summary
+            field_documents, missing_reason_documents, row_documents, summary, failures
         )
         unknown_reasons = {
             reason
@@ -449,18 +502,11 @@ class MarketSnapshotStore:
         }
         snapshot_id = hashlib.sha256(_json_bytes(semantic)).hexdigest()
         manifest = {
-            "schema": "market-snapshot-manifest/v6",
+            "schema": "market-snapshot-manifest/v7",
             "snapshot_id": snapshot_id,
             **manifest_body,
         }
-        explorer_data = build_snapshot_explorer_data(
-            manifest,
-            summary,
-            field_documents,
-            row_documents,
-            quality,
-            market_indicators,
-        )
+        explorer_data = build_snapshot_explorer_data(manifest, field_documents)
         destination = self.objects / snapshot_id
         self._ensure_directory(self.objects)
         if destination.is_dir():
@@ -642,7 +688,7 @@ class MarketSnapshotStore:
         market = aggregates[0]
         return {
             **manifest,
-            "schema": "market-snapshot/v6",
+            "schema": "market-snapshot/v7",
             "market": market,
             "artifacts": {
                 name: str(path / name)
@@ -683,7 +729,7 @@ class MarketSnapshotStore:
                 candidate = self._read_json(manifest_path)
                 if (
                     isinstance(candidate, dict)
-                    and candidate.get("schema") != "market-snapshot-manifest/v6"
+                    and candidate.get("schema") != "market-snapshot-manifest/v7"
                 ):
                     continue
             self._verify_object(path, path.name)
@@ -729,7 +775,7 @@ class MarketSnapshotStore:
             if not manifest_path.is_file() or manifest_path.is_symlink():
                 continue
             manifest = self._read_json(manifest_path)
-            if manifest.get("schema") != "market-snapshot-manifest/v6":
+            if manifest.get("schema") != "market-snapshot-manifest/v7":
                 continue
             if manifest.get("request_fingerprint") == fingerprint:
                 return self.show(path.name)
@@ -1159,7 +1205,7 @@ class MarketSnapshotStore:
         manifest = MarketSnapshotStore._read_json(path / "manifest.json")
         if (
             manifest.get("snapshot_id") != snapshot_id
-            or manifest.get("schema") != "market-snapshot-manifest/v6"
+            or manifest.get("schema") != "market-snapshot-manifest/v7"
         ):
             raise ValueError("market snapshot manifest identity is invalid")
         definitions = MarketSnapshotStore._read_json(path / "definitions.json")
@@ -1219,14 +1265,7 @@ class MarketSnapshotStore:
         ):
             raise ValueError("market snapshot summary projection is invalid")
         explorer_data = MarketSnapshotStore._read_json(path / "explorer-data.json")
-        expected_explorer_data = build_snapshot_explorer_data(
-            manifest,
-            summary,
-            fields,
-            rows,
-            quality,
-            market_indicators,
-        )
+        expected_explorer_data = build_snapshot_explorer_data(manifest, fields)
         if explorer_data != expected_explorer_data:
             raise ValueError("market snapshot Explorer data projection is invalid")
         if (path / "explorer.html").read_text(encoding="utf-8") != render_explorer(explorer_data):

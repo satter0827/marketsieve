@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.16.0] - 2026-08-08
+
+- Replaced duplicated embedded Snapshot Explorer data with a reference-only v2 contract that reads
+  canonical object files over the restricted local preview server.
+- Added coordinated market exploration, paginated securities, URL handoff state, explicit quality
+  counts, field-aware unit checks, and bounded local gate parallelism.
+
 ## [0.15.1] - 2026-08-08
 
 - Merge overlapping benchmark and market-indicator roles before constructing the all-market
