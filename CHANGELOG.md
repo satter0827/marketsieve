@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.12.0] - 2026-08-08
+
+### Added
+
+- Explicit scope, evidence-domain, and history inputs for Market Snapshot and Security Research runs.
+- Stored Snapshot diff with definition compatibility checks and multi-security research batches.
+- Chart-led, self-contained Snapshot and research Explorers designed for human and AI handoff.
+
+### Changed
+
+- Runtime settings are separated from per-run analytical inputs and use `--settings`.
+- Snapshot artifacts use `aggregates.jsonl` and schema v3; research artifacts use schema v2.
+- The public workspace contains only core, extension API, CLI, and yfinance source packages.
+
+### Removed
+
+- Portfolio, watchlist, routine reports, generic sources and snapshots, experiments, and their
+  providers, schemas, settings, examples, tests, and editor entries.
+- CSV output. JSON and JSONL remain authoritative; HTML and Markdown are projections.
+
 All notable changes to this project will be documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and stable releases

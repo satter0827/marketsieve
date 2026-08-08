@@ -1,0 +1,14 @@
+# Optional non-secret operational settings. Analysis scope is always supplied by CLI arguments.
+[yfinance]
+batch_size = 50
+company_workers = 2
+timeout_seconds = 30
+max_retries = 3
+retry_base_seconds = 2.0
+
+[quality.market]
+minimum_overall_price_coverage = 0.95
+minimum_index_price_coverage = 0.90
+
+[quality.research]
+minimum_price_observations = 252

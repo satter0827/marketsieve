@@ -439,8 +439,14 @@ class YFinanceSource:
             hide_exceptions = YFINANCE.config.debug.hide_exceptions
             YFINANCE.config.debug.hide_exceptions = False
             try:
-                bars, price_failures = self._prices(request, version, session)
-                profiles, profile_failures = self._profiles(request, session)
+                if "price" in request.evidence:
+                    bars, price_failures = self._prices(request, version, session)
+                else:
+                    bars, price_failures = {}, ()
+                if {"company", "financials"} & set(request.evidence):
+                    profiles, profile_failures = self._profiles(request, session)
+                else:
+                    profiles, profile_failures = {}, ()
             finally:
                 YFINANCE.config.debug.hide_exceptions = hide_exceptions
                 session.close()
@@ -449,6 +455,12 @@ class YFinanceSource:
         for item in request.instruments:
             identity = (item.instrument.mic, item.instrument.symbol)
             profile, financials = profiles.get(identity, ((), ()))
+            if "company" not in request.evidence:
+                profile = tuple(
+                    (name, value) for name, value in profile if name == "financial_currency"
+                )
+            if "financials" not in request.evidence:
+                financials = ()
             item_bars = bars.get(identity, ())
             semantic = {
                 "instrument": identity,
@@ -506,7 +518,7 @@ class YFinanceSource:
             request=request,
             source_name="yfinance",
             source_version=version,
-            dataset="equity-history-profile-financials",
+            dataset="equity-" + "-".join(request.evidence),
             retrieved_at=retrieved_at,
             observations=tuple(observations),
             failures=failures,
@@ -533,6 +545,7 @@ class YFinanceSource:
             request.max_retries,
             request.retry_base_seconds,
             request.settings,
+            tuple(sorted({"price", "company", "financials"} & set(request.evidence))) or ("price",),
         )
         with _YFINANCE_RUNTIME_LOCK:
             cache = Path(request.settings.get("cache_dir", ".marketsieve/cache/yfinance"))
@@ -544,46 +557,62 @@ class YFinanceSource:
             YFINANCE.config.debug.hide_exceptions = False
             failures: list[EquityAcquisitionFailure] = []
             try:
-                prices, price_failures = self._prices(batch_request, version, session)
-                failures.extend(price_failures)
+                if "price" in request.evidence:
+                    prices, price_failures = self._prices(batch_request, version, session)
+                    failures.extend(price_failures)
+                else:
+                    prices = {}
                 ticker = YFINANCE.Ticker(request.provider_symbol, session=session)
-                info = self._research_attempt(
-                    ticker.get_info, batch_request, failures, request, "company"
-                )
-                frames = {
-                    ("income", period): self._research_attempt(
-                        partial(ticker.get_income_stmt, freq=period),
+                info = (
+                    self._research_attempt(
+                        ticker.get_info,
                         batch_request,
                         failures,
                         request,
-                        f"income_{period}",
+                        "company" if "company" in request.evidence else "financial_currency",
                     )
-                    for period in ("yearly", "quarterly")
-                }
-                frames.update(
+                    if {"company", "financials"} & set(request.evidence)
+                    else None
+                )
+                frames = (
                     {
-                        ("balance_sheet", period): self._research_attempt(
-                            partial(ticker.get_balance_sheet, freq=period),
+                        ("income", period): self._research_attempt(
+                            partial(ticker.get_income_stmt, freq=period),
                             batch_request,
                             failures,
                             request,
-                            f"balance_sheet_{period}",
+                            f"income_{period}",
                         )
                         for period in ("yearly", "quarterly")
                     }
+                    if "financials" in request.evidence
+                    else {}
                 )
-                frames.update(
-                    {
-                        ("cash_flow", period): self._research_attempt(
-                            partial(ticker.get_cash_flow, freq=period),
-                            batch_request,
-                            failures,
-                            request,
-                            f"cash_flow_{period}",
-                        )
-                        for period in ("yearly", "quarterly")
-                    }
-                )
+                if "financials" in request.evidence:
+                    frames.update(
+                        {
+                            ("balance_sheet", period): self._research_attempt(
+                                partial(ticker.get_balance_sheet, freq=period),
+                                batch_request,
+                                failures,
+                                request,
+                                f"balance_sheet_{period}",
+                            )
+                            for period in ("yearly", "quarterly")
+                        }
+                    )
+                    frames.update(
+                        {
+                            ("cash_flow", period): self._research_attempt(
+                                partial(ticker.get_cash_flow, freq=period),
+                                batch_request,
+                                failures,
+                                request,
+                                f"cash_flow_{period}",
+                            )
+                            for period in ("yearly", "quarterly")
+                        }
+                    )
                 for (statement, period), frame in frames.items():
                     if frame is not None and getattr(frame, "empty", True):
                         failures.append(
@@ -594,23 +623,35 @@ class YFinanceSource:
                                 "financials_unavailable",
                             )
                         )
-                actions = self._research_attempt(
-                    lambda: ticker.get_actions(period="10y"),
-                    batch_request,
-                    failures,
-                    request,
-                    "actions",
+                actions = (
+                    self._research_attempt(
+                        lambda: ticker.get_actions(period="10y"),
+                        batch_request,
+                        failures,
+                        request,
+                        "actions",
+                    )
+                    if "events" in request.evidence
+                    else None
                 )
-                earnings = self._research_attempt(
-                    lambda: ticker.get_earnings_dates(limit=100),
-                    batch_request,
-                    failures,
-                    request,
-                    "earnings",
+                earnings = (
+                    self._research_attempt(
+                        lambda: ticker.get_earnings_dates(limit=100),
+                        batch_request,
+                        failures,
+                        request,
+                        "earnings",
+                    )
+                    if "events" in request.evidence
+                    else None
                 )
-                if earnings is None and not any(
-                    failure.stage == "research" and failure.field == "earnings"
-                    for failure in failures
+                if (
+                    "events" in request.evidence
+                    and earnings is None
+                    and not any(
+                        failure.stage == "research" and failure.field == "earnings"
+                        for failure in failures
+                    )
                 ):
                     failures.append(
                         EquityAcquisitionFailure(
@@ -625,8 +666,12 @@ class YFinanceSource:
                 session.close()
         retrieved_at = self._retrieved_at()
         company_source = info if isinstance(info, Mapping) else {}
-        if not company_source and not any(
-            failure.stage == "research" and failure.field == "company" for failure in failures
+        if (
+            "company" in request.evidence
+            and not company_source
+            and not any(
+                failure.stage == "research" and failure.field == "company" for failure in failures
+            )
         ):
             failures.append(
                 EquityAcquisitionFailure(
@@ -653,6 +698,8 @@ class YFinanceSource:
                 )
             )
         )
+        if "company" not in request.evidence:
+            company = ()
         financial_currency = _text(company_source.get("financialCurrency"))
         if financial_currency is None and any(
             frame is not None and not getattr(frame, "empty", True) for frame in frames.values()
@@ -1215,11 +1262,27 @@ class YFinanceSource:
                     return error
 
             return item, (
-                attempt("get_info"),
-                attempt("get_income_stmt", freq="yearly"),
-                attempt("get_income_stmt", freq="quarterly"),
-                attempt("get_balance_sheet", freq="quarterly"),
-                attempt("get_cash_flow", freq="quarterly"),
+                attempt("get_info") if {"company", "financials"} & set(request.evidence) else {},
+                (
+                    attempt("get_income_stmt", freq="yearly")
+                    if "financials" in request.evidence
+                    else None
+                ),
+                (
+                    attempt("get_income_stmt", freq="quarterly")
+                    if "financials" in request.evidence
+                    else None
+                ),
+                (
+                    attempt("get_balance_sheet", freq="quarterly")
+                    if "financials" in request.evidence
+                    else None
+                ),
+                (
+                    attempt("get_cash_flow", freq="quarterly")
+                    if "financials" in request.evidence
+                    else None
+                ),
             )
 
         completed: list[ProfileLoadResult] = []
@@ -1260,8 +1323,8 @@ class YFinanceSource:
                 failures.append(
                     EquityAcquisitionFailure(
                         item.instrument,
-                        "profile",
-                        "company",
+                        "profile" if "company" in request.evidence else "financials",
+                        "company" if "company" in request.evidence else "financial_currency",
                         _failure_reason(info),
                     )
                 )
@@ -1270,8 +1333,8 @@ class YFinanceSource:
                 failures.append(
                     EquityAcquisitionFailure(
                         item.instrument,
-                        "profile",
-                        "company",
+                        "profile" if "company" in request.evidence else "financials",
+                        "company" if "company" in request.evidence else "financial_currency",
                         "provider_error",
                     )
                 )
@@ -1355,16 +1418,24 @@ class YFinanceSource:
                 }
             )
             financials = tuple(sorted(financial_values.items()))
-            if not profile and not any(
-                failure.instrument == item.instrument and failure.stage == "profile"
-                for failure in failures
+            if (
+                "company" in request.evidence
+                and not profile
+                and not any(
+                    failure.instrument == item.instrument and failure.stage == "profile"
+                    for failure in failures
+                )
             ):
                 failures.append(
                     EquityAcquisitionFailure(item.instrument, "profile", "company", "field_absent")
                 )
-            if not financials and not any(
-                failure.instrument == item.instrument and failure.stage == "financials"
-                for failure in failures
+            if (
+                "financials" in request.evidence
+                and not financials
+                and not any(
+                    failure.instrument == item.instrument and failure.stage == "financials"
+                    for failure in failures
+                )
             ):
                 failures.append(
                     EquityAcquisitionFailure(

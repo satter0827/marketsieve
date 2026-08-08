@@ -1,0 +1,9 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:marketsieve:schema:security-research-list:2.0.0",
+  "type": "object",
+  "required": ["schema", "research"],
+  "properties": {"schema": {"const": "security-research-list/v2"}, "research": {"type": "array", "items": {"type": "object", "required": ["research_id", "snapshot_id", "instrument_id", "created_at", "price_requirements_met"], "properties": {"research_id": {"$ref": "#/$defs/id"}, "snapshot_id": {"$ref": "#/$defs/id"}, "instrument_id": {"type": "string"}, "created_at": {"type": "string", "format": "date-time"}, "price_requirements_met": {"type": "boolean"}}, "additionalProperties": false}}},
+  "$defs": {"id": {"type": "string", "pattern": "^[0-9a-f]{64}$"}},
+  "additionalProperties": false
+}

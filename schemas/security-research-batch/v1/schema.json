@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:marketsieve:schema:security-research-batch:1.0.0",
+  "type": "object",
+  "required": ["schema", "snapshot_id", "requested", "research", "failures", "requirements_met"],
+  "properties": {
+    "schema": {"const": "security-research-batch/v1"}, "snapshot_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "requested": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string"}},
+    "research": {"type": "array", "items": {"type": "object", "required": ["research_id", "snapshot_id", "instrument_id", "price_requirements_met"], "properties": {"research_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "snapshot_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "instrument_id": {"type": "string"}, "price_requirements_met": {"type": "boolean"}}, "additionalProperties": true}},
+    "failures": {"type": "array", "items": {"type": "object", "required": ["instrument_id", "error"], "properties": {"instrument_id": {"type": "string"}, "error": {"type": "string"}}, "additionalProperties": false}},
+    "requirements_met": {"type": "boolean"}
+  },
+  "additionalProperties": false
+}

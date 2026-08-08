@@ -21,7 +21,7 @@ from marketsieve.matrix import (
     build_matrix_row,
     field_definitions,
 )
-from marketsieve_cli.contracts import MarketConfiguration
+from marketsieve_cli.contracts import MarketBuildInputs, RuntimeSettings
 from marketsieve_extension_api import (
     EquityAcquisitionFailure,
     EquityBatchFetcher,
@@ -30,8 +30,12 @@ from marketsieve_extension_api import (
 )
 
 
-class ConfigurationReader(Protocol):
-    def market_configuration(self) -> MarketConfiguration: ...
+class SettingsReader(Protocol):
+    def runtime(self) -> RuntimeSettings: ...
+
+    def effective_document(self) -> dict[str, Any]: ...
+
+    def effective_hash(self) -> str: ...
 
 
 class BatchRegistry(Protocol):
@@ -86,6 +90,10 @@ class MarketSnapshotRepository(Protocol):
 
     def research_context(self, snapshot_id: str, instrument_id: str) -> dict[str, Any]: ...
 
+    def diff(
+        self, left_snapshot_id: str, right_snapshot_id: str, fields: tuple[str, ...]
+    ) -> dict[str, Any]: ...
+
 
 class MarketService:
     """Acquire one complete fixed universe and persist a Market Snapshot."""
@@ -94,27 +102,43 @@ class MarketService:
         self,
         registry: BatchRegistry,
         store: MarketSnapshotRepository,
-        configuration: ConfigurationReader,
+        settings: SettingsReader,
         *,
         today: Callable[[], date] = date.today,
     ) -> None:
         self._registry = registry
         self._store = store
-        self._configuration = configuration
+        self._settings = settings
         self._today = today
 
-    def refresh(self, *, resume: str | None = None) -> dict[str, Any]:
-        configuration = self._configuration.market_configuration()
-        universe, assets = _load_universe(configuration.indices)
-        benchmark_seeds = _benchmark_seeds(configuration.indices)
+    def build(
+        self, inputs: MarketBuildInputs | None, *, resume: str | None = None
+    ) -> dict[str, Any]:
+        runtime = self._settings.runtime()
+        if resume is None and inputs is None:
+            raise ValueError("market build inputs are required")
+        if resume is not None and inputs is not None:
+            raise ValueError("--resume cannot be combined with market build inputs")
+        stored_request = self._store.run_request(resume) if resume is not None else None
+        if stored_request is not None:
+            inputs = MarketBuildInputs(
+                tuple(stored_request["inputs"]["indices"]),
+                tuple(stored_request["inputs"]["evidence"]),
+                stored_request["inputs"]["history_days"],
+            )
+        assert inputs is not None
+        universe, assets = _load_universe(inputs.indices)
+        benchmark_seeds = (
+            _benchmark_seeds(inputs.indices) if "benchmarks" in inputs.evidence else ()
+        )
         requested = tuple(sorted((*universe, *benchmark_seeds), key=_seed_key))
         acquisition_date = self._today()
         if resume is None:
             end = acquisition_date
-            start = end - timedelta(days=configuration.history_days)
+            start = end - timedelta(days=inputs.history_days or 0)
         else:
-            stored_request = self._store.run_request(resume)
             try:
+                assert stored_request is not None
                 start = date.fromisoformat(str(stored_request["start"]))
                 end = date.fromisoformat(str(stored_request["end"]))
             except (KeyError, TypeError, ValueError) as error:
@@ -122,17 +146,22 @@ class MarketService:
             if end != acquisition_date:
                 raise ValueError(
                     "market snapshot runs can be resumed only on their original acquisition date; "
-                    "start a new refresh"
+                    "start a new build"
                 )
         fingerprint_document = {
-            "schema": "market-snapshot-request/v1",
-            "indices": list(configuration.indices),
+            "schema": "market-snapshot-request/v2",
+            "inputs": {
+                "indices": list(inputs.indices),
+                "evidence": list(inputs.evidence),
+                "history_days": inputs.history_days,
+            },
             "assets": assets,
             "start": start.isoformat(),
             "end": end.isoformat(),
             "adjustment": Adjustment.ADJUSTED.value,
-            "settings": _configuration_document(configuration),
-            "source": {"name": "yfinance", "profile": "market-yfinance"},
+            "runtime_settings": self._settings.effective_document(),
+            "runtime_settings_hash": self._settings.effective_hash(),
+            "source": {"name": "yfinance"},
         }
         fingerprint = hashlib.sha256(_json_bytes(fingerprint_document)).hexdigest()
         run_id = self._store.begin_run(
@@ -146,12 +175,13 @@ class MarketService:
             start=start,
             end=end,
             adjustment=Adjustment.ADJUSTED,
-            batch_size=configuration.batch_size,
-            profile_workers=configuration.profile_workers,
-            timeout_seconds=configuration.timeout_seconds,
-            max_retries=configuration.max_retries,
-            retry_base_seconds=configuration.retry_base_seconds,
+            batch_size=runtime.yfinance.batch_size,
+            profile_workers=runtime.yfinance.company_workers,
+            timeout_seconds=runtime.yfinance.timeout_seconds,
+            max_retries=runtime.yfinance.max_retries,
+            retry_base_seconds=runtime.yfinance.retry_base_seconds,
             settings={"cache_dir": ".marketsieve/cache/yfinance"},
+            evidence=inputs.evidence,
         )
         fetcher = self._registry.load_equity_batch_fetcher("yfinance")
         diagnostic = fetcher.doctor()
@@ -162,7 +192,7 @@ class MarketService:
             raise ValueError("source fetch result must preserve the exact market request")
         if self._today() != acquisition_date:
             raise ValueError(
-                "market acquisition crossed the local date boundary; start a new refresh"
+                "market acquisition crossed the local date boundary; start a new build"
             )
         benchmark_ids = {
             seed.provider_symbol: (seed.instrument.mic, seed.instrument.symbol)
@@ -175,7 +205,7 @@ class MarketService:
         benchmarks: dict[str, tuple[Any, ...]] = {}
         benchmark_failure_reasons: dict[str, str] = {}
         for index, symbol in INDEX_BENCHMARKS.items():
-            if index not in configuration.indices:
+            if index not in inputs.indices or "benchmarks" not in inputs.evidence:
                 continue
             benchmark_identity = benchmark_ids[symbol]
             observation = observations.get(benchmark_identity)
@@ -208,6 +238,10 @@ class MarketService:
                 benchmark_failure_reasons,
                 successful_fields=frozenset(name for name, _ in calculated.values),
             )
+            overrides = _merge_missing_overrides(
+                overrides,
+                _not_requested_fields(inputs.evidence),
+            )
             values = dict(calculated.values)
             missing = dict(calculated.missing)
             for field, reason in overrides:
@@ -234,11 +268,21 @@ class MarketService:
         identities = tuple(_seed_key(row.security) for row in ordered_rows)
         if len(identities) != len(set(identities)):
             raise ValueError("provider exchange normalization created duplicate securities")
-        summary = _summary(ordered_rows, configuration, imported.retrieved_at)
+        summary = _summary(
+            ordered_rows,
+            inputs.indices,
+            runtime,
+            imported.retrieved_at,
+            price_requested="price" in inputs.evidence,
+        )
         failures = _failures(ordered_rows, imported.failures)
         manifest_body = {
             "created_at": imported.retrieved_at.isoformat(),
             "request": {"fingerprint": fingerprint, **fingerprint_document},
+            "inputs": fingerprint_document["inputs"],
+            "runtime_settings": fingerprint_document["runtime_settings"],
+            "runtime_settings_hash": fingerprint_document["runtime_settings_hash"],
+            "request_fingerprint": fingerprint,
             "source": {
                 "name": imported.source_name,
                 "version": imported.source_version,
@@ -247,7 +291,6 @@ class MarketService:
             },
             "input_snapshot_id": imported.response_hash,
             "universe_assets": assets,
-            "configuration": _configuration_document(configuration),
             "row_count": len(ordered_rows),
             "field_count": len(field_definitions()),
             "failure_count": len(failures),
@@ -262,6 +305,11 @@ class MarketService:
             summary=summary,
             failures=failures,
         )
+
+    def diff(
+        self, left_snapshot_id: str, right_snapshot_id: str, fields: tuple[str, ...]
+    ) -> dict[str, Any]:
+        return self._store.diff(left_snapshot_id, right_snapshot_id, fields)
 
     def show(self, snapshot_id: str) -> dict[str, Any]:
         return self._store.show(snapshot_id)
@@ -477,6 +525,41 @@ def _missing_overrides(
     return tuple(sorted(output.items()))
 
 
+def _not_requested_fields(evidence: tuple[str, ...]) -> tuple[tuple[str, str], ...]:
+    """Mark omitted evidence domains as expected absences, not acquisition failures."""
+
+    requested = set(evidence)
+    fields = field_definitions()
+    groups: set[str] = set()
+    names: set[str] = set()
+    if "price" not in requested:
+        groups.update({"price", "return", "trend", "momentum", "risk", "liquidity", "relative"})
+    if "benchmarks" not in requested:
+        groups.add("relative")
+    if "company" not in requested:
+        groups.update({"identity", "size"})
+        names.update({"volume_turnover_20d", "free_cash_flow_yield"})
+    if "financials" not in requested:
+        groups.update({"financial", "fundamental", "profitability", "safety", "valuation"})
+    return tuple(
+        sorted(
+            (field.name, "not_requested")
+            for field in fields
+            if field.group in groups or field.name in names
+            if not (field.name == "financial_currency" and "financials" in requested)
+        )
+    )
+
+
+def _merge_missing_overrides(
+    observed: tuple[tuple[str, str], ...],
+    expected: tuple[tuple[str, str], ...],
+) -> tuple[tuple[str, str], ...]:
+    output = dict(observed)
+    output.update(expected)
+    return tuple(sorted(output.items()))
+
+
 def _seed_key(value: Any) -> tuple[str, str]:
     instrument = value.instrument
     return instrument.mic, instrument.symbol
@@ -566,24 +649,6 @@ def _benchmark_seeds(indices: tuple[str, ...]) -> tuple[EquityBatchInstrument, .
     )
 
 
-def _configuration_document(configuration: MarketConfiguration) -> dict[str, Any]:
-    return {
-        "indices": list(configuration.indices),
-        "history_days": configuration.history_days,
-        "batch_size": configuration.batch_size,
-        "profile_workers": configuration.profile_workers,
-        "timeout_seconds": configuration.timeout_seconds,
-        "max_retries": configuration.max_retries,
-        "retry_base_seconds": str(configuration.retry_base_seconds),
-        "minimum_overall_price_coverage": canonical_decimal(
-            configuration.minimum_overall_price_coverage
-        ),
-        "minimum_index_price_coverage": canonical_decimal(
-            configuration.minimum_index_price_coverage
-        ),
-    }
-
-
 def _decimal(values: Mapping[str, str], name: str) -> Decimal | None:
     try:
         return Decimal(values[name])
@@ -627,23 +692,29 @@ def _ratio_text(numerator: Decimal, denominator: Decimal) -> str | None:
 
 def _summary(
     rows: tuple[MatrixRow, ...],
-    configuration: MarketConfiguration,
+    indices: tuple[str, ...],
+    runtime: RuntimeSettings,
     retrieved_at: datetime,
+    *,
+    price_requested: bool,
 ) -> dict[str, Any]:
     with localcontext(CONTEXT):
-        return _build_summary(rows, configuration, retrieved_at)
+        return _build_summary(rows, indices, runtime, retrieved_at, price_requested=price_requested)
 
 
 def _build_summary(
     rows: tuple[MatrixRow, ...],
-    configuration: MarketConfiguration,
+    indices: tuple[str, ...],
+    runtime: RuntimeSettings,
     retrieved_at: datetime,
+    *,
+    price_requested: bool,
 ) -> dict[str, Any]:
     groups: dict[str, tuple[MatrixRow, ...]] = {
         "all": rows,
         **{
             f"index:{index}": tuple(row for row in rows if index in row.security.memberships)
-            for index in configuration.indices
+            for index in indices
         },
     }
     groups["market:jp"] = tuple(row for row in rows if row.security.instrument.mic == "XTKS")
@@ -825,11 +896,14 @@ def _build_summary(
         }
     overall = Decimal(documents["all"]["price_coverage"])
     index_coverages = {
-        index: Decimal(documents[f"index:{index}"]["price_coverage"])
-        for index in configuration.indices
+        index: Decimal(documents[f"index:{index}"]["price_coverage"]) for index in indices
     }
-    meets = overall >= configuration.minimum_overall_price_coverage and all(
-        value >= configuration.minimum_index_price_coverage for value in index_coverages.values()
+    meets = (not price_requested) or (
+        overall >= runtime.market_quality.minimum_overall_price_coverage
+        and all(
+            value >= runtime.market_quality.minimum_index_price_coverage
+            for value in index_coverages.values()
+        )
     )
     return {
         "schema": "market-snapshot-summary/v1",
@@ -869,7 +943,7 @@ def _failures(
                 "reason": reason,
             }
             for field, reason in row.missing
-            if reason != "not_applicable"
+            if reason not in {"not_applicable", "not_requested"}
         )
     return tuple(
         sorted(

@@ -1,6 +1,6 @@
 [project]
 name = "marketsieve-cli"
-version = "0.11.0"
+version = "0.12.0"
 description = "Public command-line workbench for MarketSieve."
 readme = "README.md"
 requires-python = ">=3.12,<3.15"
@@ -11,32 +11,10 @@ authors = [
 ]
 dependencies = [
     "click>=8.1,<9",
-    "marketsieve>=0.11,<0.12",
-    "marketsieve-extension-api>=0.11,<0.12",
-    "marketsieve-source-yfinance>=0.11,<0.12",
+    "marketsieve>=0.12,<0.13",
+    "marketsieve-extension-api>=0.12,<0.13",
+    "marketsieve-source-yfinance>=0.12,<0.13",
     "rich>=14,<15",
-]
-
-[project.optional-dependencies]
-all-sources = [
-    "marketsieve-import-rakuten>=0.11,<0.12",
-    "marketsieve-source-csv>=0.11,<0.12",
-    "marketsieve-source-jquants>=0.11,<0.12",
-    "marketsieve-source-alphavantage>=0.11,<0.12",
-    "marketsieve-source-fred>=0.11,<0.12",
-    "marketsieve-source-sec>=0.11,<0.12",
-    "marketsieve-source-edinet>=0.11,<0.12",
-    "marketsieve-source-yfinance>=0.11,<0.12",
-]
-all = [
-    "marketsieve-import-rakuten>=0.11,<0.12",
-    "marketsieve-source-csv>=0.11,<0.12",
-    "marketsieve-source-jquants>=0.11,<0.12",
-    "marketsieve-source-alphavantage>=0.11,<0.12",
-    "marketsieve-source-fred>=0.11,<0.12",
-    "marketsieve-source-sec>=0.11,<0.12",
-    "marketsieve-source-edinet>=0.11,<0.12",
-    "marketsieve-source-yfinance>=0.11,<0.12",
 ]
 
 [project.scripts]
@@ -60,11 +38,4 @@ only-include = [
 [tool.uv.sources]
 marketsieve = { workspace = true }
 marketsieve-extension-api = { workspace = true }
-marketsieve-import-rakuten = { workspace = true }
-marketsieve-source-csv = { workspace = true }
-marketsieve-source-jquants = { workspace = true }
-marketsieve-source-alphavantage = { workspace = true }
-marketsieve-source-fred = { workspace = true }
-marketsieve-source-sec = { workspace = true }
-marketsieve-source-edinet = { workspace = true }
 marketsieve-source-yfinance = { workspace = true }

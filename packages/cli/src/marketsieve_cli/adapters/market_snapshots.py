@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import csv
 import hashlib
 import html
 import json
@@ -23,11 +22,9 @@ ARTIFACT_ROLES = {
     "manifest.json": "Acquisition, universe, benchmark, artifact, and identity metadata.",
     "definitions.json": "Field and missing-value definitions.",
     "quality.json": "Coverage by evidence domain and price requirement results.",
-    "market.json": "Overall, Japanese, and U.S. market aggregates.",
-    "segments.jsonl": "Index, sector, and industry aggregates.",
+    "aggregates.jsonl": "Overall, market, index, sector, and industry aggregates.",
     "securities.jsonl": "Authoritative one-security-per-line observations.",
     "failures.jsonl": "Observed source, history, and calculation failures.",
-    "securities.csv": "Tabular projection of securities.jsonl.",
     "explorer.html": "Self-contained interactive Market Explorer.",
     "summary.md": "Compact neutral projection of market and segment aggregates.",
 }
@@ -45,6 +42,7 @@ MISSING_REASONS = {
     "insufficient_history": ("history", "Too few observations exist for the calculation."),
     "network_error": ("source", "The provider request failed at the network boundary."),
     "not_applicable": ("expected", "The field does not apply to this security."),
+    "not_requested": ("expected", "The evidence domain was not requested for this Snapshot."),
     "provider_error": ("source", "The provider returned an unclassified failure."),
     "rate_limited": ("source", "The provider rate-limited the request."),
     "stale_history": ("history", "The latest observation is older than the market reference."),
@@ -312,18 +310,18 @@ class MarketSnapshotStore:
                 name: {"path": name, "role": role} for name, role in ARTIFACT_ROLES.items()
             },
         }
+        aggregates = (market, *segments)
         semantic = {
             **manifest_body,
             "definitions": definitions,
             "row_hashes": [hashlib.sha256(_json_bytes(row)).hexdigest() for row in row_documents],
-            "market": market,
-            "segments": segments,
+            "aggregates": aggregates,
             "quality": quality,
             "failures": failures,
         }
         snapshot_id = hashlib.sha256(_json_bytes(semantic)).hexdigest()
         manifest = {
-            "schema": "market-snapshot-manifest/v2",
+            "schema": "market-snapshot-manifest/v3",
             "snapshot_id": snapshot_id,
             **manifest_body,
         }
@@ -338,11 +336,9 @@ class MarketSnapshotStore:
                 (pending / "manifest.json").write_bytes(_json_bytes(manifest))
                 (pending / "definitions.json").write_bytes(_json_bytes(definitions))
                 (pending / "quality.json").write_bytes(_json_bytes(quality))
-                (pending / "market.json").write_bytes(_json_bytes(market))
-                self._write_jsonl(pending / "segments.jsonl", segments)
+                self._write_jsonl(pending / "aggregates.jsonl", aggregates)
                 self._write_jsonl(pending / "securities.jsonl", row_documents)
                 self._write_jsonl(pending / "failures.jsonl", failures)
-                self._write_csv(pending / "securities.csv", fields, row_documents)
                 self._write_html(
                     pending / "explorer.html", manifest, summary, fields, row_documents
                 )
@@ -392,44 +388,6 @@ class MarketSnapshotStore:
         with path.open("wb") as stream:
             for document in documents:
                 stream.write(_json_bytes(document))
-
-    @staticmethod
-    def _write_csv(
-        path: Path, fields: tuple[MatrixField, ...], rows: tuple[dict[str, Any], ...]
-    ) -> None:
-        names = [field.name for field in fields]
-        header = [
-            "instrument_id",
-            "provider_symbol",
-            "memberships_json",
-            "retrieved_at",
-            *names,
-            "missing_fields_json",
-            "evidence_id",
-        ]
-        with path.open("w", encoding="utf-8", newline="") as stream:
-            writer = csv.DictWriter(stream, fieldnames=header)
-            writer.writeheader()
-            for row in rows:
-                values = row["values"]
-                writer.writerow(
-                    {
-                        "instrument_id": row["instrument_id"],
-                        "provider_symbol": row["provider_symbol"],
-                        "memberships_json": json.dumps(
-                            row["memberships"], ensure_ascii=False, separators=(",", ":")
-                        ),
-                        "retrieved_at": row["retrieved_at"],
-                        **{name: values.get(name, "") for name in names},
-                        "missing_fields_json": json.dumps(
-                            row["missing"],
-                            ensure_ascii=False,
-                            separators=(",", ":"),
-                            sort_keys=True,
-                        ),
-                        "evidence_id": row["evidence_id"],
-                    }
-                )
 
     @staticmethod
     def _write_html(
@@ -483,6 +441,27 @@ class MarketSnapshotStore:
         groups_json = html.escape(
             json.dumps(field_groups, ensure_ascii=False, indent=2, sort_keys=True)
         )
+        all_group = summary["groups"]["all"]
+        overview_cards = "".join(
+            f'<div class="card"><strong>{label}</strong><br>{html.escape(str(value))}</div>'
+            for label, value in (
+                ("Securities", all_group["security_count"]),
+                ("Price coverage", all_group["price_coverage"]),
+                ("Advancing", all_group["advancing_count"]),
+                ("Declining", all_group["declining_count"]),
+                ("Above SMA20", all_group["above_sma_20_count"]),
+                ("Above SMA200", all_group["above_sma_200_count"]),
+            )
+        )
+        breadth_rows = "".join(
+            '<div class="breadth-row">'
+            f"<span>{html.escape(name)}</span>"
+            f'<div class="bar"><i style="width:{min(100, max(0, percentage)):.2f}%"></i></div>'
+            f"<strong>{percentage:.1f}%</strong></div>"
+            for name, group in sorted(summary["groups"].items())
+            if (name.startswith("index:") or name.startswith("market:")) and group["security_count"]
+            for percentage in (group["above_sma_200_count"] / group["security_count"] * 100,)
+        )
         headers = "".join(
             f'<th><button type="button" data-column="{index}">{html.escape(name)}</button></th>'
             for index, name in enumerate(columns)
@@ -526,6 +505,12 @@ class MarketSnapshotStore:
         style = (
             "body{font:14px system-ui;margin:2rem;color:CanvasText;background:Canvas}"
             "h1{margin-bottom:.25rem}.meta{color:GrayText}"
+            ".cards{display:flex;gap:.75rem;flex-wrap:wrap;margin:1rem 0}"
+            ".card{border:1px solid GrayText;border-radius:.5rem;padding:.8rem;min-width:8rem}"
+            ".breadth{max-width:52rem;margin:1.5rem 0}.breadth-row{display:grid;"
+            "grid-template-columns:9rem 1fr 4rem;gap:.6rem;align-items:center;margin:.45rem 0}"
+            ".bar{height:.75rem;background:#d7dee5;border-radius:1rem;overflow:hidden}"
+            ".bar i{display:block;height:100%;background:#1769aa}"
             "input{padding:.6rem;width:min(32rem,90%);margin:1rem 0}"
             "select{padding:.6rem;margin:1rem}button{font:inherit;border:0;"
             "background:transparent;color:inherit;font-weight:700;cursor:pointer}"
@@ -569,6 +554,8 @@ class MarketSnapshotStore:
             f"{manifest['row_count']}銘柄 · {len(fields)}指標</p>"
             "<p>指数横断のMarket Snapshotです。空欄の理由は正本JSONLと"
             "failures.jsonlに保持されています。</p>"
+            f'<div class="cards">{overview_cards}</div>'
+            f'<section class="breadth"><h2>Above SMA200</h2>{breadth_rows}</section>'
             f"<details><summary>指数要約</summary><pre>{summary_json}</pre></details>"
             f"<details><summary>指標グループ</summary><pre>{groups_json}</pre></details>"
             '<label>検索 <input id="filter" type="search" '
@@ -607,9 +594,9 @@ class MarketSnapshotStore:
             "defined field appears either in `values` or in `missing`.",
             "",
             "`definitions.json` defines fields and missing-value codes. `quality.json` separates "
-            "coverage by evidence domain. `market.json` and `segments.jsonl` contain aggregate "
-            "statistics. `failures.jsonl` contains observed failures. CSV, HTML, and Markdown "
-            "files are deterministic views.",
+            "coverage by evidence domain. `aggregates.jsonl` contains aggregate statistics. "
+            "`failures.jsonl` contains observed failures. HTML and Markdown files are "
+            "deterministic views.",
             "",
             "Index memberships can overlap, so membership counts must not be summed as unique "
             "security counts. Currency-denominated values must not be aggregated across currencies "
@@ -687,10 +674,11 @@ class MarketSnapshotStore:
         path = self.objects / resolved
         self._verify_object(path, resolved)
         manifest = json.loads((path / "manifest.json").read_text(encoding="utf-8"))
-        market = json.loads((path / "market.json").read_text(encoding="utf-8"))
+        aggregates = tuple(self._read_jsonl(path / "aggregates.jsonl"))
+        market = aggregates[0]
         return {
             **manifest,
-            "schema": "market-snapshot/v2",
+            "schema": "market-snapshot/v3",
             "market": market,
             "artifacts": {
                 name: str(path / name)
@@ -699,11 +687,9 @@ class MarketSnapshotStore:
                     "manifest.json",
                     "definitions.json",
                     "quality.json",
-                    "market.json",
-                    "segments.jsonl",
+                    "aggregates.jsonl",
                     "securities.jsonl",
                     "failures.jsonl",
-                    "securities.csv",
                     "explorer.html",
                     "summary.md",
                 )
@@ -713,7 +699,7 @@ class MarketSnapshotStore:
     def list(self) -> dict[str, Any]:
         if not self.objects.exists():
             return {
-                "schema": "market-snapshot-list/v1",
+                "schema": "market-snapshot-list/v2",
                 "snapshots": [],
             }
         self._require_directory(self.objects)
@@ -731,7 +717,7 @@ class MarketSnapshotStore:
                 candidate = self._read_json(manifest_path)
                 if (
                     isinstance(candidate, dict)
-                    and candidate.get("schema") != "market-snapshot-manifest/v2"
+                    and candidate.get("schema") != "market-snapshot-manifest/v3"
                 ):
                     continue
             self._verify_object(path, path.name)
@@ -762,7 +748,7 @@ class MarketSnapshotStore:
         ):
             raise ValueError("market snapshot creation time must include a UTC offset")
         return {
-            "schema": "market-snapshot-list/v1",
+            "schema": "market-snapshot-list/v2",
             "snapshots": ordered,
         }
 
@@ -947,10 +933,11 @@ class MarketSnapshotStore:
         path = self.objects / resolved
         self._verify_object(path, resolved)
         security = self.row(resolved, instrument_id)
-        market = self._read_json(path / "market.json")
+        aggregates = tuple(self._read_jsonl(path / "aggregates.jsonl"))
+        market = aggregates[0]
         values = security["values"]
         selected = []
-        for segment in self._read_jsonl(path / "segments.jsonl"):
+        for segment in aggregates[1:]:
             segment_type = segment["segment_type"]
             segment_value = segment["segment_value"]
             if (
@@ -968,6 +955,67 @@ class MarketSnapshotStore:
             "definitions": self._read_json(path / "definitions.json"),
         }
 
+    def diff(
+        self, left_snapshot_id: str, right_snapshot_id: str, fields: tuple[str, ...]
+    ) -> dict[str, Any]:
+        left_id = self.resolve_id(left_snapshot_id)
+        right_id = self.resolve_id(right_snapshot_id)
+        left_path = self.objects / left_id
+        right_path = self.objects / right_id
+        self._verify_object(left_path, left_id)
+        self._verify_object(right_path, right_id)
+        left_definitions = {
+            item["name"]: item for item in self._read_json(left_path / "definitions.json")["fields"]
+        }
+        right_definitions = {
+            item["name"]: item
+            for item in self._read_json(right_path / "definitions.json")["fields"]
+        }
+        shared_fields = set(left_definitions) & set(right_definitions)
+        if fields:
+            unknown = set(fields) - shared_fields
+            if unknown:
+                raise ValueError(f"diff fields are not shared by both snapshots: {sorted(unknown)}")
+            shared_fields &= set(fields)
+        incompatible = sorted(
+            name
+            for name in shared_fields
+            if any(
+                left_definitions[name][key] != right_definitions[name][key]
+                for key in ("data_type", "unit", "definition_version")
+            )
+        )
+        comparable = tuple(sorted(shared_fields - set(incompatible)))
+        left_rows = {row["instrument_id"]: row for row in self._rows(left_id)}
+        right_rows = {row["instrument_id"]: row for row in self._rows(right_id)}
+        changes = []
+        for instrument_id in sorted(set(left_rows) & set(right_rows)):
+            changed = {}
+            for name in comparable:
+                left_value = left_rows[instrument_id]["values"].get(name)
+                right_value = right_rows[instrument_id]["values"].get(name)
+                left_missing = left_rows[instrument_id]["missing"].get(name)
+                right_missing = right_rows[instrument_id]["missing"].get(name)
+                if (left_value, left_missing) != (right_value, right_missing):
+                    changed[name] = {
+                        "left": left_value,
+                        "right": right_value,
+                        "left_missing": left_missing,
+                        "right_missing": right_missing,
+                    }
+            if changed:
+                changes.append({"instrument_id": instrument_id, "fields": changed})
+        return {
+            "schema": "market-snapshot-diff/v1",
+            "left_snapshot_id": left_id,
+            "right_snapshot_id": right_id,
+            "added_instruments": sorted(set(right_rows) - set(left_rows)),
+            "removed_instruments": sorted(set(left_rows) - set(right_rows)),
+            "comparable_fields": list(comparable),
+            "incompatible_fields": incompatible,
+            "changed_securities": changes,
+        }
+
     def _rows(self, snapshot_id: str) -> Iterable[dict[str, Any]]:
         path = self.objects / snapshot_id / "securities.jsonl"
         with path.open(encoding="utf-8") as stream:
@@ -983,11 +1031,9 @@ class MarketSnapshotStore:
             "manifest.json",
             "definitions.json",
             "quality.json",
-            "market.json",
-            "segments.jsonl",
+            "aggregates.jsonl",
             "securities.jsonl",
             "failures.jsonl",
-            "securities.csv",
             "explorer.html",
             "summary.md",
         }
@@ -999,13 +1045,16 @@ class MarketSnapshotStore:
         manifest = MarketSnapshotStore._read_json(path / "manifest.json")
         if (
             manifest.get("snapshot_id") != snapshot_id
-            or manifest.get("schema") != "market-snapshot-manifest/v2"
+            or manifest.get("schema") != "market-snapshot-manifest/v3"
         ):
             raise ValueError("market snapshot manifest identity is invalid")
         definitions = MarketSnapshotStore._read_json(path / "definitions.json")
         fields = definitions["fields"]
-        market = MarketSnapshotStore._read_json(path / "market.json")
-        segments = tuple(MarketSnapshotStore._read_jsonl(path / "segments.jsonl"))
+        aggregates = tuple(MarketSnapshotStore._read_jsonl(path / "aggregates.jsonl"))
+        if not aggregates:
+            raise ValueError("market snapshot aggregates are empty")
+        market = aggregates[0]
+        segments = aggregates[1:]
         quality = MarketSnapshotStore._read_json(path / "quality.json")
         rows = tuple(MarketSnapshotStore._read_jsonl(path / "securities.jsonl"))
         failures = tuple(MarketSnapshotStore._read_jsonl(path / "failures.jsonl"))
@@ -1036,8 +1085,7 @@ class MarketSnapshotStore:
             },
             "definitions": definitions,
             "row_hashes": [hashlib.sha256(_json_bytes(row)).hexdigest() for row in rows],
-            "market": market,
-            "segments": segments,
+            "aggregates": aggregates,
             "quality": quality,
             "failures": failures,
         }
@@ -1057,12 +1105,8 @@ class MarketSnapshotStore:
         field_values = tuple(MatrixField(**value) for value in fields)
         with tempfile.TemporaryDirectory(prefix="marketsieve-snapshot-verify-") as directory:
             temporary = Path(directory)
-            expected_csv = temporary / "securities.csv"
             expected_html = temporary / "explorer.html"
-            MarketSnapshotStore._write_csv(expected_csv, field_values, rows)
             MarketSnapshotStore._write_html(expected_html, manifest, summary, field_values, rows)
-            if (path / "securities.csv").read_bytes() != expected_csv.read_bytes():
-                raise ValueError("market snapshot CSV projection is invalid")
             if (path / "explorer.html").read_bytes() != expected_html.read_bytes():
                 raise ValueError("market snapshot HTML projection is invalid")
 

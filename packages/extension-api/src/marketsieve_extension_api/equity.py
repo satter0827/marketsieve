@@ -11,7 +11,18 @@ from typing import Protocol, runtime_checkable
 from marketsieve.data.daily import Adjustment, DailyBar
 from marketsieve.domain import Instrument
 
-from .daily import SourceDiagnostic
+
+@dataclass(frozen=True, slots=True)
+class SourceDiagnostic:
+    """Provider readiness without network acquisition."""
+
+    ready: bool
+    code: str
+    message: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.ready, bool) or not self.code or not self.message:
+            raise ValueError("source diagnostic values must be valid")
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,6 +65,7 @@ class EquityBatchRequest:
     max_retries: int
     retry_base_seconds: float
     settings: Mapping[str, str]
+    evidence: tuple[str, ...] = ("benchmarks", "company", "financials", "price")
 
     def __post_init__(self) -> None:
         if not self.source_profile:
@@ -94,6 +106,13 @@ class EquityBatchRequest:
             for key, value in self.settings.items()
         ):
             raise TypeError("batch settings must map strings to strings")
+        allowed = {"benchmarks", "company", "financials", "price"}
+        if (
+            not self.evidence
+            or self.evidence != tuple(sorted(set(self.evidence)))
+            or set(self.evidence) - allowed
+        ):
+            raise ValueError("batch evidence must be unique, sorted, and supported")
 
 
 @dataclass(frozen=True, slots=True)

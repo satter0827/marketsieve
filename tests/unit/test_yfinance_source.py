@@ -157,6 +157,60 @@ class _Ticker:
         )
 
 
+def _research_request(tmp_path: Path, evidence: tuple[str, ...]) -> SecurityResearchRequest:
+    return SecurityResearchRequest(
+        "market-yfinance",
+        _instrument(),
+        "MSFT",
+        date(2023, 8, 8),
+        date(2026, 8, 7),
+        Adjustment.ADJUSTED,
+        30,
+        1,
+        0.0,
+        {"cache_dir": str(tmp_path / "cache")},
+        evidence,
+    )
+
+
+def test_yfinance_research_honors_selected_evidence_domains(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        source_module.YFINANCE,
+        "download",
+        lambda symbols, **kwargs: _history(tuple(symbols)),
+    )
+    monkeypatch.setattr(source_module.YFINANCE, "Ticker", _Ticker)
+    monkeypatch.setattr(source_module.YFINANCE, "set_tz_cache_location", lambda value: None)
+
+    price = YFinanceSource().fetch_research(_research_request(tmp_path, ("price",)))
+    financials = YFinanceSource().fetch_research(_research_request(tmp_path, ("financials",)))
+
+    assert price.bars and not price.company and not price.financials and not price.events
+    assert not price.failures
+    assert financials.financials and not financials.company and not financials.events
+    assert not any(failure.field == "financial_currency" for failure in financials.failures)
+
+
+def test_yfinance_batch_financials_preserve_only_required_currency_metadata(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        source_module.YFINANCE, "download", lambda symbols, **kwargs: _history(symbols)
+    )
+    monkeypatch.setattr(source_module.YFINANCE, "Ticker", _Ticker)
+    monkeypatch.setattr(source_module.YFINANCE, "set_tz_cache_location", lambda value: None)
+    request = replace(_request(), evidence=("financials",))
+
+    observation = YFinanceSource().fetch(request).observations[0]
+
+    assert dict(observation.profile) == {"financial_currency": "USD"}
+    assert observation.financials
+
+
 def test_yfinance_source_fetches_adjusted_batches_profiles_and_statements(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
