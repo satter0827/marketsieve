@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
@@ -14,11 +15,18 @@ from marketsieve_cli.bootstrap import (
     MARKET_INDICES,
     RESEARCH_EVIDENCE,
     MarketBuildInputs,
+    MarketCompareInputs,
+    MarketDiffInputs,
+    MarketQueryInputs,
+    PreviewInputs,
     ResearchBuildInputs,
     build_console_output,
     build_diagnostics_service,
+    build_market_preview,
     build_market_snapshot,
+    build_research_preview,
     build_security_research,
+    capabilities_document,
     compare_market_snapshot_securities,
     diff_market_snapshots,
     list_market_snapshots,
@@ -31,20 +39,6 @@ from marketsieve_cli.bootstrap import (
 )
 
 OUTPUT_CHOICES = ("auto", "rich", "text", "json")
-COMMANDS = {
-    "market build": ("market-snapshot/v3", True, ("market_snapshot",)),
-    "market list": ("market-snapshot-list/v2", False, ()),
-    "market show": ("market-snapshot/v3", False, ()),
-    "market query": ("market-snapshot-query-result/v1", False, ()),
-    "market security": ("market-snapshot-security-result/v1", False, ()),
-    "market compare": ("market-snapshot-comparison/v1", False, ()),
-    "market diff": ("market-snapshot-diff/v1", False, ()),
-    "research build": ("security-research-batch/v1", True, ("security_research",)),
-    "research list": ("security-research-list/v2", False, ()),
-    "research show": ("security-research/v2", False, ()),
-    "doctor": ("doctor-result/v1", False, ("log_file",)),
-    "capabilities": ("capabilities-result/v5", False, ()),
-}
 
 
 def output_option(function: Any) -> Any:
@@ -149,19 +143,7 @@ def doctor(context: click.Context, output_mode: str) -> None:
 def capabilities(context: click.Context, output_mode: str) -> None:
     """Describe stable commands, schemas, and side effects."""
 
-    document = {
-        "schema": "capabilities-result/v5",
-        "version": sdk_version(),
-        "commands": [
-            {
-                "name": name,
-                "summary": name,
-                "output_schema": schema,
-                "effects": {"network": network, "secrets": False, "writes": list(writes)},
-            }
-            for name, (schema, network, writes) in COMMANDS.items()
-        ],
-    }
+    document = capabilities_document(sdk_version())
     _console(context, output_mode).emit_capabilities(document)
 
 
@@ -208,6 +190,76 @@ def market_build(
         raise click.exceptions.Exit(1)
 
 
+@market.command("capture")
+@click.option("--market", "market_name", required=True, type=click.Choice(("jp", "us")))
+@click.option("--session", required=True, type=click.Choice(("close",)))
+@click.option("--evidence", multiple=True, required=True, type=click.Choice(MARKET_EVIDENCE))
+@click.option("--history-days", required=True, type=click.IntRange(30, 3653))
+@click.option("--resume", "run_id")
+@output_option
+@click.pass_context
+def market_capture(
+    context: click.Context,
+    market_name: str,
+    session: str,
+    evidence: tuple[str, ...],
+    history_days: int,
+    run_id: str | None,
+    output_mode: str,
+) -> None:
+    """Capture one explicitly selected market close session."""
+
+    console = _console(context, output_mode)
+    try:
+        inputs = None
+        if run_id is None:
+            inputs = MarketBuildInputs(
+                MARKET_INDEX_GROUPS[market_name],
+                tuple(sorted(set(evidence))),
+                history_days,
+                session=session,
+            )
+        document = build_market_snapshot(context.obj["settings_path"], inputs, resume=run_id)
+    except (LookupError, OSError, RuntimeError, TypeError, ValueError) as error:
+        _emit_failure(console, "market_capture_failed", error)
+    console.emit_document(document, title="Market Capture")
+    if not document["price_requirements_met"]:
+        raise click.exceptions.Exit(1)
+
+
+@market.command("reconstruct")
+@click.option("--market", "market_name", required=True, type=click.Choice(("jp", "us")))
+@click.option("--date", "as_of", required=True, type=str)
+@click.option("--history-days", required=True, type=click.IntRange(30, 3653))
+@output_option
+@click.pass_context
+def market_reconstruct(
+    context: click.Context,
+    market_name: str,
+    as_of: str,
+    history_days: int,
+    output_mode: str,
+) -> None:
+    """Reconstruct price and benchmark evidence without present-day financial data."""
+
+    console = _console(context, output_mode)
+    try:
+        inputs = MarketBuildInputs(
+            MARKET_INDEX_GROUPS[market_name],
+            ("benchmarks", "price"),
+            history_days,
+            as_of=date.fromisoformat(as_of),
+            mode="historical_price_reconstruction",
+            session="close",
+        )
+        document = build_market_snapshot(context.obj["settings_path"], inputs)
+    except (LookupError, OSError, RuntimeError, TypeError, ValueError) as error:
+        _emit_failure(console, "market_reconstruct_failed", error)
+    console.emit_document(document, title="Historical Price Reconstruction")
+    if not document["price_requirements_met"]:
+        raise click.exceptions.Exit(1)
+
+
 @market.command("list")
 @output_option
 @click.pass_context
@@ -231,6 +283,24 @@ def market_show(context: click.Context, snapshot_id: str, output_mode: str) -> N
     _console(context, output_mode).emit_document(document, title="Market Snapshot")
 
 
+@market.command("serve")
+@click.argument("snapshot_id", required=True)
+@click.option("--port", type=click.IntRange(0, 65535), default=0, show_default=True)
+@click.option("--open", "open_browser", is_flag=True)
+@click.pass_context
+def market_serve(context: click.Context, snapshot_id: str, port: int, open_browser: bool) -> None:
+    """Preview one Snapshot Explorer over a loopback-only HTTP server."""
+
+    try:
+        preview = build_market_preview(
+            context.obj["settings_path"], PreviewInputs(snapshot_id, port)
+        )
+    except (LookupError, OSError, TypeError, ValueError) as error:
+        _emit_failure(_console(context, "text"), "market_serve_failed", error)
+    click.echo(preview.url)
+    preview.serve_forever(open_browser=open_browser)
+
+
 def _query_options(function: Any) -> Any:
     for name in ("industry", "sector", "currency", "country", "exchange", "mic"):
         function = click.option(f"--{name}", multiple=True)(function)
@@ -249,6 +319,15 @@ def _query_options(function: Any) -> Any:
     function = click.option("--present", multiple=True)(function)
     function = click.option("--missing", multiple=True)(function)
     function = click.option("--fields", multiple=True)(function)
+    function = click.option("--order", multiple=True, metavar="FIELD:asc|desc")(function)
+    function = click.option("--limit", type=click.IntRange(min=1))(function)
+    function = click.option("--domain", "domains", multiple=True)(function)
+    function = click.option("--profile", type=click.Choice(("short-swing", "swing", "position")))(
+        function
+    )
+    function = click.option("--budget", type=Decimal)(function)
+    function = click.option("--budget-currency")(function)
+    function = click.option("--trading-unit", type=click.IntRange(min=1))(function)
     return function
 
 
@@ -281,13 +360,22 @@ def market_query(
         }
         document = query_market_snapshot(
             context.obj["settings_path"],
-            snapshot_id,
-            filters=filters,
-            minimums=_numeric_bounds(values["minimum_values"], "--min"),
-            maximums=_numeric_bounds(values["maximum_values"], "--max"),
-            present=values["present"],
-            missing=values["missing"],
-            fields=values["fields"],
+            MarketQueryInputs(
+                snapshot_id=snapshot_id,
+                filters=filters,
+                minimums=_numeric_bounds(values["minimum_values"], "--min"),
+                maximums=_numeric_bounds(values["maximum_values"], "--max"),
+                present=values["present"],
+                missing=values["missing"],
+                fields=values["fields"],
+                order=values["order"],
+                limit=values["limit"],
+                domains=values["domains"],
+                profile=values["profile"],
+                budget=values["budget"],
+                budget_currency=values["budget_currency"],
+                trading_unit=values["trading_unit"],
+            ),
         )
     except (LookupError, OSError, TypeError, ValueError) as error:
         _emit_failure(console, "market_query_failed", error)
@@ -326,7 +414,7 @@ def market_compare(
 ) -> None:
     try:
         document = compare_market_snapshot_securities(
-            context.obj["settings_path"], snapshot_id, instrument_ids, fields
+            context.obj["settings_path"], MarketCompareInputs(snapshot_id, instrument_ids, fields)
         )
     except (LookupError, OSError, TypeError, ValueError) as error:
         _emit_failure(_console(context, output_mode), "market_compare_failed", error)
@@ -350,7 +438,8 @@ def market_diff(
 
     try:
         document = diff_market_snapshots(
-            context.obj["settings_path"], left_snapshot_id, right_snapshot_id, fields
+            context.obj["settings_path"],
+            MarketDiffInputs(left_snapshot_id, right_snapshot_id, fields),
         )
     except (LookupError, OSError, TypeError, ValueError) as error:
         _emit_failure(_console(context, output_mode), "market_diff_failed", error)
@@ -430,6 +519,36 @@ def research_show(
     except (LookupError, OSError, TypeError, ValueError) as error:
         _emit_failure(_console(context, output_mode), "research_show_failed", error)
     _console(context, output_mode).emit_document(document, title="Security Research")
+
+
+@research.command("serve")
+@click.argument("research_id", required=True)
+@click.option("--snapshot", "snapshot_id")
+@click.option("--security", "instrument_id")
+@click.option("--port", type=click.IntRange(0, 65535), default=0, show_default=True)
+@click.option("--open", "open_browser", is_flag=True)
+@click.pass_context
+def research_serve(
+    context: click.Context,
+    research_id: str,
+    snapshot_id: str | None,
+    instrument_id: str | None,
+    port: int,
+    open_browser: bool,
+) -> None:
+    """Preview one Research Explorer over a loopback-only HTTP server."""
+
+    try:
+        preview = build_research_preview(
+            context.obj["settings_path"],
+            PreviewInputs(research_id, port),
+            snapshot_id=snapshot_id,
+            instrument_id=instrument_id,
+        )
+    except (LookupError, OSError, TypeError, ValueError) as error:
+        _emit_failure(_console(context, "text"), "research_serve_failed", error)
+    click.echo(preview.url)
+    preview.serve_forever(open_browser=open_browser)
 
 
 def entrypoint() -> None:

@@ -18,6 +18,8 @@ from marketsieve_cli.adapters.research import ResearchStore
 from marketsieve_cli.application.research import ResearchService
 from marketsieve_cli.contracts import ResearchBuildInputs
 from marketsieve_extension_api import (
+    EquityBatchObservation,
+    ImportedEquityBatch,
     ImportedSecurityResearch,
     ResearchEvent,
     ResearchFinancialFact,
@@ -91,19 +93,33 @@ def test_research_pack_is_self_contained_and_charted(tmp_path: Path) -> None:
     )
     root = Path(document["artifacts"]["manifest.json"]).parent
 
-    assert document["schema"] == "security-research/v2"
+    assert document["schema"] == "security-research/v4"
     assert document["price_requirements_met"] is True
     assert not list(root.glob("*.csv")) and not list(root.glob("*.xlsx"))
     html = (root / "explorer.html").read_text()
     assert "<svg" in html and "https://" not in html
-    chart_payload = html.split('<script id="chart-data" type="application/json">', 1)[1].split(
+    chart_payload = html.split('<script id="explorer-data" type="application/json">', 1)[1].split(
         "</script>", 1
     )[0]
-    assert json.loads(chart_payload)["prices"]
+    assert any(
+        chart["chart_id"] == "price_sma_volume" for chart in json.loads(chart_payload)["charts"]
+    )
     schema = json.loads(
-        (Path(__file__).parents[2] / "schemas/security-research/v2/schema.json").read_text()
+        (Path(__file__).parents[2] / "schemas/security-research/v4/schema.json").read_text()
     )
     Draft202012Validator(schema).validate(document)
+    assert (
+        ResearchStore(tmp_path / "research").list()["research"][0]["research_id"]
+        == document["research_id"]
+    )
+    assert (
+        ResearchStore(tmp_path / "research").latest("a" * 64, "XNAS:MSFT")["research_id"]
+        == document["research_id"]
+    )
+    with pytest.raises(LookupError, match="does not exist"):
+        ResearchStore(tmp_path / "research").show("invalid")
+    with pytest.raises(LookupError, match="does not exist"):
+        ResearchStore(tmp_path / "empty").latest("a" * 64, "XNAS:MSFT")
 
 
 class _Market:
@@ -197,3 +213,52 @@ def test_research_service_preserves_partial_batch_success() -> None:
     assert result["snapshot_id"] == "a" * 64
     assert [item["instrument_id"] for item in result["research"]] == ["XNAS:MSFT"]
     assert result["failures"] == [{"instrument_id": "XNAS:MISSING", "error": "not present"}]
+
+
+class _BenchmarkRegistry(_Registry):
+    def load_equity_batch_fetcher(self, name: str) -> Any:
+        assert name == "yfinance"
+
+        class Fetcher:
+            def fetch(self, request: Any) -> ImportedEquityBatch:
+                retrieved_at = datetime(2026, 8, 8, tzinfo=UTC)
+                return ImportedEquityBatch(
+                    request,
+                    "yfinance",
+                    "1.5.2",
+                    "benchmarks",
+                    retrieved_at,
+                    tuple(
+                        EquityBatchObservation(item, retrieved_at, (), (), (), "d" * 64)
+                        for item in request.instruments
+                    ),
+                    (),
+                    "c" * 64,
+                )
+
+        return Fetcher()
+
+
+def test_research_service_builds_benchmarks_and_read_views() -> None:
+    service = ResearchService(
+        _BenchmarkRegistry(),
+        _Market(),
+        _Repository(),
+        Settings(None),
+        today=lambda: date(2026, 8, 8),
+    )
+    result = service.build(
+        ResearchBuildInputs("latest", ("XNAS:MSFT",), ("benchmarks", "company", "price"), 365)
+    )
+    assert not result["failures"], result["failures"]
+    assert result["requirements_met"] is True
+    assert service.show("f" * 64)["research_id"] == "f" * 64
+    assert (
+        service.show("latest", snapshot_id="latest", instrument_id="XNAS:MSFT")["instrument_id"]
+        == "XNAS:MSFT"
+    )
+    assert service.list(snapshot_id="a" * 64)["snapshot_id"] == "a" * 64
+    with pytest.raises(ValueError, match="only valid"):
+        service.show("f" * 64, snapshot_id="latest")
+    with pytest.raises(ValueError, match="requires"):
+        service.show("latest")

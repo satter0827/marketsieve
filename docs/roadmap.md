@@ -9,10 +9,11 @@ and release history.
   membership changes.
 - Improve Market Snapshot acquisition efficiency only when failure semantics, content identity, and the
   yfinance-only source boundary remain unchanged.
-- Expose Market Snapshot and Security Research application services through MCP only after the
-  current typed CLI schemas and local operational flow are stable. MCP remains a transport adapter;
-  it does not own provider access, persistence, or analysis instructions.
-- Add scheduling only after one-shot commands and local recovery have proved reliable.
+- Expose the existing typed build, capture, query, compare, diff, research, and serve application
+  requests through MCP only after more than one client needs the boundary. MCP remains a transport
+  adapter; it does not own provider access, persistence, or analysis instructions.
+- Invoke the one-shot JP and US close Capture commands from an external scheduler only after local
+  recovery history is sufficient. Scheduling, notification, cron, and daemons remain out of scope.
 
 External interpretation, discussion, messaging, and model execution remain outside canonical
 MarketSieve state. They may consume self-contained Snapshot and Research Pack objects.

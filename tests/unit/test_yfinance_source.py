@@ -102,7 +102,7 @@ class _Ticker:
             "trailingPE": 10,
             "freeCashflow": 20,
             "debtToEquity": 29.118,
-            "dividendYield": 0.0075,
+            "dividendYield": 0.75,
         }
 
     def get_income_stmt(self, *, freq: str) -> pd.DataFrame:

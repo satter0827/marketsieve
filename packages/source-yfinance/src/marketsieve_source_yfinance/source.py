@@ -126,7 +126,10 @@ FINANCIAL_FIELDS = {
     "dividendYield": "dividend_yield",
     "payoutRatio": "payout_ratio",
 }
-PERCENT_POINT_FIELDS = {"debtToEquity"}
+# yfinance exposes these fields as percentage points while MarketSieve stores
+# every ratio as a unit interval value. Keep the conversion at the provider
+# boundary so Snapshot and Research share one contract.
+PERCENT_POINT_FIELDS = {"debtToEquity", "dividendYield"}
 
 RESEARCH_STATEMENT_FIELDS = {
     "income": {
@@ -293,6 +296,23 @@ def _financial_text(source: str, value: object) -> str | None:
             return _text(number)
     except (InvalidOperation, TypeError, ValueError):
         return None
+
+
+def _latest_statement_period(*frames: Any) -> str | None:
+    """Return the newest provider statement period without inferring publication time."""
+
+    periods: list[date] = []
+    for frame in frames:
+        if frame is None or getattr(frame, "empty", True):
+            continue
+        for value in getattr(frame, "columns", ()):
+            try:
+                periods.append(
+                    value.date() if hasattr(value, "date") else date.fromisoformat(str(value))
+                )
+            except (TypeError, ValueError):
+                continue
+    return max(periods).isoformat() if periods else None
 
 
 @lru_cache(maxsize=16)
@@ -1417,6 +1437,13 @@ class YFinanceSource:
                     if name not in financial_values and (rendered := _text(value)) is not None
                 }
             )
+            latest_financial_period = _latest_statement_period(
+                annual_income, quarterly_income, balance, quarterly_cash_flow
+            )
+            if latest_financial_period is not None:
+                financial_values["_financial_period_end"] = latest_financial_period
+                financial_values["_financial_period_type"] = "mixed_latest"
+                financial_values["_availability_basis"] = "retrieval"
             financials = tuple(sorted(financial_values.items()))
             if (
                 "company" in request.evidence

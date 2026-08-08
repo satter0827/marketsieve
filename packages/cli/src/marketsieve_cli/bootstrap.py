@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from decimal import Decimal
 from pathlib import Path
 from typing import Any, TextIO
 
@@ -11,6 +10,7 @@ from marketsieve_cli.adapters.config import Settings
 from marketsieve_cli.adapters.console import ConsoleOutput, OutputMode
 from marketsieve_cli.adapters.market_snapshots import MarketSnapshotStore
 from marketsieve_cli.adapters.plugins import SourcePluginRegistry
+from marketsieve_cli.adapters.preview import ObjectPreviewServer
 from marketsieve_cli.adapters.research import ResearchStore
 from marketsieve_cli.application.diagnostics import DiagnosticsService
 from marketsieve_cli.application.market import MarketService
@@ -30,9 +30,14 @@ from marketsieve_cli.contracts import (
 from marketsieve_cli.contracts import (
     MarketBuildInputs as _MarketBuildInputs,
 )
+from marketsieve_cli.contracts import MarketCompareInputs as _MarketCompareInputs
+from marketsieve_cli.contracts import MarketDiffInputs as _MarketDiffInputs
+from marketsieve_cli.contracts import MarketQueryInputs as _MarketQueryInputs
+from marketsieve_cli.contracts import PreviewInputs as _PreviewInputs
 from marketsieve_cli.contracts import (
     ResearchBuildInputs as _ResearchBuildInputs,
 )
+from marketsieve_cli.contracts import capabilities_document as _capabilities_document
 from marketsieve_cli.observability import configure_logger
 
 MARKET_EVIDENCE = _MARKET_EVIDENCE
@@ -40,7 +45,12 @@ MARKET_INDEX_GROUPS = _MARKET_INDEX_GROUPS
 MARKET_INDICES = _MARKET_INDICES
 RESEARCH_EVIDENCE = _RESEARCH_EVIDENCE
 MarketBuildInputs = _MarketBuildInputs
+MarketQueryInputs = _MarketQueryInputs
+MarketCompareInputs = _MarketCompareInputs
+MarketDiffInputs = _MarketDiffInputs
+PreviewInputs = _PreviewInputs
 ResearchBuildInputs = _ResearchBuildInputs
+capabilities_document = _capabilities_document
 
 
 def build_console_output(
@@ -60,10 +70,12 @@ def build_diagnostics_service(
     return DiagnosticsService(logger=configure_logger(level=level, write_file=write_log_file))
 
 
-def build_market_service(settings_path: Path | None = None) -> MarketService:
+def build_market_service(
+    settings_path: Path | None = None, *, state_root: Path = Path(".marketsieve")
+) -> MarketService:
     return MarketService(
         SourcePluginRegistry(),
-        MarketSnapshotStore(Path(".marketsieve/market-snapshots")),
+        MarketSnapshotStore(state_root / "market-snapshots"),
         Settings.resolve(settings_path),
     )
 
@@ -85,26 +97,18 @@ def list_market_snapshots(settings_path: Path | None) -> dict[str, Any]:
     return build_market_service(settings_path).list()
 
 
+def build_market_preview(settings_path: Path | None, request: PreviewInputs) -> ObjectPreviewServer:
+    document = show_market_snapshot(settings_path, request.object_id)
+    return ObjectPreviewServer(
+        Path(document["artifacts"]["explorer.html"]).parent, port=request.port
+    )
+
+
 def query_market_snapshot(
     settings_path: Path | None,
-    snapshot_id: str,
-    *,
-    filters: dict[str, tuple[str, ...]],
-    minimums: dict[str, Decimal],
-    maximums: dict[str, Decimal],
-    present: tuple[str, ...],
-    missing: tuple[str, ...],
-    fields: tuple[str, ...],
+    request: MarketQueryInputs,
 ) -> dict[str, Any]:
-    return build_market_service(settings_path).query(
-        snapshot_id,
-        filters=filters,
-        minimums=minimums,
-        maximums=maximums,
-        present=present,
-        missing=missing,
-        fields=fields,
-    )
+    return build_market_service(settings_path).query(request)
 
 
 def read_market_snapshot_security(
@@ -115,27 +119,25 @@ def read_market_snapshot_security(
 
 def compare_market_snapshot_securities(
     settings_path: Path | None,
-    snapshot_id: str,
-    instrument_ids: tuple[str, ...],
-    fields: tuple[str, ...],
+    request: MarketCompareInputs,
 ) -> dict[str, Any]:
-    return build_market_service(settings_path).compare(snapshot_id, instrument_ids, fields)
+    return build_market_service(settings_path).compare(request)
 
 
 def diff_market_snapshots(
     settings_path: Path | None,
-    left_snapshot_id: str,
-    right_snapshot_id: str,
-    fields: tuple[str, ...],
+    request: MarketDiffInputs,
 ) -> dict[str, Any]:
-    return build_market_service(settings_path).diff(left_snapshot_id, right_snapshot_id, fields)
+    return build_market_service(settings_path).diff(request)
 
 
-def build_research_service(settings_path: Path | None = None) -> ResearchService:
+def build_research_service(
+    settings_path: Path | None = None, *, state_root: Path = Path(".marketsieve")
+) -> ResearchService:
     return ResearchService(
         SourcePluginRegistry(),
-        build_market_service(settings_path),
-        ResearchStore(Path(".marketsieve/research")),
+        build_market_service(settings_path, state_root=state_root),
+        ResearchStore(state_root / "research"),
         Settings.resolve(settings_path),
     )
 
@@ -166,6 +168,24 @@ def list_security_research(
 ) -> dict[str, Any]:
     return build_research_service(settings_path).list(
         snapshot_id=snapshot_id, instrument_id=instrument_id
+    )
+
+
+def build_research_preview(
+    settings_path: Path | None,
+    request: PreviewInputs,
+    *,
+    snapshot_id: str | None,
+    instrument_id: str | None,
+) -> ObjectPreviewServer:
+    document = show_security_research(
+        settings_path,
+        request.object_id,
+        snapshot_id=snapshot_id,
+        instrument_id=instrument_id,
+    )
+    return ObjectPreviewServer(
+        Path(document["artifacts"]["explorer.html"]).parent, port=request.port
     )
 
 

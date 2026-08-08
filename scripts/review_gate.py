@@ -132,7 +132,10 @@ def load_metrics(evidence: Path) -> tuple[int, float]:
         raise RuntimeError("JUnit evidence has no testsuite")
     tests = int(suite.attrib["tests"])
     coverage = json.loads((evidence / "coverage.json").read_text(encoding="utf-8"))
-    return tests, float(coverage["totals"]["percent_covered"])
+    totals = coverage["totals"]
+    branches = int(totals["num_branches"])
+    branch_coverage = 100.0 if branches == 0 else int(totals["covered_branches"]) / branches * 100
+    return tests, branch_coverage
 
 
 def redact_patch(path: Path) -> None:
@@ -172,9 +175,42 @@ def ensure_secret_free(paths: list[Path]) -> None:
         raise RuntimeError("review bundle contains credential-like or unscannable content")
 
 
-def create(base_value: str, head_value: str, evidence: Path, output: Path) -> None:
+def review_base(base: str, head: str, reviewed: str | None) -> str:
+    """Use a reviewed ancestor for delta review, otherwise return to the full PR diff."""
+
+    if reviewed is None:
+        return base
+    reviewed_sha = resolve_commit(reviewed)
+    is_ancestor = (
+        subprocess.run(
+            ("git", "merge-base", "--is-ancestor", reviewed_sha, head),
+            cwd=ROOT,
+            check=False,
+        ).returncode
+        == 0
+    )
+    descends_from_base = (
+        subprocess.run(
+            ("git", "merge-base", "--is-ancestor", base, reviewed_sha),
+            cwd=ROOT,
+            check=False,
+        ).returncode
+        == 0
+    )
+    return reviewed_sha if is_ancestor and descends_from_base else base
+
+
+def create(
+    base_value: str,
+    head_value: str,
+    evidence: Path,
+    output: Path,
+    *,
+    reviewed_sha: str | None = None,
+) -> None:
     base = resolve_commit(base_value)
     head = resolve_commit(head_value)
+    base = review_base(base, head, reviewed_sha)
     if not evidence.is_dir():
         raise RuntimeError(f"missing develop evidence: {evidence}")
     resolved = output.resolve()
@@ -183,7 +219,13 @@ def create(base_value: str, head_value: str, evidence: Path, output: Path) -> No
     shutil.rmtree(resolved, ignore_errors=True)
     evidence_output = resolved / "evidence"
     evidence_output.mkdir(parents=True)
-    for name in ("junit.xml", "coverage.json", "package.json", "smoke.json"):
+    for name in (
+        "junit.xml",
+        "coverage.json",
+        "coverage-metadata.json",
+        "package.json",
+        "smoke.json",
+    ):
         shutil.copy2(evidence / name, evidence_output / name)
     shutil.copy2(evidence / "logs.jsonl", resolved / "logs.jsonl")
 
@@ -198,6 +240,7 @@ def create(base_value: str, head_value: str, evidence: Path, output: Path) -> No
         "changes.patch": "text/x-diff",
         "evidence/junit.xml": "application/xml",
         "evidence/coverage.json": "application/json",
+        "evidence/coverage-metadata.json": "application/json",
         "evidence/package.json": "application/json",
         "evidence/smoke.json": "application/json",
         "logs.jsonl": "application/x-ndjson",
@@ -301,6 +344,7 @@ def parse_args() -> argparse.Namespace:
     create_parser.add_argument("--head-sha", default="HEAD")
     create_parser.add_argument("--evidence-dir", type=Path, required=True)
     create_parser.add_argument("--output-dir", type=Path, required=True)
+    create_parser.add_argument("--reviewed-sha")
     validate_parser = subparsers.add_parser("validate")
     validate_parser.add_argument("bundle", type=Path)
     return parser.parse_args()
@@ -309,7 +353,13 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     if args.command == "create":
-        create(args.base_sha, args.head_sha, args.evidence_dir, args.output_dir)
+        create(
+            args.base_sha,
+            args.head_sha,
+            args.evidence_dir,
+            args.output_dir,
+            reviewed_sha=args.reviewed_sha,
+        )
     else:
         validate(args.bundle)
 

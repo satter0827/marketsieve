@@ -7,9 +7,10 @@ human or external AI.
 ```shell
 make sync
 make doctor
-make market-build
-make market-show
-make market-query QUERY_ARGS='--market jp --fields close --fields return_252d'
+make market-capture MARKET=jp
+make market-capture MARKET=us
+make market-preview
+make market-query QUERY_ARGS='--market jp --profile swing --domain return --domain risk --order return_20d:desc --limit 30'
 make research-build INSTRUMENTS='XTKS:7203 XNAS:MSFT'
 ```
 
@@ -18,7 +19,8 @@ Every network run receives its analytical scope through CLI arguments. Optional
 `make setup-settings` when defaults are not sufficient.
 
 Snapshots are stored under `.marketsieve/market-snapshots/objects/SNAPSHOT_ID/`. The authoritative
-files are JSON and JSONL, while `summary.md` and the self-contained `explorer.html` are human views.
+files are JSON and JSONL. `explorer-data.json` is the chart-neutral deterministic projection;
+`summary.md` and the self-contained `explorer.html` are human views.
 Research packs are stored under `.marketsieve/research/objects/RESEARCH_ID/` and remain tied to the
 source Snapshot. No Excel or CSV artifact is generated.
 

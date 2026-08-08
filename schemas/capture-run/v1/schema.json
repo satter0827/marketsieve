@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:marketsieve:schema:capture-run:1.0.0",
+  "type": "object",
+  "required": ["schema", "run_id", "status", "exit_code", "resumable"],
+  "properties": {
+    "schema": {"const": "capture-run/v1"},
+    "run_id": {"type": "string", "minLength": 1},
+    "status": {"enum": ["completed", "duplicate", "failed", "interrupted"]},
+    "exit_code": {"type": "integer", "minimum": 0},
+    "resumable": {"type": "boolean"}
+  },
+  "additionalProperties": false
+}

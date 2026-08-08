@@ -3,19 +3,22 @@
 from __future__ import annotations
 
 import hashlib
-import html
 import json
 import os
+import re
 import shutil
 import tempfile
 from collections.abc import Iterable
 from contextlib import suppress
-from datetime import datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
+from functools import cmp_to_key
 from pathlib import Path
 from typing import Any
 
 from marketsieve.matrix import INDEX_BENCHMARKS, MatrixField, MatrixRow
+
+from .explorer import build_snapshot_explorer_data, render_explorer
 
 ARTIFACT_ROLES = {
     "README.md": "Self-contained description of the dataset and files.",
@@ -25,7 +28,9 @@ ARTIFACT_ROLES = {
     "aggregates.jsonl": "Overall, market, index, sector, and industry aggregates.",
     "securities.jsonl": "Authoritative one-security-per-line observations.",
     "failures.jsonl": "Observed source, history, and calculation failures.",
+    "market-indicators.jsonl": "Versioned yfinance macro and cross-asset observations.",
     "explorer.html": "Self-contained interactive Market Explorer.",
+    "explorer-data.json": "Chart-neutral deterministic Explorer projection.",
     "summary.md": "Compact neutral projection of market and segment aggregates.",
 }
 
@@ -73,6 +78,10 @@ def _request_fingerprint(value: object) -> str:
 
 def _row_document(row: MatrixRow) -> dict[str, Any]:
     instrument = row.security.instrument
+    financials = dict(row.security.financials)
+    price_as_of = dict(row.values).get("price_as_of")
+    financial_period_end = financials.get("_financial_period_end")
+    retrieved_date = row.security.retrieved_at.astimezone(UTC).date()
     return {
         "schema": "market-snapshot-security/v1",
         "instrument_id": f"{instrument.mic}:{instrument.symbol}",
@@ -86,6 +95,23 @@ def _row_document(row: MatrixRow) -> dict[str, Any]:
         "provider_symbol": row.security.provider_symbol,
         "memberships": list(row.security.memberships),
         "retrieved_at": row.security.retrieved_at.isoformat(),
+        "temporal": {
+            "price_as_of": price_as_of,
+            "retrieved_at": row.security.retrieved_at.isoformat(),
+            "financial_period_end": financial_period_end,
+            "financial_period_type": financials.get("_financial_period_type"),
+            "availability_basis": financials.get("_availability_basis", "retrieval"),
+            "price_age_days": (
+                (retrieved_date - date.fromisoformat(price_as_of)).days
+                if price_as_of is not None
+                else None
+            ),
+            "financial_age_days": (
+                (retrieved_date - date.fromisoformat(financial_period_end)).days
+                if financial_period_end is not None
+                else None
+            ),
+        },
         "evidence_id": row.security.evidence_id,
         "values": dict(row.values),
         "missing": dict(row.missing),
@@ -102,6 +128,9 @@ def _field_document(field: MatrixField) -> dict[str, Any]:
         "definition": field.definition,
         "formula": field.formula,
         "period": field.period,
+        "applicable_to": field.applicable_to,
+        "comparison_scope": field.comparison_scope,
+        "exclusion_conditions": list(field.exclusion_conditions),
         "definition_version": field.definition_version,
     }
 
@@ -113,7 +142,7 @@ def _projection_documents(
     summary: dict[str, Any],
 ) -> tuple[dict[str, Any], dict[str, Any], tuple[dict[str, Any], ...], dict[str, Any]]:
     definitions = {
-        "schema": "market-snapshot-definitions/v1",
+        "schema": "market-snapshot-definitions/v2",
         "fields": list(field_documents),
         "missing_reasons": missing_reason_documents,
     }
@@ -140,36 +169,133 @@ def _projection_documents(
         if key != "all" and not key.startswith("market:")
     )
     fields_by_name = {value["name"]: value for value in field_documents}
+
+    def coverage(selected: tuple[dict[str, Any], ...]) -> dict[str, Any]:
+        counts: dict[str, dict[str, int]] = {}
+        for row in selected:
+            values = row["values"]
+            missing = row["missing"]
+            for name in fields_by_name:
+                current = counts.setdefault(
+                    name, {"applicable": 0, "present": 0, "missing": 0, "not_applicable": 0}
+                )
+                if missing.get(name) == "not_applicable":
+                    current["not_applicable"] += 1
+                    continue
+                current["applicable"] += 1
+                current["present" if name in values else "missing"] += 1
+        return {
+            name: {
+                **current,
+                "coverage": (
+                    str(Decimal(current["present"]) / Decimal(current["applicable"]))
+                    if current["applicable"]
+                    else None
+                ),
+            }
+            for name, current in sorted(counts.items())
+        }
+
+    field_coverage = coverage(row_documents)
     domains: dict[str, dict[str, int]] = {}
-    for row in row_documents:
-        values = row["values"]
-        missing = row["missing"]
-        for name, definition in fields_by_name.items():
-            domain = domains.setdefault(
-                definition["group"], {"expected": 0, "present": 0, "missing": 0}
+    for name, counts in field_coverage.items():
+        domain = domains.setdefault(
+            fields_by_name[name]["group"],
+            {"applicable": 0, "present": 0, "missing": 0, "not_applicable": 0},
+        )
+        for key in domain:
+            domain[key] += counts[key]
+
+    segment_rows: dict[str, tuple[dict[str, Any], ...]] = {
+        "market:jp": tuple(row for row in row_documents if row["instrument"]["mic"] == "XTKS"),
+        "market:us": tuple(row for row in row_documents if row["instrument"]["mic"] != "XTKS"),
+    }
+    for membership in sorted({value for row in row_documents for value in row["memberships"]}):
+        segment_rows[f"index:{membership}"] = tuple(
+            row for row in row_documents if membership in row["memberships"]
+        )
+    for classification in ("sector", "industry"):
+        values = sorted(
+            {
+                value
+                for row in row_documents
+                if (value := row["values"].get(classification)) is not None
+            }
+        )
+        for value in values:
+            segment_rows[f"{classification}:{value}"] = tuple(
+                row for row in row_documents if row["values"].get(classification) == value
             )
-            if missing.get(name) == "not_applicable":
-                continue
-            domain["expected"] += 1
-            if name in values:
-                domain["present"] += 1
-            else:
-                domain["missing"] += 1
+
+    ratio_fields = {
+        name for name, definition in fields_by_name.items() if definition["unit"] == "ratio"
+    }
+    unit_issues: list[dict[str, str]] = []
+    outlier_candidates: list[dict[str, str]] = []
+    for row in row_documents:
+        for name in ratio_fields & row["values"].keys():
+            number = Decimal(row["values"][name])
+            if not number.is_finite():
+                unit_issues.append(
+                    {"instrument_id": row["instrument_id"], "field": name, "code": "non_finite"}
+                )
+            elif name == "dividend_yield" and not Decimal(0) <= number <= Decimal(1):
+                unit_issues.append(
+                    {
+                        "instrument_id": row["instrument_id"],
+                        "field": name,
+                        "code": "ratio_out_of_unit_range",
+                    }
+                )
+            elif abs(number) > Decimal(10):
+                outlier_candidates.append(
+                    {
+                        "instrument_id": row["instrument_id"],
+                        "field": name,
+                        "value": row["values"][name],
+                    }
+                )
     quality = {
-        "schema": "market-snapshot-quality/v1",
+        "schema": "market-snapshot-quality/v2",
         "price_requirements_met": summary["price_requirements_met"],
         "price_coverage": summary["coverage"],
         "domains": {
             name: {
                 **counts,
                 "coverage": (
-                    str(Decimal(counts["present"]) / Decimal(counts["expected"]))
-                    if counts["expected"]
+                    str(Decimal(counts["present"]) / Decimal(counts["applicable"]))
+                    if counts["applicable"]
                     else None
                 ),
             }
             for name, counts in sorted(domains.items())
         },
+        "fields": field_coverage,
+        "segments": {name: coverage(rows) for name, rows in sorted(segment_rows.items())},
+        "freshness": {
+            "price_age_days": {
+                "maximum": max(
+                    (
+                        row["temporal"]["price_age_days"]
+                        for row in row_documents
+                        if row["temporal"]["price_age_days"] is not None
+                    ),
+                    default=None,
+                )
+            },
+            "financial_age_days": {
+                "maximum": max(
+                    (
+                        row["temporal"]["financial_age_days"]
+                        for row in row_documents
+                        if row["temporal"]["financial_age_days"] is not None
+                    ),
+                    default=None,
+                )
+            },
+        },
+        "unit_checks": {"issue_count": len(unit_issues), "issues": unit_issues},
+        "outlier_candidates": outlier_candidates,
     }
     return definitions, market, segments, quality
 
@@ -276,6 +402,7 @@ class MarketSnapshotStore:
         rows: tuple[MatrixRow, ...],
         summary: dict[str, Any],
         failures: tuple[dict[str, str], ...],
+        market_indicators: tuple[dict[str, Any], ...] = (),
     ) -> dict[str, Any]:
         stored_request = self.run_request(run_id)
         expected_request_evidence = {
@@ -318,13 +445,22 @@ class MarketSnapshotStore:
             "aggregates": aggregates,
             "quality": quality,
             "failures": failures,
+            "market_indicators": market_indicators,
         }
         snapshot_id = hashlib.sha256(_json_bytes(semantic)).hexdigest()
         manifest = {
-            "schema": "market-snapshot-manifest/v3",
+            "schema": "market-snapshot-manifest/v6",
             "snapshot_id": snapshot_id,
             **manifest_body,
         }
+        explorer_data = build_snapshot_explorer_data(
+            manifest,
+            summary,
+            field_documents,
+            row_documents,
+            quality,
+            market_indicators,
+        )
         destination = self.objects / snapshot_id
         self._ensure_directory(self.objects)
         if destination.is_dir():
@@ -339,8 +475,10 @@ class MarketSnapshotStore:
                 self._write_jsonl(pending / "aggregates.jsonl", aggregates)
                 self._write_jsonl(pending / "securities.jsonl", row_documents)
                 self._write_jsonl(pending / "failures.jsonl", failures)
-                self._write_html(
-                    pending / "explorer.html", manifest, summary, fields, row_documents
+                self._write_jsonl(pending / "market-indicators.jsonl", market_indicators)
+                (pending / "explorer-data.json").write_bytes(_json_bytes(explorer_data))
+                (pending / "explorer.html").write_text(
+                    render_explorer(explorer_data), encoding="utf-8"
                 )
                 (pending / "README.md").write_text(
                     self._readme_markdown(manifest), encoding="utf-8"
@@ -390,189 +528,6 @@ class MarketSnapshotStore:
                 stream.write(_json_bytes(document))
 
     @staticmethod
-    def _write_html(
-        path: Path,
-        manifest: dict[str, Any],
-        summary: dict[str, Any],
-        fields: tuple[MatrixField, ...],
-        rows: tuple[dict[str, Any], ...],
-    ) -> None:
-        columns = [
-            "instrument_id",
-            "memberships",
-            "provider_symbol",
-            "retrieved_at",
-            *(field.name for field in fields),
-        ]
-        table_rows: list[str] = []
-        for row in rows:
-            values = row["values"]
-            record = {
-                "instrument_id": row["instrument_id"],
-                "memberships": ", ".join(row["memberships"]),
-                "provider_symbol": row["provider_symbol"],
-                "retrieved_at": row["retrieved_at"],
-                **values,
-            }
-            cells = "".join(
-                f"<td>{html.escape(str(record.get(name, '')))}</td>" for name in columns
-            )
-            attributes = {
-                "market": "jp" if row["instrument"]["mic"] == "XTKS" else "us",
-                "memberships": ",".join(row["memberships"]),
-                "mic": row["instrument"]["mic"],
-                "exchange": values.get("exchange", ""),
-                "country": values.get("country", ""),
-                "currency": values.get("currency", row["instrument"]["currency"]),
-                "sector": values.get("sector", ""),
-                "industry": values.get("industry", ""),
-            }
-            rendered_attributes = " ".join(
-                f'data-{name}="{html.escape(str(value), quote=True)}"'
-                for name, value in attributes.items()
-            )
-            table_rows.append(f"<tr {rendered_attributes}>{cells}</tr>")
-        field_groups: dict[str, int] = {}
-        for field in fields:
-            field_groups[field.group] = field_groups.get(field.group, 0) + 1
-        summary_json = html.escape(
-            json.dumps(summary, ensure_ascii=False, indent=2, sort_keys=True)
-        )
-        groups_json = html.escape(
-            json.dumps(field_groups, ensure_ascii=False, indent=2, sort_keys=True)
-        )
-        all_group = summary["groups"]["all"]
-        overview_cards = "".join(
-            f'<div class="card"><strong>{label}</strong><br>{html.escape(str(value))}</div>'
-            for label, value in (
-                ("Securities", all_group["security_count"]),
-                ("Price coverage", all_group["price_coverage"]),
-                ("Advancing", all_group["advancing_count"]),
-                ("Declining", all_group["declining_count"]),
-                ("Above SMA20", all_group["above_sma_20_count"]),
-                ("Above SMA200", all_group["above_sma_200_count"]),
-            )
-        )
-        breadth_rows = "".join(
-            '<div class="breadth-row">'
-            f"<span>{html.escape(name)}</span>"
-            f'<div class="bar"><i style="width:{min(100, max(0, percentage)):.2f}%"></i></div>'
-            f"<strong>{percentage:.1f}%</strong></div>"
-            for name, group in sorted(summary["groups"].items())
-            if (name.startswith("index:") or name.startswith("market:")) and group["security_count"]
-            for percentage in (group["above_sma_200_count"] / group["security_count"] * 100,)
-        )
-        headers = "".join(
-            f'<th><button type="button" data-column="{index}">{html.escape(name)}</button></th>'
-            for index, name in enumerate(columns)
-        )
-        body = "".join(table_rows)
-        index_memberships = sorted(
-            {membership for row in rows for membership in row["memberships"]}
-        )
-        index_options = "".join(
-            f'<option value="{html.escape(value)}">{html.escape(value)}</option>'
-            for value in index_memberships
-        )
-        filter_names = ("market", "mic", "exchange", "country", "currency", "sector", "industry")
-        filter_options: dict[str, tuple[str, ...]] = {}
-        for name in filter_names:
-            values = set()
-            for row in rows:
-                row_values = row["values"]
-                if name == "market":
-                    value = "jp" if row["instrument"]["mic"] == "XTKS" else "us"
-                elif name == "mic":
-                    value = row["instrument"]["mic"]
-                elif name == "currency":
-                    value = row_values.get(name, row["instrument"]["currency"])
-                else:
-                    value = row_values.get(name)
-                if value:
-                    values.add(str(value))
-            filter_options[name] = tuple(sorted(values))
-
-        def select(name: str, label: str) -> str:
-            options = "".join(
-                f'<option value="{html.escape(value, quote=True)}">{html.escape(value)}</option>'
-                for value in filter_options[name]
-            )
-            return (
-                f'<label>{label} <select id="{name}"><option value="">すべて</option>'
-                f"{options}</select></label>"
-            )
-
-        style = (
-            "body{font:14px system-ui;margin:2rem;color:CanvasText;background:Canvas}"
-            "h1{margin-bottom:.25rem}.meta{color:GrayText}"
-            ".cards{display:flex;gap:.75rem;flex-wrap:wrap;margin:1rem 0}"
-            ".card{border:1px solid GrayText;border-radius:.5rem;padding:.8rem;min-width:8rem}"
-            ".breadth{max-width:52rem;margin:1.5rem 0}.breadth-row{display:grid;"
-            "grid-template-columns:9rem 1fr 4rem;gap:.6rem;align-items:center;margin:.45rem 0}"
-            ".bar{height:.75rem;background:#d7dee5;border-radius:1rem;overflow:hidden}"
-            ".bar i{display:block;height:100%;background:#1769aa}"
-            "input{padding:.6rem;width:min(32rem,90%);margin:1rem 0}"
-            "select{padding:.6rem;margin:1rem}button{font:inherit;border:0;"
-            "background:transparent;color:inherit;font-weight:700;cursor:pointer}"
-            ".wrap{overflow:auto;border:1px solid GrayText}"
-            "table{border-collapse:collapse;min-width:1200px;width:100%}"
-            "th,td{padding:.45rem .6rem;border-bottom:1px solid GrayText;"
-            "text-align:right;white-space:nowrap}"
-            "th:first-child,td:first-child,th:nth-child(2),td:nth-child(2),"
-            "th:nth-child(3),td:nth-child(3){text-align:left}"
-            "thead{position:sticky;top:0;background:Canvas}tr[hidden]{display:none}"
-        )
-        script = (
-            "const q=document.querySelector('#filter'),idx=document.querySelector('#index');"
-            "const filters=['market','mic','exchange','country','currency','sector','industry']"
-            ".map(id=>document.querySelector('#'+id));"
-            "const rows=[...document.querySelectorAll('#securities tbody tr')];"
-            "const apply=()=>{const value=q.value.toLowerCase(),index=idx.value;"
-            "for(const row of rows){row.hidden=!row.textContent.toLowerCase().includes(value)"
-            "||(index&&!row.dataset.memberships.split(',').includes(index))"
-            "||filters.some(item=>item.value&&row.dataset[item.id]!==item.value)}};"
-            "q.addEventListener('input',apply);idx.addEventListener('change',apply);"
-            "for(const item of filters)item.addEventListener('change',apply);"
-            "for(const button of document.querySelectorAll('th button')){"
-            "button.addEventListener('click',()=>{const column=Number(button.dataset.column);"
-            "const direction=button.dataset.direction==='asc'?'desc':'asc';"
-            "button.dataset.direction=direction;rows.sort((left,right)=>{"
-            "const a=left.cells[column].textContent.trim(),"
-            "b=right.cells[column].textContent.trim();"
-            "const an=Number(a),bn=Number(b);const value=a!==''&&b!==''&&!Number.isNaN(an)"
-            "&&!Number.isNaN(bn)?an-bn:a.localeCompare(b);return direction==='asc'?value:-value});"
-            "const body=document.querySelector('#securities tbody');for(const row of rows)"
-            "body.appendChild(row)})}"
-        )
-        document = (
-            '<!doctype html><html lang="ja"><head><meta charset="utf-8">'
-            '<meta name="viewport" content="width=device-width,initial-scale=1">'
-            '<meta name="color-scheme" content="light dark">'
-            f"<title>MarketSieve Market Explorer</title><style>{style}</style></head>"
-            "<body><h1>MarketSieve Market Explorer</h1>"
-            f'<p class="meta">Snapshot {manifest["snapshot_id"]} · '
-            f"{manifest['row_count']}銘柄 · {len(fields)}指標</p>"
-            "<p>指数横断のMarket Snapshotです。空欄の理由は正本JSONLと"
-            "failures.jsonlに保持されています。</p>"
-            f'<div class="cards">{overview_cards}</div>'
-            f'<section class="breadth"><h2>Above SMA200</h2>{breadth_rows}</section>'
-            f"<details><summary>指数要約</summary><pre>{summary_json}</pre></details>"
-            f"<details><summary>指標グループ</summary><pre>{groups_json}</pre></details>"
-            '<label>検索 <input id="filter" type="search" '
-            'placeholder="銘柄、指数、名称"></label>'
-            f'<label>指数 <select id="index"><option value="">すべて</option>{index_options}'
-            "</select></label>"
-            f"{select('market', '市場')}{select('mic', 'MIC')}"
-            f"{select('exchange', '取引所')}{select('country', '国')}"
-            f"{select('currency', '通貨')}{select('sector', 'セクター')}"
-            f"{select('industry', '業種')}"
-            f'<div class="wrap"><table id="securities"><thead><tr>{headers}</tr>'
-            f"</thead><tbody>{body}</tbody></table></div>"
-            f"<script>{script}</script></body></html>"
-        )
-        path.write_text(document, encoding="utf-8")
-
-    @staticmethod
     def _readme_markdown(manifest: dict[str, Any]) -> str:
         benchmarks = ", ".join(
             f"{name}={value['benchmark_symbol']} ({value.get('benchmark_kind', 'index')})"
@@ -617,19 +572,28 @@ class MarketSnapshotStore:
             f"- Price requirements met: `{str(summary['price_requirements_met']).lower()}`",
             "",
             "| Group | Securities | Price coverage | Advancing | Declining | "
-            "Above SMA20 | Above SMA200 |",
-            "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
+            "Above SMA20 | Above SMA200 | Return 20d median | Volatility 60d median | "
+            "PER median | ROE median |",
+            "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
         ]
         displayed_groups = {
             name: group
             for name, group in summary["groups"].items()
             if name == "all" or name.startswith(("market:", "index:"))
         }
+
+        def median(group: dict[str, Any], field: str) -> Any:
+            return group.get("distributions", {}).get(field, {}).get("median")
+
         for name, group in sorted(displayed_groups.items()):
             lines.append(
                 f"| {name} | {group['security_count']} | {group['price_coverage']} | "
                 f"{group['advancing_count']} | {group['declining_count']} | "
-                f"{group['above_sma_20_count']} | {group['above_sma_200_count']} |"
+                f"{group['above_sma_20_count']} | {group['above_sma_200_count']} | "
+                f"{median(group, 'return_20d')} | "
+                f"{median(group, 'volatility_60d')} | "
+                f"{median(group, 'trailing_pe')} | "
+                f"{median(group, 'return_on_equity')} |"
             )
         lines.extend(
             (
@@ -678,7 +642,7 @@ class MarketSnapshotStore:
         market = aggregates[0]
         return {
             **manifest,
-            "schema": "market-snapshot/v3",
+            "schema": "market-snapshot/v6",
             "market": market,
             "artifacts": {
                 name: str(path / name)
@@ -690,6 +654,8 @@ class MarketSnapshotStore:
                     "aggregates.jsonl",
                     "securities.jsonl",
                     "failures.jsonl",
+                    "market-indicators.jsonl",
+                    "explorer-data.json",
                     "explorer.html",
                     "summary.md",
                 )
@@ -717,7 +683,7 @@ class MarketSnapshotStore:
                 candidate = self._read_json(manifest_path)
                 if (
                     isinstance(candidate, dict)
-                    and candidate.get("schema") != "market-snapshot-manifest/v3"
+                    and candidate.get("schema") != "market-snapshot-manifest/v6"
                 ):
                     continue
             self._verify_object(path, path.name)
@@ -752,6 +718,23 @@ class MarketSnapshotStore:
             "snapshots": ordered,
         }
 
+    def find_by_request_fingerprint(self, fingerprint: str) -> dict[str, Any] | None:
+        if not self.objects.exists():
+            return None
+        self._require_directory(self.objects)
+        for path in sorted(self.objects.iterdir(), key=lambda value: value.name):
+            if path.name.startswith(".") or not path.is_dir() or path.is_symlink():
+                continue
+            manifest_path = path / "manifest.json"
+            if not manifest_path.is_file() or manifest_path.is_symlink():
+                continue
+            manifest = self._read_json(manifest_path)
+            if manifest.get("schema") != "market-snapshot-manifest/v6":
+                continue
+            if manifest.get("request_fingerprint") == fingerprint:
+                return self.show(path.name)
+        return None
+
     def query(
         self,
         snapshot_id: str,
@@ -762,6 +745,13 @@ class MarketSnapshotStore:
         present: tuple[str, ...],
         missing: tuple[str, ...],
         fields: tuple[str, ...],
+        order: tuple[str, ...] = (),
+        limit: int | None = None,
+        domains: tuple[str, ...] = (),
+        profile: str | None = None,
+        budget: Decimal | None = None,
+        budget_currency: str | None = None,
+        trading_unit: int | None = None,
     ) -> dict[str, Any]:
         self._require_directory(self.objects)
         resolved = self.resolve_id(snapshot_id)
@@ -786,13 +776,28 @@ class MarketSnapshotStore:
             raise ValueError("market snapshot classification filter values must be unique")
         if invalid_indices := set(filters.get("index", ())) - set(INDEX_BENCHMARKS):
             raise ValueError(f"unknown market snapshot indices: {sorted(invalid_indices)}")
-        if any(len(values) != len(set(values)) for values in (present, missing, fields)):
+        if any(len(values) != len(set(values)) for values in (present, missing, fields, domains)):
             raise ValueError("market snapshot query field selections must be unique")
         definitions_document = self._read_json(self.objects / resolved / "definitions.json")
         definitions = definitions_document["fields"]
         field_types = {value["name"]: value["data_type"] for value in definitions}
         known = set(field_types)
-        requested = set(fields) | set(minimums) | set(maximums) | set(present) | set(missing)
+        order_fields: list[tuple[str, str]] = []
+        for item in order:
+            name, separator, direction = item.partition(":")
+            if not separator or direction not in {"asc", "desc"}:
+                raise ValueError("market snapshot order requires FIELD:asc or FIELD:desc")
+            order_fields.append((name, direction))
+        if len({name for name, _ in order_fields}) != len(order_fields):
+            raise ValueError("market snapshot order fields must be unique")
+        requested = (
+            set(fields)
+            | set(minimums)
+            | set(maximums)
+            | set(present)
+            | set(missing)
+            | {name for name, _ in order_fields}
+        )
         if unknown := requested - known:
             raise ValueError(f"unknown market snapshot fields: {sorted(unknown)}")
         numeric = {name for name, kind in field_types.items() if kind in {"decimal", "integer"}}
@@ -806,7 +811,32 @@ class MarketSnapshotStore:
             name for name in set(minimums) & set(maximums) if minimums[name] > maximums[name]
         }:
             raise ValueError(f"market snapshot minimum exceeds maximum: {sorted(invalid_bounds)}")
-        selected = tuple(sorted(fields or tuple(known)))
+        known_domains = {value["group"] for value in definitions} | {"quality"}
+        if invalid_domains := set(domains) - known_domains:
+            raise ValueError(f"unknown market snapshot domains: {sorted(invalid_domains)}")
+        profile_windows = {
+            "short-swing": {1, 5, 20, 60},
+            "swing": {5, 20, 60, 120},
+            "position": {20, 60, 120, 252},
+        }
+        if profile is not None and profile not in profile_windows:
+            raise ValueError(f"unknown market snapshot profile: {profile}")
+        selected_by_domain = {value["name"] for value in definitions if value["group"] in domains}
+        if "quality" in domains:
+            selected_by_domain.update({"price_as_of"})
+        selected_source = set(fields) if fields else selected_by_domain or known
+        if profile is not None and not fields:
+            windows = profile_windows[profile]
+            selected_source = {
+                name
+                for name in selected_source
+                if not (match := re.search(r"_(\d+)(?:d)?(?:$|_)", name))
+                or int(match.group(1)) in windows
+            }
+            selected_source.update(
+                {"name", "exchange", "country", "currency", "sector", "industry", "close"} & known
+            )
+        selected = tuple(sorted(selected_source))
 
         def matches(row: dict[str, Any]) -> bool:
             values = row["values"]
@@ -837,10 +867,34 @@ class MarketSnapshotStore:
                 name in row["missing"] for name in missing
             )
 
-        rows = []
+        rows: list[dict[str, Any]] = []
         for row in self._rows(resolved):
             if not matches(row):
                 continue
+            values_document = {
+                name: row["values"][name] for name in selected if name in row["values"]
+            }
+            purchase_projection = None
+            if budget is not None and budget_currency is not None:
+                currency = row["values"].get("currency", row["instrument"]["currency"])
+                close = row["values"].get("close")
+                unit = trading_unit or 1
+                minimum_purchase = Decimal(close) * unit if close is not None else None
+                purchase_projection = {
+                    "budget": str(budget),
+                    "budget_currency": budget_currency,
+                    "security_currency": currency,
+                    "trading_unit": unit,
+                    "minimum_purchase_amount": (
+                        str(minimum_purchase) if minimum_purchase is not None else None
+                    ),
+                    "affordable": (
+                        minimum_purchase <= budget
+                        if minimum_purchase is not None and currency == budget_currency
+                        else None
+                    ),
+                    "reason": None if currency == budget_currency else "currency_mismatch",
+                }
             rows.append(
                 {
                     "instrument_id": row["instrument_id"],
@@ -848,20 +902,54 @@ class MarketSnapshotStore:
                     "provider_symbol": row["provider_symbol"],
                     "memberships": row["memberships"],
                     "retrieved_at": row["retrieved_at"],
-                    "values": {
-                        name: row["values"][name] for name in selected if name in row["values"]
-                    },
+                    "values": values_document,
+                    "_order_values": {name: row["values"].get(name) for name, _ in order_fields},
                     "missing": {
                         name: row["missing"][name] for name in selected if name in row["missing"]
                     },
+                    **(
+                        {"purchase_projection": purchase_projection}
+                        if purchase_projection is not None
+                        else {}
+                    ),
                 }
             )
-        rows.sort(key=lambda value: value["instrument_id"])
+
+        def compare(left: dict[str, Any], right: dict[str, Any]) -> int:
+            for name, direction in order_fields:
+                left_value = left["_order_values"].get(name)
+                right_value = right["_order_values"].get(name)
+                if left_value is None or right_value is None:
+                    if left_value is right_value:
+                        continue
+                    return 1 if left_value is None else -1
+                if name in numeric:
+                    left_value, right_value = Decimal(left_value), Decimal(right_value)
+                if left_value == right_value:
+                    continue
+                result = -1 if left_value < right_value else 1
+                return result if direction == "asc" else -result
+            left_id, right_id = str(left["instrument_id"]), str(right["instrument_id"])
+            return (left_id > right_id) - (left_id < right_id)
+
+        rows.sort(key=cmp_to_key(compare))
+        total_count = len(rows)
+        if limit is not None:
+            if limit <= 0:
+                raise ValueError("market snapshot query limit must be positive")
+            rows = rows[:limit]
+        for row in rows:
+            del row["_order_values"]
         return {
-            "schema": "market-snapshot-query-result/v1",
+            "schema": "market-snapshot-query-result/v2",
             "snapshot_id": resolved,
             "matched_count": len(rows),
+            "total_matched_count": total_count,
             "fields": list(selected),
+            "profile": profile,
+            "domains": list(domains),
+            "order": list(order),
+            "limit": limit,
             "filters": {
                 "classifications": {name: list(values) for name, values in sorted(filters.items())},
                 "minimums": {name: str(value) for name, value in sorted(minimums.items())},
@@ -891,12 +979,10 @@ class MarketSnapshotStore:
         resolved = self.resolve_id(snapshot_id)
         self._require_directory(self.objects)
         self._verify_object(self.objects / resolved, resolved)
-        available_fields = {
-            value["name"]
-            for value in json.loads(
-                (self.objects / resolved / "definitions.json").read_text(encoding="utf-8")
-            )["fields"]
-        }
+        field_documents = json.loads(
+            (self.objects / resolved / "definitions.json").read_text(encoding="utf-8")
+        )["fields"]
+        available_fields = {value["name"] for value in field_documents}
         if len(fields) != len(set(fields)):
             raise ValueError("market snapshot compare fields must be unique")
         selected = tuple(sorted(fields or tuple(available_fields)))
@@ -906,8 +992,25 @@ class MarketSnapshotStore:
         missing_ids = [value for value in instrument_ids if value not in rows]
         if missing_ids:
             raise LookupError(f"instruments are not present in Market Snapshot: {missing_ids}")
+        comparison_scopes = {value["name"]: value["comparison_scope"] for value in field_documents}
+        if any(comparison_scopes[name] == "same_market_and_currency" for name in selected):
+            markets = {
+                "jp" if rows[instrument_id]["instrument"]["mic"] == "XTKS" else "us"
+                for instrument_id in instrument_ids
+            }
+            currencies = {
+                rows[instrument_id]["values"].get(
+                    "currency", rows[instrument_id]["instrument"]["currency"]
+                )
+                for instrument_id in instrument_ids
+            }
+            if len(markets) != 1 or len(currencies) != 1:
+                raise ValueError(
+                    "market snapshot comparison requires one market and currency "
+                    "for selected fields"
+                )
         return {
-            "schema": "market-snapshot-comparison/v1",
+            "schema": "market-snapshot-comparison/v2",
             "snapshot_id": resolved,
             "fields": list(selected),
             "rows": [
@@ -936,6 +1039,11 @@ class MarketSnapshotStore:
         aggregates = tuple(self._read_jsonl(path / "aggregates.jsonl"))
         market = aggregates[0]
         values = security["values"]
+        market_name = "jp" if security["instrument"]["mic"] == "XTKS" else "us"
+        market = {
+            **market,
+            "markets": {market_name: market["markets"][market_name]},
+        }
         selected = []
         for segment in aggregates[1:]:
             segment_type = segment["segment_type"]
@@ -944,6 +1052,10 @@ class MarketSnapshotStore:
                 (segment_type == "index" and segment_value in security["memberships"])
                 or (segment_type == "sector" and segment_value == values.get("sector"))
                 or (segment_type == "industry" and segment_value == values.get("industry"))
+                or (
+                    segment_type == "market-sector"
+                    and segment_value == f"{market_name}|{values.get('sector')}"
+                )
             ):
                 selected.append(segment)
         return {
@@ -1034,6 +1146,8 @@ class MarketSnapshotStore:
             "aggregates.jsonl",
             "securities.jsonl",
             "failures.jsonl",
+            "market-indicators.jsonl",
+            "explorer-data.json",
             "explorer.html",
             "summary.md",
         }
@@ -1045,7 +1159,7 @@ class MarketSnapshotStore:
         manifest = MarketSnapshotStore._read_json(path / "manifest.json")
         if (
             manifest.get("snapshot_id") != snapshot_id
-            or manifest.get("schema") != "market-snapshot-manifest/v3"
+            or manifest.get("schema") != "market-snapshot-manifest/v6"
         ):
             raise ValueError("market snapshot manifest identity is invalid")
         definitions = MarketSnapshotStore._read_json(path / "definitions.json")
@@ -1058,6 +1172,7 @@ class MarketSnapshotStore:
         quality = MarketSnapshotStore._read_json(path / "quality.json")
         rows = tuple(MarketSnapshotStore._read_jsonl(path / "securities.jsonl"))
         failures = tuple(MarketSnapshotStore._read_jsonl(path / "failures.jsonl"))
+        market_indicators = tuple(MarketSnapshotStore._read_jsonl(path / "market-indicators.jsonl"))
         summary = {
             "schema": "market-snapshot-summary/v1",
             "generated_at": market["generated_at"],
@@ -1088,6 +1203,7 @@ class MarketSnapshotStore:
             "aggregates": aggregates,
             "quality": quality,
             "failures": failures,
+            "market_indicators": market_indicators,
         }
         if hashlib.sha256(_json_bytes(semantic)).hexdigest() != snapshot_id:
             raise ValueError("market snapshot content identity is invalid")
@@ -1102,13 +1218,19 @@ class MarketSnapshotStore:
             summary,
         ):
             raise ValueError("market snapshot summary projection is invalid")
-        field_values = tuple(MatrixField(**value) for value in fields)
-        with tempfile.TemporaryDirectory(prefix="marketsieve-snapshot-verify-") as directory:
-            temporary = Path(directory)
-            expected_html = temporary / "explorer.html"
-            MarketSnapshotStore._write_html(expected_html, manifest, summary, field_values, rows)
-            if (path / "explorer.html").read_bytes() != expected_html.read_bytes():
-                raise ValueError("market snapshot HTML projection is invalid")
+        explorer_data = MarketSnapshotStore._read_json(path / "explorer-data.json")
+        expected_explorer_data = build_snapshot_explorer_data(
+            manifest,
+            summary,
+            fields,
+            rows,
+            quality,
+            market_indicators,
+        )
+        if explorer_data != expected_explorer_data:
+            raise ValueError("market snapshot Explorer data projection is invalid")
+        if (path / "explorer.html").read_text(encoding="utf-8") != render_explorer(explorer_data):
+            raise ValueError("market snapshot HTML projection is invalid")
 
     @staticmethod
     def _read_jsonl(path: Path) -> Iterable[dict[str, Any]]:

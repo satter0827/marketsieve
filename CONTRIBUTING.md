@@ -16,7 +16,7 @@ Create short-lived branches from `develop` and open pull requests back to `devel
 name such as `feature/instrument-model`, `fix/invalid-timezone`, or `docs/market-semantics`.
 Repository coding agents use their required agent-specific prefix.
 
-Normal pull requests are squash-merged by automation after `Develop Gate` and `Evidence Gate` succeed
+Normal pull requests are squash-merged by automation after `Develop Gate` and `Semantic Review` succeed
 and unresolved conversations are closed. A human decision is required only when a finding depends
 on product meaning or another non-automatable tradeoff. Direct pushes to `develop` and `main` are
 not part of the normal workflow.
@@ -30,14 +30,14 @@ bundle. CI retains the bundle for 30 days. The bundle is input to code review ra
 that code review occurred. The machine-readable `review.json` is authoritative; `summary.md` is a
 deterministic projection for reviewers.
 
-Before opening a pull request, finish focused checks, run `make evidence`, and review the final diff
-with `codex review --base origin/develop`. Resolve the findings as one batch, rerun affected checks
-and the complete gate, and freeze the reviewed commit. After a clean review, publish the commit-bound
-status with `make review-attest REVIEWED_SHA=<full-commit-sha>`. The command rejects a different or
-dirty HEAD and invalid evidence. CI verifies that exact commit; do not start a new asynchronous code
-review after CI begins. A code change returns the work to the pre-PR review sequence instead of
-extending the same CI repair loop. An environment-only failure may rerun the unchanged commit after
-its cause is identified.
+Before opening a pull request, finish focused checks and create the draft PR so Static, Tests, and
+Package can run in parallel. Review the full diff once. After changes, create a delta bundle with
+`make evidence PREVIOUS_REVIEWED_SHA=<full-commit-sha>` and review only that proven descendant.
+Conflict resolution or history replacement that breaks ancestry returns review to the full PR diff.
+After a clean review, publish `Semantic Review` with
+`make review-attest REVIEWED_SHA=<full-commit-sha>`. CI tests GitHub's virtual merge result without
+rewriting the feature branch. The attestation command rejects a different or dirty HEAD and invalid
+evidence.
 
 ## Change expectations
 
