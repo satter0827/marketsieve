@@ -287,7 +287,7 @@ def _projection_documents(
                     }
                 )
     failure_instruments = {failure["instrument_id"] for failure in failures}
-    completely_failed = {
+    completely_failed = failure_instruments & {
         row["instrument_id"] for row in row_documents if "close" not in row["values"]
     }
     failure_groups: dict[str, dict[str, int]] = {key: {} for key in ("stage", "reason", "field")}

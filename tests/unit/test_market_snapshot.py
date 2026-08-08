@@ -165,6 +165,10 @@ def test_snapshot_is_self_contained_without_spreadsheets(tmp_path: Path) -> None
     assert "https://" not in (root / "explorer.html").read_text()
     assert "securities.jsonl" not in (root / "explorer.html").read_text()
     assert "fetch('explorer-data.json'" in (root / "explorer.html").read_text()
+    html = (root / "explorer.html").read_text()
+    assert "sectors.indexOf(d.y)" in html
+    assert "Math.floor(i/2)" not in html
+    assert 'return`<span class="meta"' not in html
     explorer_data = json.loads((root / "explorer-data.json").read_text())
     assert explorer_data["schema"] == "explorer-data/v2"
     assert "securities" not in explorer_data
@@ -490,6 +494,9 @@ def test_market_service_builds_explicit_company_only_scope(tmp_path: Path) -> No
         for line in Path(document["artifacts"]["failures.jsonl"]).read_text().splitlines()
     ]
     assert not any(failure["field"] == "close" for failure in failures)
+    quality = json.loads(Path(document["artifacts"]["quality.json"]).read_text())
+    assert quality["failures"]["affected_security_count"] == 0
+    assert quality["failures"]["complete_failure_security_count"] == 0
     assert service.show("latest")["snapshot_id"] == document["snapshot_id"]
     schema = json.loads(
         (Path(__file__).parents[2] / "schemas/market-snapshot/v7/schema.json").read_text()

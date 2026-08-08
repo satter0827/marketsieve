@@ -508,8 +508,8 @@ def check_all(jobs: int) -> None:
     tasks = (
         Task("quality", check_quality_and_schemas),
         Task("tests", partial(check_tests, path)),
-        Task("package", partial(check_package, path, jobs=jobs)),
-        Task("smoke", partial(check_smoke, path, jobs=jobs)),
+        Task("package", partial(check_package, path, jobs=1)),
+        Task("smoke", partial(check_smoke, path, jobs=1)),
     )
     try:
         timings = run_tasks(tasks, jobs=jobs)

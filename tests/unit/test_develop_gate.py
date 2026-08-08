@@ -57,8 +57,12 @@ def test_complete_gate_scans_before_and_after_execution(
     monkeypatch.setattr(develop_gate, "check_quality", lambda: events.append("quality"))
     monkeypatch.setattr(develop_gate, "check_tests", lambda _path: events.append("tests"))
     monkeypatch.setattr(develop_gate, "validate_schemas", lambda: events.append("schemas"))
-    monkeypatch.setattr(develop_gate, "check_smoke", lambda _path, jobs: events.append("smoke"))
-    monkeypatch.setattr(develop_gate, "check_package", lambda _path, jobs: events.append("package"))
+    monkeypatch.setattr(
+        develop_gate, "check_smoke", lambda _path, jobs: events.append(f"smoke:{jobs}")
+    )
+    monkeypatch.setattr(
+        develop_gate, "check_package", lambda _path, jobs: events.append(f"package:{jobs}")
+    )
     monkeypatch.setattr(develop_gate, "_write_timings", lambda *_: events.append("timings"))
 
     develop_gate.check_all(1)
@@ -69,11 +73,29 @@ def test_complete_gate_scans_before_and_after_execution(
         "quality",
         "schemas",
         "tests",
-        "package",
-        "smoke",
+        "package:1",
+        "smoke:1",
         "timings",
         "secrets",
     ]
+
+
+def test_parallel_gate_keeps_nested_subprocess_groups_serial(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    nested_jobs: list[int] = []
+    monkeypatch.setattr(develop_gate, "evidence_dir", lambda: tmp_path)
+    monkeypatch.setattr(develop_gate, "reset_evidence", lambda _: None)
+    monkeypatch.setattr(develop_gate, "check_secrets", lambda _: None)
+    monkeypatch.setattr(develop_gate, "check_quality_and_schemas", lambda: None)
+    monkeypatch.setattr(develop_gate, "check_tests", lambda _: None)
+    monkeypatch.setattr(develop_gate, "check_package", lambda _path, jobs: nested_jobs.append(jobs))
+    monkeypatch.setattr(develop_gate, "check_smoke", lambda _path, jobs: nested_jobs.append(jobs))
+    monkeypatch.setattr(develop_gate, "_write_timings", lambda *_: None)
+
+    develop_gate.check_all(4)
+
+    assert nested_jobs == [1, 1]
 
 
 def test_test_gate_runs_once_and_enforces_coverage_threshold(
