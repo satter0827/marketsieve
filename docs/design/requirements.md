@@ -2,58 +2,68 @@
 
 ## Product objective
 
-MarketSieve gives a human or external analysis agent a broad, reproducible view of Japanese and U.S.
-equities before any security-specific research. The primary evidence is a complete rectangular
-matrix, not a candidate list. The product informs research; it does not choose securities or place
-orders.
+MarketSieve gives a human or external agent a broad, reproducible view of Japanese and U.S. equities
+before focused research. The primary evidence is a complete market cross-section, not a candidate
+list. The product informs research; it does not choose securities or place orders.
 
-## Market matrix
+## Market Snapshot
 
-- **MAT-01:** One run covers the built-in Nikkei 225, TOPIX 500, S&P 500, Dow 30, and Nasdaq-100
-  constituent assets selected by configuration.
-- **MAT-02:** Securities are deduplicated by exchange-qualified identity and retain every index
-  membership. Every constituent appears once whether acquisition succeeds or fails.
-- **MAT-03:** yfinance is the only runtime matrix source and requires no account, key, registration,
-  or source fallback.
-- **MAT-04:** Every row has the same field set. Each field has either a provider-derived or
-  deterministically calculated value, or one stable missing-reason code.
-- **MAT-05:** Calculations cover identity, classification, price, size, return, trend, momentum,
-  risk, liquidity, index-relative behavior, financial statements, growth, profitability, safety,
-  and valuation.
-- **MAT-06:** The system never imputes, zero-fills, clips, replaces outliers, scores, ranks, or emits
+- **MKT-01:** One run covers configured built-in Nikkei 225, TOPIX 500, S&P 500, Dow 30, and
+  Nasdaq-100 constituents.
+- **MKT-02:** Securities are deduplicated by exchange-qualified identity, retain every membership,
+  and appear once whether acquisition succeeds or fails.
+- **MKT-03:** yfinance is the only runtime source and requires no account, key, registration, or
+  provider fallback.
+- **MKT-04:** Every security has the same field set. Each field has one value or stable missing code.
+- **MKT-05:** Calculations cover identity, classification, price, size, return, trend, momentum,
+  risk, liquidity, relative behavior, financials, growth, profitability, safety, and valuation.
+- **MKT-06:** The system never imputes, zero-fills, clips, replaces outliers, scores, ranks, or emits
   a trading recommendation.
-- **MAT-07:** `securities.jsonl` is authoritative. CSV, self-contained HTML, summaries, and Markdown
-  are deterministic projections and no Excel-format artifact is created.
-- **MAT-08:** Matrix identity commits to the constituent assets, configuration, field definitions,
-  source version, input snapshot, rows, summaries, and failures.
-- **MAT-09:** Interrupted request state is separate from immutable objects. Resume accepts only the
-  identical request fingerprint.
-- **MAT-10:** A ready matrix meets 95% overall and 90% per-index price coverage by default. Failure
-  to meet a threshold remains visible and never triggers another provider.
+- **MKT-07:** `securities.jsonl` is authoritative. CSV, self-contained HTML, JSON summaries, and
+  Markdown are projections. No Excel artifact is created.
+- **MKT-08:** Snapshot identity commits to assets, configuration, definitions, source evidence,
+  rows, aggregates, quality, failures, and artifact inventory.
+- **MKT-09:** Interrupted state is separate. Resume accepts only the identical fingerprint and date.
+- **MKT-10:** Default readiness requires 95% overall and 90% per-index price coverage. Failure is
+  visible and never triggers another provider.
+
+## Security Research Pack
+
+- **RES-01:** Focused research accepts only a security present in a selected verified Snapshot.
+- **RES-02:** It acquires adjusted daily price history, retrieval-time company facts, annual and
+  quarterly financial facts, dividends, splits, earnings events, and exact failures from yfinance.
+- **RES-03:** The pack preserves the selected Snapshot plus matching market, index, sector, and
+  industry context without copying the full Snapshot.
+- **RES-04:** JSON and JSONL evidence is authoritative. README, Markdown, and self-contained HTML are
+  verified projections. The directory has no external file reference.
+- **RES-05:** Missing publication timestamps are not guessed. Affected facts are explicitly marked
+  as known at retrieval rather than historical point-in-time evidence.
+- **RES-06:** The pack contains no prompt, prescribed analysis sequence, model output, score,
+  ranking, recommendation, or order instruction.
+- **RES-07:** Transport is outside the use case. A future MCP adapter reuses the same typed service
+  and schemas and cannot own provider calls or persistence.
 
 ## Stored views and portable context
 
-- **VIEW-01:** `matrix list`, `matrix show`, `matrix query`, `matrix row`, and `matrix compare` verify and read stored matrix data
-  without network access or indicator recalculation.
-- **VIEW-02:** One matrix object is self-contained and transferable. Its README explains only the
-  data contract and file roles; no agent prompt, reasoning sequence, question, or conclusion format
-  is embedded.
-- **VIEW-03:** `summary.md` is a neutral projection of aggregate evidence. External interpretation
-  is not written back to an immutable matrix object.
+- **VIEW-01:** `market list`, `show`, `query`, `security`, and `compare`, plus `research list` and
+  `show`, verify saved data without network access or recalculation.
+- **VIEW-02:** Each object is self-contained and transferable. README explains data and file roles
+  without embedding an agent prompt, reasoning sequence, question, or conclusion format.
+- **VIEW-03:** External interpretation is never written into immutable evidence objects.
 
-## Maintained non-matrix capabilities
+## Maintained capabilities
 
-- **FND-01:** The public SDK owns pure domain and calculation rules and has no CLI, configuration,
-  storage, network, delivery, database, or model-provider dependency.
-- **FND-02:** Extension contracts and installed adapters preserve exact request and provenance
-  boundaries. Generic source and snapshot capabilities remain available for non-matrix workflows.
-- **OPS-01:** Portfolio import, watchlists, daily and weekly reports, and deterministic experiments
-  remain supported and independent from broad matrix generation.
-- **OPS-02:** Generated state remains below `.marketsieve`; private holdings and live generated
-  reports are never committed.
+- **FND-01:** The SDK has no CLI, configuration, storage, network, delivery, database, or model
+  dependency.
+- **FND-02:** Extension contracts preserve exact requests and provenance. Generic source and
+  snapshot capabilities remain independent.
+- **OPS-01:** Portfolio, watchlist, daily, weekly, and experiment workflows remain supported and
+  separate from broad-market and focused-research generation.
+- **OPS-02:** Generated state stays below `.marketsieve`; private holdings and live data are not
+  committed.
 
 ## Exclusions
 
 MarketSieve does not execute an LLM, browse news, send messages, schedule unattended work, manage
-credentials, place orders, or automatically adopt an analysis conclusion. Existing legacy local
-files are not deleted, migrated, or read through removed schemas.
+credentials, place orders, or adopt an investment conclusion. Pre-0.11 market objects are not
+migrated or read by current commands.

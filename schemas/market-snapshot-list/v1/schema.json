@@ -1,23 +1,23 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:marketsieve:schema:market-matrix-list:1.0.0",
-  "title": "MarketSieve persisted market matrix list",
+  "$id": "urn:marketsieve:schema:market-snapshot-list:1.0.0",
+  "title": "MarketSieve persisted Market Snapshot list",
   "type": "object",
-  "required": ["schema", "matrices"],
+  "required": ["schema", "snapshots"],
   "properties": {
-    "schema": {"const": "market-matrix-list/v1"},
-    "matrices": {
+    "schema": {"const": "market-snapshot-list/v1"},
+    "snapshots": {
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["matrix_id", "created_at", "row_count", "field_count", "coverage", "quality_status"],
+        "required": ["snapshot_id", "created_at", "row_count", "field_count", "coverage", "price_requirements_met"],
         "properties": {
-          "matrix_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "snapshot_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
           "created_at": {"type": "string", "format": "date-time"},
           "row_count": {"type": "integer", "minimum": 1},
           "field_count": {"type": "integer", "minimum": 1},
           "coverage": {"$ref": "#/$defs/coverage"},
-          "quality_status": {"enum": ["ready", "partial"]}
+          "price_requirements_met": {"type": "boolean"}
         },
         "additionalProperties": false
       }

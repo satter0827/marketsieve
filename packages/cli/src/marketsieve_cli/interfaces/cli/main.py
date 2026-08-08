@@ -18,55 +18,74 @@ from marketsieve_cli.bootstrap import (
     build_daily_brief_service,
     build_diagnostics_service,
     build_experiment_service,
+    build_security_research,
     build_snapshot_service,
     build_weekly_brief_service,
-    compare_market_matrix_rows,
+    compare_market_snapshot_securities,
     import_portfolio,
     list_decision_reports,
-    list_market_matrices,
+    list_market_snapshots,
+    list_security_research,
     project_decision_report,
-    query_market_matrix,
+    query_market_snapshot,
     read_decision_report,
-    read_market_matrix_row,
+    read_market_snapshot_security,
     read_portfolio,
     read_watchlist,
-    refresh_market_matrix,
+    refresh_market_snapshot,
     remove_watchlist_instrument,
     render_decision_report,
     sdk_version,
-    show_market_matrix,
+    show_market_snapshot,
+    show_security_research,
 )
 
 OUTPUT_CHOICES = ("auto", "rich", "text", "json")
-MATRIX_INDEX_CHOICES = ("dow30", "nasdaq100", "nikkei225", "sp500", "topix500")
-CAPABILITIES_SCHEMA_VERSION = "3.0.0"
+MARKET_INDEX_CHOICES = ("dow30", "nasdaq100", "nikkei225", "sp500", "topix500")
+CAPABILITIES_SCHEMA_VERSION = "4.0.0"
 COMMAND_METADATA: dict[str, dict[str, Any]] = {
-    "matrix refresh": {
-        "output_schema": "urn:marketsieve:schema:market-matrix:2.0.0",
+    "market refresh": {
+        "output_schema": "urn:marketsieve:schema:market-snapshot:2.0.0",
         "effects": {
             "network": True,
             "secrets": False,
-            "optional_writes": ["matrix_run", "market_matrix"],
+            "optional_writes": ["market_snapshot_run", "market_snapshot"],
         },
     },
-    "matrix show": {
-        "output_schema": "urn:marketsieve:schema:market-matrix:2.0.0",
+    "market show": {
+        "output_schema": "urn:marketsieve:schema:market-snapshot:2.0.0",
         "effects": {"network": False, "secrets": False, "optional_writes": []},
     },
-    "matrix list": {
-        "output_schema": "urn:marketsieve:schema:market-matrix-list:1.0.0",
+    "market list": {
+        "output_schema": "urn:marketsieve:schema:market-snapshot-list:1.0.0",
         "effects": {"network": False, "secrets": False, "optional_writes": []},
     },
-    "matrix query": {
-        "output_schema": "urn:marketsieve:schema:matrix-query-result:1.0.0",
+    "market query": {
+        "output_schema": "urn:marketsieve:schema:market-snapshot-query-result:1.0.0",
         "effects": {"network": False, "secrets": False, "optional_writes": []},
     },
-    "matrix row": {
-        "output_schema": "urn:marketsieve:schema:market-matrix-row:1.0.0",
+    "market security": {
+        "output_schema": "urn:marketsieve:schema:market-snapshot-security-result:1.0.0",
         "effects": {"network": False, "secrets": False, "optional_writes": []},
     },
-    "matrix compare": {
-        "output_schema": "urn:marketsieve:schema:market-matrix-comparison:1.0.0",
+    "market compare": {
+        "output_schema": "urn:marketsieve:schema:market-snapshot-comparison:1.0.0",
+        "effects": {"network": False, "secrets": False, "optional_writes": []},
+    },
+    "research build": {
+        "output_schema": "urn:marketsieve:schema:security-research:1.0.0",
+        "effects": {
+            "network": True,
+            "secrets": False,
+            "optional_writes": ["security_research"],
+        },
+    },
+    "research list": {
+        "output_schema": "urn:marketsieve:schema:security-research-list:1.0.0",
+        "effects": {"network": False, "secrets": False, "optional_writes": []},
+    },
+    "research show": {
+        "output_schema": "urn:marketsieve:schema:security-research:1.0.0",
         "effects": {"network": False, "secrets": False, "optional_writes": []},
     },
     "watchlist add": {
@@ -94,7 +113,7 @@ COMMAND_METADATA: dict[str, dict[str, Any]] = {
         "effects": {"network": False, "secrets": False, "optional_writes": []},
     },
     "capabilities": {
-        "output_schema": "urn:marketsieve:schema:capabilities-result:3.0.0",
+        "output_schema": "urn:marketsieve:schema:capabilities-result:4.0.0",
         "effects": {"network": False, "secrets": False, "optional_writes": []},
     },
     "doctor": {
@@ -244,57 +263,57 @@ def doctor(context: click.Context, output_mode: str) -> None:
 
 
 @main.group()
-def matrix() -> None:
-    """Build and inspect the broad yfinance equity matrix."""
+def market() -> None:
+    """Build and inspect broad yfinance Market Snapshots."""
 
 
-@matrix.command("refresh")
+@market.command("refresh")
 @click.option("--resume", "run_id", default=None, help="Resume one matching interrupted run.")
 @output_option
 @click.pass_context
-def matrix_refresh(context: click.Context, run_id: str | None, output_mode: str) -> None:
+def market_refresh(context: click.Context, run_id: str | None, output_mode: str) -> None:
     """Acquire all configured index constituents through yfinance."""
 
     console = _console(context, output_mode)
     try:
-        document = refresh_market_matrix(context.obj["config_path"], resume=run_id)
+        document = refresh_market_snapshot(context.obj["config_path"], resume=run_id)
     except (LookupError, OSError, RuntimeError, TypeError, ValueError) as error:
-        console.emit_error("matrix_refresh_failed", str(error))
+        console.emit_error("market_refresh_failed", str(error))
         raise click.exceptions.Exit(1) from None
-    console.emit_document(document, title="Market matrix")
-    if document["quality_status"] != "ready":
+    console.emit_document(document, title="Market Snapshot")
+    if not document["price_requirements_met"]:
         raise click.exceptions.Exit(1)
 
 
-@matrix.command("show")
-@click.argument("matrix_id", default="latest")
+@market.command("show")
+@click.argument("snapshot_id", default="latest")
 @output_option
 @click.pass_context
-def matrix_show(context: click.Context, matrix_id: str, output_mode: str) -> None:
-    """Show one persisted matrix and its artifact paths."""
+def market_show(context: click.Context, snapshot_id: str, output_mode: str) -> None:
+    """Show one persisted Market Snapshot and its artifact paths."""
 
     console = _console(context, output_mode)
     try:
-        document = show_market_matrix(context.obj["config_path"], matrix_id)
+        document = show_market_snapshot(context.obj["config_path"], snapshot_id)
     except (LookupError, OSError, TypeError, ValueError) as error:
-        console.emit_error("matrix_show_failed", str(error))
+        console.emit_error("market_show_failed", str(error))
         raise click.exceptions.Exit(1) from None
-    console.emit_document(document, title="Market matrix")
+    console.emit_document(document, title="Market Snapshot")
 
 
-@matrix.command("list")
+@market.command("list")
 @output_option
 @click.pass_context
-def matrix_list(context: click.Context, output_mode: str) -> None:
-    """List verified persisted matrices, newest first."""
+def market_list(context: click.Context, output_mode: str) -> None:
+    """List verified persisted Market Snapshots, newest first."""
 
     console = _console(context, output_mode)
     try:
-        document = list_market_matrices(context.obj["config_path"])
+        document = list_market_snapshots(context.obj["config_path"])
     except (LookupError, OSError, TypeError, ValueError) as error:
-        console.emit_error("matrix_list_failed", str(error))
+        console.emit_error("market_list_failed", str(error))
         raise click.exceptions.Exit(1) from None
-    console.emit_document(document, title="Market matrices")
+    console.emit_document(document, title="Market Snapshots")
 
 
 def _numeric_bounds(values: tuple[str, ...], option: str) -> dict[str, Decimal]:
@@ -315,10 +334,10 @@ def _numeric_bounds(values: tuple[str, ...], option: str) -> dict[str, Decimal]:
     return bounds
 
 
-@matrix.command("query")
-@click.option("--matrix", "matrix_id", default="latest", show_default=True)
+@market.command("query")
+@click.option("--snapshot", "snapshot_id", default="latest", show_default=True)
 @click.option("--market", multiple=True, type=click.Choice(("jp", "us")))
-@click.option("--index", "indices", multiple=True, type=click.Choice(MATRIX_INDEX_CHOICES))
+@click.option("--index", "indices", multiple=True, type=click.Choice(MARKET_INDEX_CHOICES))
 @click.option("--mic", multiple=True)
 @click.option("--exchange", multiple=True)
 @click.option("--country", multiple=True)
@@ -332,9 +351,9 @@ def _numeric_bounds(values: tuple[str, ...], option: str) -> dict[str, Decimal]:
 @click.option("--fields", multiple=True)
 @output_option
 @click.pass_context
-def matrix_query(
+def market_query(
     context: click.Context,
-    matrix_id: str,
+    snapshot_id: str,
     market: tuple[str, ...],
     indices: tuple[str, ...],
     mic: tuple[str, ...],
@@ -350,13 +369,13 @@ def matrix_query(
     fields: tuple[str, ...],
     output_mode: str,
 ) -> None:
-    """Filter one persisted matrix without network access or recalculation."""
+    """Filter one persisted Market Snapshot without network access or recalculation."""
 
     console = _console(context, output_mode)
     try:
-        document = query_market_matrix(
+        document = query_market_snapshot(
             context.obj["config_path"],
-            matrix_id,
+            snapshot_id,
             filters={
                 name: values
                 for name, values in {
@@ -378,40 +397,42 @@ def matrix_query(
             fields=fields,
         )
     except (LookupError, OSError, TypeError, ValueError) as error:
-        console.emit_error("matrix_query_failed", str(error))
+        console.emit_error("market_query_failed", str(error))
         raise click.exceptions.Exit(1) from None
-    console.emit_document(document, title="Market matrix query")
+    console.emit_document(document, title="Market Snapshot query")
 
 
-@matrix.command("row")
+@market.command("security")
 @click.argument("instrument_id")
-@click.option("--matrix", "matrix_id", default="latest", show_default=True)
+@click.option("--snapshot", "snapshot_id", default="latest", show_default=True)
 @output_option
 @click.pass_context
-def matrix_row(
-    context: click.Context, instrument_id: str, matrix_id: str, output_mode: str
+def market_security(
+    context: click.Context, instrument_id: str, snapshot_id: str, output_mode: str
 ) -> None:
-    """Read one computed security row without network access."""
+    """Read one computed security without network access."""
 
     console = _console(context, output_mode)
     try:
-        document = read_market_matrix_row(context.obj["config_path"], matrix_id, instrument_id)
+        document = read_market_snapshot_security(
+            context.obj["config_path"], snapshot_id, instrument_id
+        )
     except (LookupError, OSError, TypeError, ValueError) as error:
-        console.emit_error("matrix_row_failed", str(error))
+        console.emit_error("market_security_failed", str(error))
         raise click.exceptions.Exit(1) from None
-    console.emit_document(document, title="Market matrix row")
+    console.emit_document(document, title="Market Snapshot security")
 
 
-@matrix.command("compare")
+@market.command("compare")
 @click.argument("instrument_ids", nargs=-1, required=True)
-@click.option("--matrix", "matrix_id", default="latest", show_default=True)
+@click.option("--snapshot", "snapshot_id", default="latest", show_default=True)
 @click.option("--fields", "fields", multiple=True, help="Select one computed field per option.")
 @output_option
 @click.pass_context
-def matrix_compare(
+def market_compare(
     context: click.Context,
     instrument_ids: tuple[str, ...],
-    matrix_id: str,
+    snapshot_id: str,
     fields: tuple[str, ...],
     output_mode: str,
 ) -> None:
@@ -419,13 +440,94 @@ def matrix_compare(
 
     console = _console(context, output_mode)
     try:
-        document = compare_market_matrix_rows(
-            context.obj["config_path"], matrix_id, instrument_ids, fields
+        document = compare_market_snapshot_securities(
+            context.obj["config_path"], snapshot_id, instrument_ids, fields
         )
     except (LookupError, OSError, TypeError, ValueError) as error:
-        console.emit_error("matrix_compare_failed", str(error))
+        console.emit_error("market_compare_failed", str(error))
         raise click.exceptions.Exit(1) from None
-    console.emit_document(document, title="Market matrix comparison")
+    console.emit_document(document, title="Market Snapshot comparison")
+
+
+@main.group()
+def research() -> None:
+    """Build and inspect yfinance research for one Snapshot security."""
+
+
+@research.command("build")
+@click.argument("instrument_id")
+@click.option("--snapshot", "snapshot_id", default="latest", show_default=True)
+@output_option
+@click.pass_context
+def research_build(
+    context: click.Context, instrument_id: str, snapshot_id: str, output_mode: str
+) -> None:
+    """Acquire detailed evidence for one security in a Market Snapshot."""
+
+    console = _console(context, output_mode)
+    try:
+        document = build_security_research(context.obj["config_path"], snapshot_id, instrument_id)
+    except (LookupError, OSError, RuntimeError, TypeError, ValueError) as error:
+        console.emit_error("research_build_failed", str(error))
+        raise click.exceptions.Exit(1) from None
+    console.emit_document(document, title="Security Research Pack")
+    if not document["price_requirements_met"]:
+        raise click.exceptions.Exit(1)
+
+
+@research.command("list")
+@click.option("--snapshot", "snapshot_id", default=None)
+@click.option("--security", "instrument_id", default=None)
+@output_option
+@click.pass_context
+def research_list(
+    context: click.Context,
+    snapshot_id: str | None,
+    instrument_id: str | None,
+    output_mode: str,
+) -> None:
+    """List locally stored Security Research Packs."""
+
+    console = _console(context, output_mode)
+    try:
+        document = list_security_research(
+            context.obj["config_path"],
+            snapshot_id=snapshot_id,
+            instrument_id=instrument_id,
+        )
+    except (LookupError, OSError, TypeError, ValueError) as error:
+        console.emit_error("research_list_failed", str(error))
+        raise click.exceptions.Exit(1) from None
+    console.emit_document(document, title="Security Research Packs")
+
+
+@research.command("show")
+@click.argument("research_id", default="latest")
+@click.option("--snapshot", "snapshot_id", default="latest", show_default=True)
+@click.option("--security", "instrument_id", default=None)
+@output_option
+@click.pass_context
+def research_show(
+    context: click.Context,
+    research_id: str,
+    snapshot_id: str,
+    instrument_id: str | None,
+    output_mode: str,
+) -> None:
+    """Show one exact or security-specific latest research pack."""
+
+    console = _console(context, output_mode)
+    try:
+        document = show_security_research(
+            context.obj["config_path"],
+            research_id,
+            snapshot_id=snapshot_id,
+            instrument_id=instrument_id,
+        )
+    except (LookupError, OSError, TypeError, ValueError) as error:
+        console.emit_error("research_show_failed", str(error))
+        raise click.exceptions.Exit(1) from None
+    console.emit_document(document, title="Security Research Pack")
 
 
 @main.group()

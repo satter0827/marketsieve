@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:marketsieve:schema:security-research-manifest:1.0.0",
+  "title": "MarketSieve Security Research manifest",
+  "type": "object",
+  "required": ["schema", "research_id", "snapshot_id", "instrument_id", "provider_symbol", "created_at", "source", "request", "price_requirements_met", "artifacts"],
+  "properties": {
+    "schema": {"const": "security-research-manifest/v1"},
+    "research_id": {"$ref": "#/$defs/digest"},
+    "snapshot_id": {"$ref": "#/$defs/digest"},
+    "instrument_id": {"$ref": "#/$defs/instrumentId"},
+    "provider_symbol": {"type": "string", "minLength": 1},
+    "created_at": {"type": "string", "format": "date-time"},
+    "source": {"$ref": "#/$defs/source"},
+    "request": {"$ref": "#/$defs/request"},
+    "price_requirements_met": {"type": "boolean"},
+    "artifacts": {"$ref": "#/$defs/artifacts"}
+  },
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "instrumentId": {"type": "string", "pattern": "^[A-Z0-9]{4}:[A-Z0-9][A-Z0-9.-]*$"},
+    "source": {
+      "type": "object",
+      "required": ["name", "version", "response_hash"],
+      "properties": {
+        "name": {"const": "yfinance"},
+        "version": {"type": "string", "minLength": 1},
+        "response_hash": {"$ref": "#/$defs/digest"}
+      },
+      "additionalProperties": false
+    },
+    "request": {
+      "type": "object",
+      "required": ["source_profile", "start", "end", "adjustment", "minimum_price_observations", "timeout_seconds", "max_retries", "retry_base_seconds"],
+      "properties": {
+        "source_profile": {"const": "market-yfinance"},
+        "start": {"type": "string", "format": "date"},
+        "end": {"type": "string", "format": "date"},
+        "adjustment": {"const": "adjusted"},
+        "minimum_price_observations": {"type": "integer", "minimum": 1},
+        "timeout_seconds": {"type": "integer", "minimum": 1},
+        "max_retries": {"type": "integer", "minimum": 1},
+        "retry_base_seconds": {"type": "number", "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "artifacts": {
+      "type": "object",
+      "required": ["README.md", "manifest.json", "definitions.json", "company.json", "market-context.json", "prices.jsonl", "financials.jsonl", "events.jsonl", "failures.jsonl", "quality.json", "summary.md", "explorer.html"],
+      "properties": {
+        "README.md": {"type": "string", "minLength": 1},
+        "manifest.json": {"type": "string", "minLength": 1},
+        "definitions.json": {"type": "string", "minLength": 1},
+        "company.json": {"type": "string", "minLength": 1},
+        "market-context.json": {"type": "string", "minLength": 1},
+        "prices.jsonl": {"type": "string", "minLength": 1},
+        "financials.jsonl": {"type": "string", "minLength": 1},
+        "events.jsonl": {"type": "string", "minLength": 1},
+        "failures.jsonl": {"type": "string", "minLength": 1},
+        "quality.json": {"type": "string", "minLength": 1},
+        "summary.md": {"type": "string", "minLength": 1},
+        "explorer.html": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

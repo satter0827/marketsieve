@@ -169,7 +169,7 @@ def check_smoke(path: Path) -> None:
         "snapshot-result": json.loads(snapshot_first.stdout),
     }
     for name, document in documents.items():
-        major = "v3" if name == "capabilities-result" else "v1"
+        major = "v4" if name == "capabilities-result" else "v1"
         schema = json.loads(
             (ROOT / f"schemas/{name}/{major}/schema.json").read_text(encoding="utf-8")
         )

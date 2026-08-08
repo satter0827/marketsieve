@@ -1,19 +1,14 @@
 {
   "version": "0.2.0",
   "configurations": [
-    {"name": "01 First Run: Create Configuration", "type": "node-terminal", "request": "launch", "command": "make setup-config", "cwd": "${workspaceFolder}"},
-    {"name": "02 First Run: Import Rakuten Portfolio", "type": "node-terminal", "request": "launch", "command": "make portfolio-import BROKER=rakuten", "cwd": "${workspaceFolder}", "env": {"PORTFOLIO": "${input:portfolioPath}"}},
-    {"name": "03 Daily Use: Check Readiness", "type": "node-terminal", "request": "launch", "command": "make daily-status", "cwd": "${workspaceFolder}"},
-    {"name": "10 Market Matrix: Refresh All Indices (Network)", "type": "node-terminal", "request": "launch", "command": "make market-matrix", "cwd": "${workspaceFolder}"},
-    {"name": "30 Watchlist: Add Instrument", "type": "node-terminal", "request": "launch", "command": "make watchlist-add", "cwd": "${workspaceFolder}", "env": {"INSTRUMENT": "${input:instrument}"}},
-    {"name": "40 Daily Use: Analyze JP Watchlist (Network)", "type": "node-terminal", "request": "launch", "command": "make daily-jp", "cwd": "${workspaceFolder}"},
-    {"name": "50 Daily Use: Analyze US Watchlist (Network)", "type": "node-terminal", "request": "launch", "command": "make daily-us", "cwd": "${workspaceFolder}"},
-    {"name": "60 Weekly Use: Build Brief", "type": "node-terminal", "request": "launch", "command": "make weekly", "cwd": "${workspaceFolder}"},
-    {"name": "90 Debug: CLI Command", "type": "debugpy", "request": "launch", "module": "marketsieve_cli", "args": "${command:pickArgs}", "env": {"PYTHONPYCACHEPREFIX": "${workspaceFolder}/.marketsieve/cache/python"}, "console": "integratedTerminal", "justMyCode": true},
-    {"name": "91 Debug: JP Daily Analysis", "type": "debugpy", "request": "launch", "module": "marketsieve_cli", "args": ["--config", "marketsieve.toml", "daily", "jp"], "env": {"PYTHONPYCACHEPREFIX": "${workspaceFolder}/.marketsieve/cache/python"}, "console": "integratedTerminal", "justMyCode": true}
+    {"name": "01 Market: Show Latest Snapshot", "type": "node-terminal", "request": "launch", "command": "make market-show", "cwd": "${workspaceFolder}"},
+    {"name": "02 Market: Refresh Snapshot (Network)", "type": "node-terminal", "request": "launch", "command": "make market-snapshot", "cwd": "${workspaceFolder}"},
+    {"name": "03 Market: Query Snapshot", "type": "node-terminal", "request": "launch", "command": "make market-query MARKET=${input:market}", "cwd": "${workspaceFolder}"},
+    {"name": "04 Research: Build Security Pack (Network)", "type": "node-terminal", "request": "launch", "command": "make security-research INSTRUMENT=${input:instrument}", "cwd": "${workspaceFolder}"},
+    {"name": "05 Research: Show Latest Security Pack", "type": "node-terminal", "request": "launch", "command": "make research-show INSTRUMENT=${input:instrument}", "cwd": "${workspaceFolder}"}
   ],
   "inputs": [
-    {"id": "portfolioPath", "type": "promptString", "description": "Absolute path to the Rakuten assetbalance(all) CSV"},
+    {"id": "market", "type": "pickString", "description": "Market", "options": ["jp", "us"], "default": "jp"},
     {"id": "instrument", "type": "promptString", "description": "Instrument in MIC:SYMBOL form", "default": "XTKS:7203"}
   ]
 }

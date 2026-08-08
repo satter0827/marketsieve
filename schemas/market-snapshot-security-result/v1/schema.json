@@ -1,11 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:marketsieve:schema:market-matrix-security:1.0.0",
-  "title": "MarketSieve authoritative market matrix security row",
+  "$id": "urn:marketsieve:schema:market-snapshot-security-result:1.0.0",
+  "title": "MarketSieve Market Snapshot security result",
   "type": "object",
-  "required": ["schema", "instrument_id", "instrument", "provider_symbol", "memberships", "retrieved_at", "evidence_id", "values", "missing"],
+  "required": ["schema", "snapshot_id", "instrument_id", "instrument", "provider_symbol", "memberships", "retrieved_at", "evidence_id", "values", "missing"],
   "properties": {
-    "schema": {"const": "market-matrix-security/v1"},
+    "schema": {"const": "market-snapshot-security-result/v1"},
+    "snapshot_id": {"$ref": "#/$defs/digest"},
     "instrument_id": {"$ref": "#/$defs/instrumentId"},
     "instrument": {"$ref": "#/$defs/instrument"},
     "provider_symbol": {"type": "string", "minLength": 1},

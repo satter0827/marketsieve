@@ -1,12 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:marketsieve:schema:market-matrix-comparison:1.0.0",
+  "$id": "urn:marketsieve:schema:market-snapshot-comparison:1.0.0",
   "title": "MarketSieve stored matrix row comparison",
   "type": "object",
-  "required": ["schema", "matrix_id", "fields", "rows"],
+  "required": ["schema", "snapshot_id", "fields", "rows"],
   "properties": {
-    "schema": {"const": "market-matrix-comparison/v1"},
-    "matrix_id": {"$ref": "#/$defs/digest"},
+    "schema": {"const": "market-snapshot-comparison/v1"},
+    "snapshot_id": {"$ref": "#/$defs/digest"},
     "fields": {
       "type": "array",
       "minItems": 1,

@@ -47,6 +47,13 @@ from marketsieve_extension_api.portfolio import (
     ImportedPortfolioSnapshot,
     PortfolioSnapshotImporter,
 )
+from marketsieve_extension_api.research import (
+    ImportedSecurityResearch,
+    ResearchEvent,
+    ResearchFinancialFact,
+    SecurityResearchFetcher,
+    SecurityResearchRequest,
+)
 from marketsieve_extension_api.universe import (
     ImportedInstrumentUniverse,
     InstrumentUniverseFetcher,
@@ -84,11 +91,16 @@ __all__ = [
     "ImportedFinancials",
     "ImportedInstrumentUniverse",
     "ImportedPortfolioSnapshot",
+    "ImportedSecurityResearch",
     "InstrumentProfile",
     "InstrumentUniverseFetcher",
     "InstrumentUniverseImporter",
     "PortfolioSnapshotImporter",
+    "ResearchEvent",
+    "ResearchFinancialFact",
     "Revision",
+    "SecurityResearchFetcher",
+    "SecurityResearchRequest",
     "SourceConfiguration",
     "SourceDiagnostic",
     "UniverseRequest",

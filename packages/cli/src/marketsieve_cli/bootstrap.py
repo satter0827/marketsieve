@@ -11,7 +11,7 @@ from marketsieve import __version__
 from marketsieve_cli.adapters.config import Configuration
 from marketsieve_cli.adapters.console import ConsoleOutput, OutputMode
 from marketsieve_cli.adapters.experiments import ExperimentStore
-from marketsieve_cli.adapters.matrices import MatrixStore
+from marketsieve_cli.adapters.market_snapshots import MarketSnapshotStore
 from marketsieve_cli.adapters.plugins import SourcePluginRegistry
 from marketsieve_cli.adapters.portfolio_plugins import PortfolioPluginRegistry
 from marketsieve_cli.adapters.portfolios import (
@@ -24,6 +24,7 @@ from marketsieve_cli.adapters.reports import (
     create_report,
     report_document,
 )
+from marketsieve_cli.adapters.research import ResearchStore
 from marketsieve_cli.adapters.snapshots import SnapshotStore
 from marketsieve_cli.adapters.watchlists import (
     PortfolioWatchlistReader,
@@ -32,7 +33,8 @@ from marketsieve_cli.adapters.watchlists import (
 )
 from marketsieve_cli.application.diagnostics import DiagnosticsService
 from marketsieve_cli.application.experiments import ExperimentService
-from marketsieve_cli.application.matrix import MatrixService
+from marketsieve_cli.application.market import MarketService
+from marketsieve_cli.application.research import ResearchService
 from marketsieve_cli.application.routines import DailyBriefService, WeeklyBriefService
 from marketsieve_cli.application.snapshots import SnapshotService
 from marketsieve_cli.observability import configure_logger
@@ -121,37 +123,39 @@ def build_experiment_service() -> ExperimentService:
     )
 
 
-def build_matrix_service(config_path: Path | None = None) -> MatrixService:
-    """Build the zero-configuration yfinance market-matrix workflow."""
+def build_market_service(config_path: Path | None = None) -> MarketService:
+    """Build the zero-configuration yfinance Market Snapshot workflow."""
 
-    return MatrixService(
+    return MarketService(
         SourcePluginRegistry(),
-        MatrixStore(Path(".marketsieve/matrices")),
+        MarketSnapshotStore(Path(".marketsieve/market-snapshots")),
         Configuration.resolve(config_path),
     )
 
 
-def refresh_market_matrix(config_path: Path | None, *, resume: str | None = None) -> dict[str, Any]:
-    """Acquire and persist the configured broad-equity matrix."""
+def refresh_market_snapshot(
+    config_path: Path | None, *, resume: str | None = None
+) -> dict[str, Any]:
+    """Acquire and persist the configured broad-equity Market Snapshot."""
 
-    return build_matrix_service(config_path).refresh(resume=resume)
-
-
-def show_market_matrix(config_path: Path | None, matrix_id: str) -> dict[str, Any]:
-    """Show one persisted matrix manifest and its artifacts."""
-
-    return build_matrix_service(config_path).show(matrix_id)
+    return build_market_service(config_path).refresh(resume=resume)
 
 
-def list_market_matrices(config_path: Path | None) -> dict[str, Any]:
-    """List verified persisted matrices in reverse chronological order."""
+def show_market_snapshot(config_path: Path | None, snapshot_id: str) -> dict[str, Any]:
+    """Show one persisted Market Snapshot manifest and its artifacts."""
 
-    return build_matrix_service(config_path).list()
+    return build_market_service(config_path).show(snapshot_id)
 
 
-def query_market_matrix(
+def list_market_snapshots(config_path: Path | None) -> dict[str, Any]:
+    """List verified persisted Market Snapshots in reverse chronological order."""
+
+    return build_market_service(config_path).list()
+
+
+def query_market_snapshot(
     config_path: Path | None,
-    matrix_id: str,
+    snapshot_id: str,
     *,
     filters: dict[str, tuple[str, ...]],
     minimums: dict[str, Decimal],
@@ -160,10 +164,10 @@ def query_market_matrix(
     missing: tuple[str, ...],
     fields: tuple[str, ...],
 ) -> dict[str, Any]:
-    """Filter one persisted matrix without acquisition or recalculation."""
+    """Filter one persisted Market Snapshot without acquisition or recalculation."""
 
-    return build_matrix_service(config_path).query(
-        matrix_id,
+    return build_market_service(config_path).query(
+        snapshot_id,
         filters=filters,
         minimums=minimums,
         maximums=maximums,
@@ -173,23 +177,63 @@ def query_market_matrix(
     )
 
 
-def read_market_matrix_row(
-    config_path: Path | None, matrix_id: str, instrument_id: str
+def read_market_snapshot_security(
+    config_path: Path | None, snapshot_id: str, instrument_id: str
 ) -> dict[str, Any]:
-    """Read one already-computed matrix row without network access."""
+    """Read one already-computed Market Snapshot security without network access."""
 
-    return build_matrix_service(config_path).row(matrix_id, instrument_id)
+    return build_market_service(config_path).row(snapshot_id, instrument_id)
 
 
-def compare_market_matrix_rows(
+def compare_market_snapshot_securities(
     config_path: Path | None,
-    matrix_id: str,
+    snapshot_id: str,
     instrument_ids: tuple[str, ...],
     fields: tuple[str, ...],
 ) -> dict[str, Any]:
-    """Compare already-computed matrix cells without recalculation."""
+    """Compare already-computed Market Snapshot fields without recalculation."""
 
-    return build_matrix_service(config_path).compare(matrix_id, instrument_ids, fields)
+    return build_market_service(config_path).compare(snapshot_id, instrument_ids, fields)
+
+
+def build_research_service(config_path: Path | None = None) -> ResearchService:
+    """Build the yfinance security research workflow."""
+
+    return ResearchService(
+        SourcePluginRegistry(),
+        build_market_service(config_path),
+        ResearchStore(Path(".marketsieve/research")),
+        Configuration.resolve(config_path),
+    )
+
+
+def build_security_research(
+    config_path: Path | None, snapshot_id: str, instrument_id: str
+) -> dict[str, Any]:
+    return build_research_service(config_path).build(snapshot_id, instrument_id)
+
+
+def show_security_research(
+    config_path: Path | None,
+    research_id: str,
+    *,
+    snapshot_id: str = "latest",
+    instrument_id: str | None = None,
+) -> dict[str, Any]:
+    return build_research_service(config_path).show(
+        research_id, snapshot_id=snapshot_id, instrument_id=instrument_id
+    )
+
+
+def list_security_research(
+    config_path: Path | None,
+    *,
+    snapshot_id: str | None = None,
+    instrument_id: str | None = None,
+) -> dict[str, Any]:
+    return build_research_service(config_path).list(
+        snapshot_id=snapshot_id, instrument_id=instrument_id
+    )
 
 
 def import_portfolio(path: Path, *, broker: str, as_of: str) -> dict[str, object]:

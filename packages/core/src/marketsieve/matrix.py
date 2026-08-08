@@ -41,7 +41,7 @@ class MatrixField:
     definition: str
     formula: str | None
     period: str | None
-    definition_version: str = "market-matrix-fields/v2"
+    definition_version: str = "market-snapshot-fields/v1"
 
 
 @dataclass(frozen=True, slots=True)

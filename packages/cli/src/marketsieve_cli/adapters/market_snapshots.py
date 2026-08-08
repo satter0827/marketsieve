@@ -1,4 +1,4 @@
-"""Immutable market-matrix storage and deterministic projections."""
+"""Immutable Market Snapshot storage and deterministic projections."""
 
 from __future__ import annotations
 
@@ -20,15 +20,16 @@ from marketsieve.matrix import INDEX_BENCHMARKS, MatrixField, MatrixRow
 
 ARTIFACT_ROLES = {
     "README.md": "Self-contained description of the dataset and files.",
-    "manifest.json": "Acquisition, universe, benchmark, quality, and identity metadata.",
-    "fields.json": "Definitions, types, units, periods, and formulas for every matrix field.",
-    "missing-reasons.json": "Stable missing-value reason definitions and categories.",
-    "securities.jsonl": "Authoritative one-security-per-line matrix.",
-    "index-summary.json": "Deterministic aggregate statistics for all securities and indices.",
+    "manifest.json": "Acquisition, universe, benchmark, artifact, and identity metadata.",
+    "definitions.json": "Field and missing-value definitions.",
+    "quality.json": "Coverage by evidence domain and price requirement results.",
+    "market.json": "Overall, Japanese, and U.S. market aggregates.",
+    "segments.jsonl": "Index, sector, and industry aggregates.",
+    "securities.jsonl": "Authoritative one-security-per-line observations.",
     "failures.jsonl": "Observed source, history, and calculation failures.",
-    "matrix.csv": "Tabular projection of securities.jsonl.",
-    "overview.html": "Self-contained interactive browser projection.",
-    "summary.md": "Compact human-readable projection of index-summary.json.",
+    "securities.csv": "Tabular projection of securities.jsonl.",
+    "explorer.html": "Self-contained interactive Market Explorer.",
+    "summary.md": "Compact neutral projection of market and segment aggregates.",
 }
 
 MISSING_REASONS = {
@@ -75,7 +76,7 @@ def _request_fingerprint(value: object) -> str:
 def _row_document(row: MatrixRow) -> dict[str, Any]:
     instrument = row.security.instrument
     return {
-        "schema": "market-matrix-security/v1",
+        "schema": "market-snapshot-security/v1",
         "instrument_id": f"{instrument.mic}:{instrument.symbol}",
         "instrument": {
             "mic": instrument.mic,
@@ -107,8 +108,76 @@ def _field_document(field: MatrixField) -> dict[str, Any]:
     }
 
 
-class MatrixStore:
-    """Persist one complete content-addressed matrix object."""
+def _projection_documents(
+    field_documents: tuple[dict[str, Any], ...],
+    missing_reason_documents: list[dict[str, str]],
+    row_documents: tuple[dict[str, Any], ...],
+    summary: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any], tuple[dict[str, Any], ...], dict[str, Any]]:
+    definitions = {
+        "schema": "market-snapshot-definitions/v1",
+        "fields": list(field_documents),
+        "missing_reasons": missing_reason_documents,
+    }
+    groups = summary["groups"]
+    market = {
+        "schema": "market-snapshot-market/v1",
+        "generated_at": summary["generated_at"],
+        "coverage": summary["coverage"],
+        "price_requirements_met": summary["price_requirements_met"],
+        "markets": {
+            "all": groups["all"],
+            "jp": groups["market:jp"],
+            "us": groups["market:us"],
+        },
+    }
+    segments = tuple(
+        {
+            "schema": "market-snapshot-segment/v1",
+            "segment_type": key.partition(":")[0],
+            "segment_value": key.partition(":")[2],
+            **value,
+        }
+        for key, value in sorted(groups.items())
+        if key != "all" and not key.startswith("market:")
+    )
+    fields_by_name = {value["name"]: value for value in field_documents}
+    domains: dict[str, dict[str, int]] = {}
+    for row in row_documents:
+        values = row["values"]
+        missing = row["missing"]
+        for name, definition in fields_by_name.items():
+            domain = domains.setdefault(
+                definition["group"], {"expected": 0, "present": 0, "missing": 0}
+            )
+            if missing.get(name) == "not_applicable":
+                continue
+            domain["expected"] += 1
+            if name in values:
+                domain["present"] += 1
+            else:
+                domain["missing"] += 1
+    quality = {
+        "schema": "market-snapshot-quality/v1",
+        "price_requirements_met": summary["price_requirements_met"],
+        "price_coverage": summary["coverage"],
+        "domains": {
+            name: {
+                **counts,
+                "coverage": (
+                    str(Decimal(counts["present"]) / Decimal(counts["expected"]))
+                    if counts["expected"]
+                    else None
+                ),
+            }
+            for name, counts in sorted(domains.items())
+        },
+    }
+    return definitions, market, segments, quality
+
+
+class MarketSnapshotStore:
+    """Persist one complete content-addressed market snapshot object."""
 
     def __init__(self, root: Path) -> None:
         self.root = root
@@ -119,7 +188,7 @@ class MatrixStore:
     @staticmethod
     def _validate_run_id(run_id: str) -> None:
         if len(run_id) != 16 or any(character not in "0123456789abcdef" for character in run_id):
-            raise ValueError("matrix run ID must be 16 lowercase hexadecimal characters")
+            raise ValueError("market snapshot run ID must be 16 lowercase hexadecimal characters")
 
     def run_request(self, run_id: str) -> dict[str, Any]:
         self._validate_run_id(run_id)
@@ -127,21 +196,21 @@ class MatrixStore:
         run_path = self.runs / run_id
         path = run_path / "request.json"
         if run_path.is_symlink() or path.is_symlink() or not path.is_file():
-            raise LookupError(f"matrix run does not exist: {run_id}")
+            raise LookupError(f"market snapshot run does not exist: {run_id}")
         raw = path.read_bytes()
         try:
             document = json.loads(raw)
         except (UnicodeDecodeError, json.JSONDecodeError) as error:
-            raise ValueError("matrix run request is not valid JSON") from error
+            raise ValueError("market snapshot run request is not valid JSON") from error
         if not isinstance(document, dict) or set(document) != {"fingerprint", "request", "status"}:
-            raise ValueError("matrix run request has an invalid schema")
+            raise ValueError("market snapshot run request has an invalid schema")
         if document["status"] != "started" or not isinstance(document["request"], dict):
-            raise ValueError("matrix run request has an invalid schema")
+            raise ValueError("market snapshot run request has an invalid schema")
         if raw != _json_bytes(document):
-            raise ValueError("matrix run request is not canonical JSON")
+            raise ValueError("market snapshot run request is not canonical JSON")
         expected_fingerprint = _request_fingerprint(document["request"])
         if document["fingerprint"] != expected_fingerprint:
-            raise ValueError("matrix run request fingerprint does not match its content")
+            raise ValueError("market snapshot run request fingerprint does not match its content")
         return document["request"]
 
     def begin_run(
@@ -154,10 +223,10 @@ class MatrixStore:
         if len(fingerprint) != 64 or any(
             character not in "0123456789abcdef" for character in fingerprint
         ):
-            raise ValueError("matrix fingerprint must be a lowercase SHA-256 digest")
+            raise ValueError("market snapshot fingerprint must be a lowercase SHA-256 digest")
         expected_fingerprint = _request_fingerprint(request_document)
         if fingerprint != expected_fingerprint:
-            raise ValueError("matrix fingerprint does not match the request content")
+            raise ValueError("market snapshot fingerprint does not match the request content")
         run_id = resume or fingerprint[:16]
         self._validate_run_id(run_id)
         self._ensure_directory(self.runs)
@@ -165,11 +234,13 @@ class MatrixStore:
         if resume is not None:
             stored_request = self.run_request(run_id)
             if stored_request != request_document:
-                raise ValueError("matrix resume request does not match the stored run fingerprint")
+                raise ValueError(
+                    "market snapshot resume request does not match the stored run fingerprint"
+                )
             return run_id
         if path.exists() or path.is_symlink():
             raise ValueError(
-                f"matrix run already exists: {run_id}; resume it with --resume {run_id}"
+                f"market snapshot run already exists: {run_id}; resume it with --resume {run_id}"
             )
         temporary = Path(tempfile.mkdtemp(prefix=f".{run_id}.", dir=self.runs))
         try:
@@ -190,7 +261,8 @@ class MatrixStore:
                 temporary.rename(path)
             except FileExistsError:
                 raise ValueError(
-                    f"matrix run already exists: {run_id}; resume it with --resume {run_id}"
+                    "market snapshot run already exists: "
+                    f"{run_id}; resume it with --resume {run_id}"
                 ) from None
         except BaseException:
             shutil.rmtree(temporary, ignore_errors=True)
@@ -213,10 +285,13 @@ class MatrixStore:
             **stored_request,
         }
         if manifest_body.get("request") != expected_request_evidence:
-            raise ValueError("matrix manifest request does not match the persisted run")
+            raise ValueError("market snapshot manifest request does not match the persisted run")
         row_documents = tuple(_row_document(row) for row in rows)
         field_documents = tuple(_field_document(field) for field in fields)
         missing_reason_documents = _missing_reason_documents()
+        definitions, market, segments, quality = _projection_documents(
+            field_documents, missing_reason_documents, row_documents, summary
+        )
         unknown_reasons = {
             reason
             for row in row_documents
@@ -225,12 +300,12 @@ class MatrixStore:
         }
         if unknown_reasons:
             raise ValueError(
-                f"matrix rows contain unknown missing reasons: {sorted(unknown_reasons)}"
+                f"market snapshot rows contain unknown missing reasons: {sorted(unknown_reasons)}"
             )
         if any(failure.get("reason") == "not_applicable" for failure in failures):
-            raise ValueError("not_applicable must not be recorded as a matrix failure")
+            raise ValueError("not_applicable must not be recorded as a snapshot failure")
         if manifest_body.get("failure_count") != len(failures):
-            raise ValueError("matrix failure count does not match failures.jsonl")
+            raise ValueError("snapshot failure count does not match failures.jsonl")
         manifest_body = {
             **manifest_body,
             "artifacts": {
@@ -239,37 +314,37 @@ class MatrixStore:
         }
         semantic = {
             **manifest_body,
-            "field_definitions": field_documents,
-            "missing_reasons": missing_reason_documents,
+            "definitions": definitions,
             "row_hashes": [hashlib.sha256(_json_bytes(row)).hexdigest() for row in row_documents],
-            "summary": summary,
+            "market": market,
+            "segments": segments,
+            "quality": quality,
             "failures": failures,
         }
-        matrix_id = hashlib.sha256(_json_bytes(semantic)).hexdigest()
+        snapshot_id = hashlib.sha256(_json_bytes(semantic)).hexdigest()
         manifest = {
-            "schema": "market-matrix-manifest/v2",
-            "matrix_id": matrix_id,
+            "schema": "market-snapshot-manifest/v2",
+            "snapshot_id": snapshot_id,
             **manifest_body,
         }
-        destination = self.objects / matrix_id
+        destination = self.objects / snapshot_id
         self._ensure_directory(self.objects)
         if destination.is_dir():
-            self._verify_object(destination, matrix_id)
+            self._verify_object(destination, snapshot_id)
         else:
-            pending = self.objects / f".{matrix_id}.{os.getpid()}.pending"
+            pending = self.objects / f".{snapshot_id}.{os.getpid()}.pending"
             pending.mkdir(parents=False, exist_ok=False)
             try:
                 (pending / "manifest.json").write_bytes(_json_bytes(manifest))
-                (pending / "fields.json").write_bytes(_json_bytes(list(field_documents)))
-                (pending / "missing-reasons.json").write_bytes(
-                    _json_bytes(missing_reason_documents)
-                )
+                (pending / "definitions.json").write_bytes(_json_bytes(definitions))
+                (pending / "quality.json").write_bytes(_json_bytes(quality))
+                (pending / "market.json").write_bytes(_json_bytes(market))
+                self._write_jsonl(pending / "segments.jsonl", segments)
                 self._write_jsonl(pending / "securities.jsonl", row_documents)
-                (pending / "index-summary.json").write_bytes(_json_bytes(summary))
                 self._write_jsonl(pending / "failures.jsonl", failures)
-                self._write_csv(pending / "matrix.csv", fields, row_documents)
+                self._write_csv(pending / "securities.csv", fields, row_documents)
                 self._write_html(
-                    pending / "overview.html", manifest, summary, fields, row_documents
+                    pending / "explorer.html", manifest, summary, fields, row_documents
                 )
                 (pending / "README.md").write_text(
                     self._readme_markdown(manifest), encoding="utf-8"
@@ -284,13 +359,26 @@ class MatrixStore:
         self._ensure_directory(self.root)
         temporary = self.root / f".latest.{os.getpid()}.tmp"
         if temporary.exists() or temporary.is_symlink():
-            raise ValueError("matrix latest-reference temporary path already exists")
+            raise ValueError("snapshot latest-reference temporary path already exists")
         run_path = self.runs / run_id
         if run_path.is_symlink() or not run_path.is_dir():
-            raise ValueError("matrix run path must be a real directory")
-        document = self.show(matrix_id)
+            raise ValueError("market snapshot run path must be a real directory")
+        document = self.show(snapshot_id)
         try:
-            temporary.write_bytes(_json_bytes({"matrix_id": matrix_id}))
+            temporary.write_bytes(
+                _json_bytes(
+                    {
+                        "snapshot_id": snapshot_id,
+                        "path": f"objects/{snapshot_id}",
+                        "created_at": manifest["created_at"],
+                        "price_as_of": {
+                            market_name: market["markets"][market_name]["latest_price_date"]
+                            for market_name in ("jp", "us")
+                        },
+                        "price_requirements_met": manifest["price_requirements_met"],
+                    }
+                )
+            )
             temporary.replace(self.latest_ref)
         except BaseException:
             temporary.unlink(missing_ok=True)
@@ -453,7 +541,7 @@ class MatrixStore:
             "const q=document.querySelector('#filter'),idx=document.querySelector('#index');"
             "const filters=['market','mic','exchange','country','currency','sector','industry']"
             ".map(id=>document.querySelector('#'+id));"
-            "const rows=[...document.querySelectorAll('#matrix tbody tr')];"
+            "const rows=[...document.querySelectorAll('#securities tbody tr')];"
             "const apply=()=>{const value=q.value.toLowerCase(),index=idx.value;"
             "for(const row of rows){row.hidden=!row.textContent.toLowerCase().includes(value)"
             "||(index&&!row.dataset.memberships.split(',').includes(index))"
@@ -468,18 +556,18 @@ class MatrixStore:
             "b=right.cells[column].textContent.trim();"
             "const an=Number(a),bn=Number(b);const value=a!==''&&b!==''&&!Number.isNaN(an)"
             "&&!Number.isNaN(bn)?an-bn:a.localeCompare(b);return direction==='asc'?value:-value});"
-            "const body=document.querySelector('#matrix tbody');for(const row of rows)"
+            "const body=document.querySelector('#securities tbody');for(const row of rows)"
             "body.appendChild(row)})}"
         )
         document = (
             '<!doctype html><html lang="ja"><head><meta charset="utf-8">'
             '<meta name="viewport" content="width=device-width,initial-scale=1">'
             '<meta name="color-scheme" content="light dark">'
-            f"<title>MarketSieve 全銘柄マトリックス</title><style>{style}</style></head>"
-            "<body><h1>MarketSieve 全銘柄マトリックス</h1>"
-            f'<p class="meta">マトリックス {manifest["matrix_id"]} · '
+            f"<title>MarketSieve Market Explorer</title><style>{style}</style></head>"
+            "<body><h1>MarketSieve Market Explorer</h1>"
+            f'<p class="meta">Snapshot {manifest["snapshot_id"]} · '
             f"{manifest['row_count']}銘柄 · {len(fields)}指標</p>"
-            "<p>指数横断の全銘柄表です。空欄の理由は正本JSONLと"
+            "<p>指数横断のMarket Snapshotです。空欄の理由は正本JSONLと"
             "failures.jsonlに保持されています。</p>"
             f"<details><summary>指数要約</summary><pre>{summary_json}</pre></details>"
             f"<details><summary>指標グループ</summary><pre>{groups_json}</pre></details>"
@@ -491,7 +579,7 @@ class MatrixStore:
             f"{select('exchange', '取引所')}{select('country', '国')}"
             f"{select('currency', '通貨')}{select('sector', 'セクター')}"
             f"{select('industry', '業種')}"
-            f'<div class="wrap"><table id="matrix"><thead><tr>{headers}</tr>'
+            f'<div class="wrap"><table id="securities"><thead><tr>{headers}</tr>'
             f"</thead><tbody>{body}</tbody></table></div>"
             f"<script>{script}</script></body></html>"
         )
@@ -504,24 +592,24 @@ class MatrixStore:
             for name, value in sorted(manifest["universe_assets"].items())
         )
         lines = [
-            "# MarketSieve Market Matrix",
+            "# MarketSieve Market Snapshot",
             "",
-            "This directory is one immutable, self-contained market-matrix dataset.",
+            "This directory is one immutable, self-contained broad-market snapshot.",
             "",
-            f"- Matrix ID: `{manifest['matrix_id']}`",
+            f"- Snapshot ID: `{manifest['snapshot_id']}`",
             f"- Retrieved at: `{manifest['created_at']}`",
             f"- Securities: {manifest['row_count']}",
             f"- Fields: {manifest['field_count']}",
-            f"- Quality: `{manifest['quality_status']}`",
+            f"- Price requirements met: `{str(manifest['price_requirements_met']).lower()}`",
             f"- Benchmarks: {benchmarks}",
             "",
             "`securities.jsonl` is authoritative. One row represents one security. Every "
             "defined field appears either in `values` or in `missing`.",
             "",
-            "`fields.json` defines field meaning and units. `missing-reasons.json` defines "
-            "missing-value codes. `manifest.json` records acquisition and provenance. "
-            "`index-summary.json` contains aggregate statistics. `failures.jsonl` contains "
-            "observed failures. CSV, HTML, and Markdown files are deterministic views.",
+            "`definitions.json` defines fields and missing-value codes. `quality.json` separates "
+            "coverage by evidence domain. `market.json` and `segments.jsonl` contain aggregate "
+            "statistics. `failures.jsonl` contains observed failures. CSV, HTML, and Markdown "
+            "files are deterministic views.",
             "",
             "Index memberships can overlap, so membership counts must not be summed as unique "
             "security counts. Currency-denominated values must not be aggregated across currencies "
@@ -534,18 +622,23 @@ class MatrixStore:
         lines = [
             "# MarketSieve Market Summary",
             "",
-            f"- Matrix ID: `{manifest['matrix_id']}`",
+            f"- Snapshot ID: `{manifest['snapshot_id']}`",
             f"- Retrieved at: `{manifest['created_at']}`",
             f"- Securities: {manifest['row_count']}",
             f"- Fields: {manifest['field_count']}",
             f"- Overall price coverage: {summary['coverage']['overall']}",
-            f"- Quality: `{summary['quality_status']}`",
+            f"- Price requirements met: `{str(summary['price_requirements_met']).lower()}`",
             "",
             "| Group | Securities | Price coverage | Advancing | Declining | "
             "Above SMA20 | Above SMA200 |",
             "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
         ]
-        for name, group in sorted(summary["groups"].items()):
+        displayed_groups = {
+            name: group
+            for name, group in summary["groups"].items()
+            if name == "all" or name.startswith(("market:", "index:"))
+        }
+        for name, group in sorted(displayed_groups.items()):
             lines.append(
                 f"| {name} | {group['security_count']} | {group['price_coverage']} | "
                 f"{group['advancing_count']} | {group['declining_count']} | "
@@ -560,56 +653,58 @@ class MatrixStore:
                 "| --- | --- | ---: |",
             )
         )
-        for name, group in sorted(summary["groups"].items()):
+        for name, group in sorted(displayed_groups.items()):
             for reason, count in sorted(group["missing"]["reasons"].items()):
                 lines.append(f"| {name} | {reason} | {count} |")
         return "\n".join(lines).rstrip() + "\n"
 
-    def resolve_id(self, matrix_id: str) -> str:
-        if matrix_id != "latest":
-            return matrix_id
+    def resolve_id(self, snapshot_id: str) -> str:
+        if snapshot_id != "latest":
+            return snapshot_id
         self._require_directory(self.root)
         if self.latest_ref.is_symlink() or not self.latest_ref.is_file():
-            raise LookupError("no market matrix is available")
+            raise LookupError("no market snapshot is available")
         raw = self.latest_ref.read_bytes()
         try:
             value = json.loads(raw)
         except (UnicodeDecodeError, json.JSONDecodeError) as error:
-            raise ValueError("market matrix latest reference is invalid") from error
+            raise ValueError("market snapshot latest reference is invalid") from error
         if (
             not isinstance(value, dict)
-            or set(value) != {"matrix_id"}
+            or set(value)
+            != {"snapshot_id", "path", "created_at", "price_as_of", "price_requirements_met"}
             or raw != _json_bytes(value)
-            or not isinstance(value["matrix_id"], str)
-            or len(value["matrix_id"]) != 64
-            or any(character not in "0123456789abcdef" for character in value["matrix_id"])
+            or not isinstance(value["snapshot_id"], str)
+            or len(value["snapshot_id"]) != 64
+            or any(character not in "0123456789abcdef" for character in value["snapshot_id"])
         ):
-            raise ValueError("market matrix latest reference is invalid")
-        return value["matrix_id"]
+            raise ValueError("market snapshot latest reference is invalid")
+        return value["snapshot_id"]
 
-    def show(self, matrix_id: str) -> dict[str, Any]:
-        resolved = self.resolve_id(matrix_id)
+    def show(self, snapshot_id: str) -> dict[str, Any]:
+        resolved = self.resolve_id(snapshot_id)
         self._require_directory(self.objects)
         path = self.objects / resolved
         self._verify_object(path, resolved)
         manifest = json.loads((path / "manifest.json").read_text(encoding="utf-8"))
-        summary = json.loads((path / "index-summary.json").read_text(encoding="utf-8"))
+        market = json.loads((path / "market.json").read_text(encoding="utf-8"))
         return {
             **manifest,
-            "schema": "market-matrix/v2",
-            "summary": summary,
+            "schema": "market-snapshot/v2",
+            "market": market,
             "artifacts": {
                 name: str(path / name)
                 for name in (
                     "README.md",
                     "manifest.json",
-                    "fields.json",
-                    "missing-reasons.json",
+                    "definitions.json",
+                    "quality.json",
+                    "market.json",
+                    "segments.jsonl",
                     "securities.jsonl",
-                    "index-summary.json",
                     "failures.jsonl",
-                    "matrix.csv",
-                    "overview.html",
+                    "securities.csv",
+                    "explorer.html",
                     "summary.md",
                 )
             },
@@ -618,11 +713,11 @@ class MatrixStore:
     def list(self) -> dict[str, Any]:
         if not self.objects.exists():
             return {
-                "schema": "market-matrix-list/v1",
-                "matrices": [],
+                "schema": "market-snapshot-list/v1",
+                "snapshots": [],
             }
         self._require_directory(self.objects)
-        matrices = []
+        snapshots = []
         for path in self.objects.iterdir():
             if path.name.startswith("."):
                 continue
@@ -636,44 +731,44 @@ class MatrixStore:
                 candidate = self._read_json(manifest_path)
                 if (
                     isinstance(candidate, dict)
-                    and candidate.get("schema") != "market-matrix-manifest/v2"
+                    and candidate.get("schema") != "market-snapshot-manifest/v2"
                 ):
                     continue
             self._verify_object(path, path.name)
             manifest = self._read_json(path / "manifest.json")
-            matrices.append(
+            snapshots.append(
                 {
-                    "matrix_id": path.name,
+                    "snapshot_id": path.name,
                     "created_at": manifest["created_at"],
                     "row_count": manifest["row_count"],
                     "field_count": manifest["field_count"],
                     "coverage": manifest["coverage"],
-                    "quality_status": manifest["quality_status"],
+                    "price_requirements_met": manifest["price_requirements_met"],
                 }
             )
         try:
             ordered = sorted(
-                matrices,
+                snapshots,
                 key=lambda value: (
                     datetime.fromisoformat(value["created_at"]),
-                    value["matrix_id"],
+                    value["snapshot_id"],
                 ),
                 reverse=True,
             )
         except (TypeError, ValueError) as error:
-            raise ValueError("market matrix creation time is invalid") from error
+            raise ValueError("market snapshot creation time is invalid") from error
         if any(
             datetime.fromisoformat(value["created_at"]).utcoffset() is None for value in ordered
         ):
-            raise ValueError("market matrix creation time must include a UTC offset")
+            raise ValueError("market snapshot creation time must include a UTC offset")
         return {
-            "schema": "market-matrix-list/v1",
-            "matrices": ordered,
+            "schema": "market-snapshot-list/v1",
+            "snapshots": ordered,
         }
 
     def query(
         self,
-        matrix_id: str,
+        snapshot_id: str,
         *,
         filters: dict[str, tuple[str, ...]],
         minimums: dict[str, Decimal],
@@ -683,7 +778,7 @@ class MatrixStore:
         fields: tuple[str, ...],
     ) -> dict[str, Any]:
         self._require_directory(self.objects)
-        resolved = self.resolve_id(matrix_id)
+        resolved = self.resolve_id(snapshot_id)
         self._verify_object(self.objects / resolved, resolved)
         allowed_filters = {
             "market",
@@ -696,30 +791,35 @@ class MatrixStore:
             "industry",
         }
         if unknown_filters := set(filters) - allowed_filters:
-            raise ValueError(f"unknown matrix classification filters: {sorted(unknown_filters)}")
+            raise ValueError(
+                f"unknown market snapshot classification filters: {sorted(unknown_filters)}"
+            )
         if any(not values for values in filters.values()):
-            raise ValueError("matrix classification filters cannot be empty")
+            raise ValueError("market snapshot classification filters cannot be empty")
         if any(len(values) != len(set(values)) for values in filters.values()):
-            raise ValueError("matrix classification filter values must be unique")
+            raise ValueError("market snapshot classification filter values must be unique")
         if invalid_indices := set(filters.get("index", ())) - set(INDEX_BENCHMARKS):
-            raise ValueError(f"unknown matrix indices: {sorted(invalid_indices)}")
+            raise ValueError(f"unknown market snapshot indices: {sorted(invalid_indices)}")
         if any(len(values) != len(set(values)) for values in (present, missing, fields)):
-            raise ValueError("matrix query field selections must be unique")
-        definitions = self._read_json(self.objects / resolved / "fields.json")
+            raise ValueError("market snapshot query field selections must be unique")
+        definitions_document = self._read_json(self.objects / resolved / "definitions.json")
+        definitions = definitions_document["fields"]
         field_types = {value["name"]: value["data_type"] for value in definitions}
         known = set(field_types)
         requested = set(fields) | set(minimums) | set(maximums) | set(present) | set(missing)
         if unknown := requested - known:
-            raise ValueError(f"unknown matrix fields: {sorted(unknown)}")
+            raise ValueError(f"unknown market snapshot fields: {sorted(unknown)}")
         numeric = {name for name, kind in field_types.items() if kind in {"decimal", "integer"}}
         if invalid := (set(minimums) | set(maximums)) - numeric:
-            raise ValueError(f"matrix numeric filters require numeric fields: {sorted(invalid)}")
+            raise ValueError(
+                f"market snapshot numeric filters require numeric fields: {sorted(invalid)}"
+            )
         if set(present) & set(missing):
-            raise ValueError("matrix fields cannot be both present and missing")
+            raise ValueError("market snapshot fields cannot be both present and missing")
         if invalid_bounds := {
             name for name in set(minimums) & set(maximums) if minimums[name] > maximums[name]
         }:
-            raise ValueError(f"matrix minimum exceeds maximum: {sorted(invalid_bounds)}")
+            raise ValueError(f"market snapshot minimum exceeds maximum: {sorted(invalid_bounds)}")
         selected = tuple(sorted(fields or tuple(known)))
 
         def matches(row: dict[str, Any]) -> bool:
@@ -772,8 +872,8 @@ class MatrixStore:
             )
         rows.sort(key=lambda value: value["instrument_id"])
         return {
-            "schema": "matrix-query-result/v1",
-            "matrix_id": resolved,
+            "schema": "market-snapshot-query-result/v1",
+            "snapshot_id": resolved,
             "matched_count": len(rows),
             "fields": list(selected),
             "filters": {
@@ -786,43 +886,43 @@ class MatrixStore:
             "rows": rows,
         }
 
-    def row(self, matrix_id: str, instrument_id: str) -> dict[str, Any]:
-        resolved = self.resolve_id(matrix_id)
+    def row(self, snapshot_id: str, instrument_id: str) -> dict[str, Any]:
+        resolved = self.resolve_id(snapshot_id)
         self._require_directory(self.objects)
         self._verify_object(self.objects / resolved, resolved)
         for document in self._rows(resolved):
             if document["instrument_id"] == instrument_id:
                 return {
                     **document,
-                    "schema": "market-matrix-row/v1",
-                    "matrix_id": resolved,
+                    "schema": "market-snapshot-security-result/v1",
+                    "snapshot_id": resolved,
                 }
-        raise LookupError(f"instrument is not present in matrix: {instrument_id}")
+        raise LookupError(f"instrument is not present in Market Snapshot: {instrument_id}")
 
     def compare(
-        self, matrix_id: str, instrument_ids: tuple[str, ...], fields: tuple[str, ...]
+        self, snapshot_id: str, instrument_ids: tuple[str, ...], fields: tuple[str, ...]
     ) -> dict[str, Any]:
-        resolved = self.resolve_id(matrix_id)
+        resolved = self.resolve_id(snapshot_id)
         self._require_directory(self.objects)
         self._verify_object(self.objects / resolved, resolved)
         available_fields = {
             value["name"]
             for value in json.loads(
-                (self.objects / resolved / "fields.json").read_text(encoding="utf-8")
-            )
+                (self.objects / resolved / "definitions.json").read_text(encoding="utf-8")
+            )["fields"]
         }
         if len(fields) != len(set(fields)):
-            raise ValueError("matrix compare fields must be unique")
+            raise ValueError("market snapshot compare fields must be unique")
         selected = tuple(sorted(fields or tuple(available_fields)))
         if unknown := set(selected) - available_fields:
-            raise ValueError(f"unknown matrix fields: {sorted(unknown)}")
+            raise ValueError(f"unknown market snapshot fields: {sorted(unknown)}")
         rows = {value["instrument_id"]: value for value in self._rows(resolved)}
         missing_ids = [value for value in instrument_ids if value not in rows]
         if missing_ids:
-            raise LookupError(f"instruments are not present in matrix: {missing_ids}")
+            raise LookupError(f"instruments are not present in Market Snapshot: {missing_ids}")
         return {
-            "schema": "market-matrix-comparison/v1",
-            "matrix_id": resolved,
+            "schema": "market-snapshot-comparison/v1",
+            "snapshot_id": resolved,
             "fields": list(selected),
             "rows": [
                 {
@@ -842,73 +942,129 @@ class MatrixStore:
             ],
         }
 
-    def _rows(self, matrix_id: str) -> Iterable[dict[str, Any]]:
-        path = self.objects / matrix_id / "securities.jsonl"
+    def research_context(self, snapshot_id: str, instrument_id: str) -> dict[str, Any]:
+        resolved = self.resolve_id(snapshot_id)
+        path = self.objects / resolved
+        self._verify_object(path, resolved)
+        security = self.row(resolved, instrument_id)
+        market = self._read_json(path / "market.json")
+        values = security["values"]
+        selected = []
+        for segment in self._read_jsonl(path / "segments.jsonl"):
+            segment_type = segment["segment_type"]
+            segment_value = segment["segment_value"]
+            if (
+                (segment_type == "index" and segment_value in security["memberships"])
+                or (segment_type == "sector" and segment_value == values.get("sector"))
+                or (segment_type == "industry" and segment_value == values.get("industry"))
+            ):
+                selected.append(segment)
+        return {
+            "schema": "market-research-context/v1",
+            "snapshot_id": resolved,
+            "security": security,
+            "market": market,
+            "segments": selected,
+            "definitions": self._read_json(path / "definitions.json"),
+        }
+
+    def _rows(self, snapshot_id: str) -> Iterable[dict[str, Any]]:
+        path = self.objects / snapshot_id / "securities.jsonl"
         with path.open(encoding="utf-8") as stream:
             for line in stream:
                 yield json.loads(line)
 
     @staticmethod
-    def _verify_object(path: Path, matrix_id: str) -> None:
-        if path.is_symlink() or not path.is_dir() or path.name != matrix_id:
-            raise LookupError(f"market matrix does not exist: {matrix_id}")
+    def _verify_object(path: Path, snapshot_id: str) -> None:
+        if path.is_symlink() or not path.is_dir() or path.name != snapshot_id:
+            raise LookupError(f"market snapshot does not exist: {snapshot_id}")
         required = {
             "README.md",
             "manifest.json",
-            "fields.json",
-            "missing-reasons.json",
+            "definitions.json",
+            "quality.json",
+            "market.json",
+            "segments.jsonl",
             "securities.jsonl",
-            "index-summary.json",
             "failures.jsonl",
-            "matrix.csv",
-            "overview.html",
+            "securities.csv",
+            "explorer.html",
             "summary.md",
         }
         artifacts = {value.name: value for value in path.iterdir()}
-        if not required.issubset(artifacts) or any(
+        if set(artifacts) != required or any(
             artifacts[name].is_symlink() or not artifacts[name].is_file() for name in required
         ):
-            raise ValueError("market matrix object is incomplete")
-        manifest = MatrixStore._read_json(path / "manifest.json")
+            raise ValueError("market snapshot object inventory is invalid")
+        manifest = MarketSnapshotStore._read_json(path / "manifest.json")
         if (
-            manifest.get("matrix_id") != matrix_id
-            or manifest.get("schema") != "market-matrix-manifest/v2"
+            manifest.get("snapshot_id") != snapshot_id
+            or manifest.get("schema") != "market-snapshot-manifest/v2"
         ):
-            raise ValueError("market matrix manifest identity is invalid")
-        fields = MatrixStore._read_json(path / "fields.json")
-        missing_reasons = MatrixStore._read_json(path / "missing-reasons.json")
-        summary = MatrixStore._read_json(path / "index-summary.json")
-        rows = tuple(MatrixStore._read_jsonl(path / "securities.jsonl"))
-        failures = tuple(MatrixStore._read_jsonl(path / "failures.jsonl"))
+            raise ValueError("market snapshot manifest identity is invalid")
+        definitions = MarketSnapshotStore._read_json(path / "definitions.json")
+        fields = definitions["fields"]
+        market = MarketSnapshotStore._read_json(path / "market.json")
+        segments = tuple(MarketSnapshotStore._read_jsonl(path / "segments.jsonl"))
+        quality = MarketSnapshotStore._read_json(path / "quality.json")
+        rows = tuple(MarketSnapshotStore._read_jsonl(path / "securities.jsonl"))
+        failures = tuple(MarketSnapshotStore._read_jsonl(path / "failures.jsonl"))
+        summary = {
+            "schema": "market-snapshot-summary/v1",
+            "generated_at": market["generated_at"],
+            "coverage": market["coverage"],
+            "price_requirements_met": market["price_requirements_met"],
+            "groups": {
+                "all": market["markets"]["all"],
+                "market:jp": market["markets"]["jp"],
+                "market:us": market["markets"]["us"],
+                **{
+                    f"{value['segment_type']}:{value['segment_value']}": {
+                        key: item
+                        for key, item in value.items()
+                        if key not in {"schema", "segment_type", "segment_value"}
+                    }
+                    for value in segments
+                },
+            },
+        }
         semantic = {
-            **{key: value for key, value in manifest.items() if key not in {"schema", "matrix_id"}},
-            "field_definitions": fields,
-            "missing_reasons": missing_reasons,
+            **{
+                key: value
+                for key, value in manifest.items()
+                if key not in {"schema", "snapshot_id"}
+            },
+            "definitions": definitions,
             "row_hashes": [hashlib.sha256(_json_bytes(row)).hexdigest() for row in rows],
-            "summary": summary,
+            "market": market,
+            "segments": segments,
+            "quality": quality,
             "failures": failures,
         }
-        if hashlib.sha256(_json_bytes(semantic)).hexdigest() != matrix_id:
-            raise ValueError("market matrix content identity is invalid")
-        if (path / "README.md").read_text(encoding="utf-8") != MatrixStore._readme_markdown(
+        if hashlib.sha256(_json_bytes(semantic)).hexdigest() != snapshot_id:
+            raise ValueError("market snapshot content identity is invalid")
+        if (path / "README.md").read_text(encoding="utf-8") != MarketSnapshotStore._readme_markdown(
             manifest
         ):
-            raise ValueError("market matrix README projection is invalid")
-        if (path / "summary.md").read_text(encoding="utf-8") != MatrixStore._summary_markdown(
-            manifest, summary
+            raise ValueError("market snapshot README projection is invalid")
+        if (path / "summary.md").read_text(
+            encoding="utf-8"
+        ) != MarketSnapshotStore._summary_markdown(
+            manifest,
+            summary,
         ):
-            raise ValueError("market matrix summary projection is invalid")
+            raise ValueError("market snapshot summary projection is invalid")
         field_values = tuple(MatrixField(**value) for value in fields)
-        with tempfile.TemporaryDirectory(prefix="marketsieve-matrix-verify-") as directory:
+        with tempfile.TemporaryDirectory(prefix="marketsieve-snapshot-verify-") as directory:
             temporary = Path(directory)
-            expected_csv = temporary / "matrix.csv"
-            expected_html = temporary / "overview.html"
-            MatrixStore._write_csv(expected_csv, field_values, rows)
-            MatrixStore._write_html(expected_html, manifest, summary, field_values, rows)
-            if (path / "matrix.csv").read_bytes() != expected_csv.read_bytes():
-                raise ValueError("market matrix CSV projection is invalid")
-            if (path / "overview.html").read_bytes() != expected_html.read_bytes():
-                raise ValueError("market matrix HTML projection is invalid")
+            expected_csv = temporary / "securities.csv"
+            expected_html = temporary / "explorer.html"
+            MarketSnapshotStore._write_csv(expected_csv, field_values, rows)
+            MarketSnapshotStore._write_html(expected_html, manifest, summary, field_values, rows)
+            if (path / "securities.csv").read_bytes() != expected_csv.read_bytes():
+                raise ValueError("market snapshot CSV projection is invalid")
+            if (path / "explorer.html").read_bytes() != expected_html.read_bytes():
+                raise ValueError("market snapshot HTML projection is invalid")
 
     @staticmethod
     def _read_jsonl(path: Path) -> Iterable[dict[str, Any]]:
@@ -916,9 +1072,9 @@ class MatrixStore:
             try:
                 document = json.loads(line)
             except (UnicodeDecodeError, json.JSONDecodeError) as error:
-                raise ValueError(f"market matrix JSONL is invalid: {path.name}") from error
+                raise ValueError(f"market snapshot JSONL is invalid: {path.name}") from error
             if not isinstance(document, dict) or line != _json_bytes(document):
-                raise ValueError(f"market matrix JSONL is not canonical: {path.name}")
+                raise ValueError(f"market snapshot JSONL is not canonical: {path.name}")
             yield document
 
     @staticmethod
@@ -927,9 +1083,9 @@ class MatrixStore:
         try:
             document = json.loads(raw)
         except (UnicodeDecodeError, json.JSONDecodeError) as error:
-            raise ValueError(f"market matrix JSON is invalid: {path.name}") from error
+            raise ValueError(f"market snapshot JSON is invalid: {path.name}") from error
         if raw != _json_bytes(document):
-            raise ValueError(f"market matrix JSON is not canonical: {path.name}")
+            raise ValueError(f"market snapshot JSON is not canonical: {path.name}")
         return document
 
     def _ensure_directory(self, path: Path) -> None:
@@ -939,10 +1095,10 @@ class MatrixStore:
             current /= part
             directories.append(current)
         if any(candidate.is_symlink() for candidate in directories):
-            raise ValueError("matrix storage path must be a real directory")
+            raise ValueError("market snapshot storage path must be a real directory")
         path.mkdir(parents=True, exist_ok=True)
         if any(not candidate.is_dir() for candidate in directories):
-            raise ValueError("matrix storage path must be a real directory")
+            raise ValueError("market snapshot storage path must be a real directory")
 
     def _require_directory(self, path: Path) -> None:
         current = self.root
@@ -951,4 +1107,4 @@ class MatrixStore:
             current /= part
             directories.append(current)
         if any(candidate.is_symlink() or not candidate.is_dir() for candidate in directories):
-            raise LookupError("matrix storage directory does not exist")
+            raise LookupError("market snapshot storage directory does not exist")

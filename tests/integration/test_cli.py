@@ -148,7 +148,7 @@ def test_landing_and_version_are_immediately_useful() -> None:
 
     assert landing.exit_code == 0
     assert "再現可能な日本株・米国株分析" in landing.stdout
-    assert "marketsieve matrix refresh" in landing.stdout
+    assert "marketsieve market refresh" in landing.stdout
     assert version.output == f"marketsieve, version {__version__}\n"
 
 
@@ -182,7 +182,7 @@ def test_capabilities_match_click_commands_and_validate_schema() -> None:
 
     assert result.exit_code == 0
     document = json.loads(result.stdout)
-    validate("capabilities-result", document, major=3)
+    validate("capabilities-result", document, major=4)
     command_names = [item["name"] for item in document["commands"]]
     assert command_names == [
         "capabilities",
@@ -191,17 +191,20 @@ def test_capabilities_match_click_commands_and_validate_schema() -> None:
         "experiment compare",
         "experiment run",
         "experiment show",
-        "matrix compare",
-        "matrix list",
-        "matrix query",
-        "matrix refresh",
-        "matrix row",
-        "matrix show",
+        "market compare",
+        "market list",
+        "market query",
+        "market refresh",
+        "market security",
+        "market show",
         "portfolio import",
         "portfolio show",
         "report export",
         "report list",
         "report show",
+        "research build",
+        "research list",
+        "research show",
         "snapshot list",
         "snapshot show",
         "snapshot verify",
@@ -228,22 +231,22 @@ def test_capabilities_match_click_commands_and_validate_schema() -> None:
 
 
 def test_matrix_commands_project_versioned_documents(monkeypatch: pytest.MonkeyPatch) -> None:
-    matrix_id = "a" * 64
-    matrix_document: dict[str, object] = {
-        "schema": "market-matrix/v2",
-        "matrix_id": matrix_id,
+    snapshot_id = "a" * 64
+    snapshot_document: dict[str, object] = {
+        "schema": "market-snapshot/v2",
+        "snapshot_id": snapshot_id,
         "input_snapshot_id": "d" * 64,
         "created_at": "2026-08-07T00:00:00+00:00",
         "request": {
             "fingerprint": "c" * 64,
-            "schema": "market-matrix-request/v1",
+            "schema": "market-snapshot-request/v1",
             "indices": ["sp500"],
             "assets": {},
             "start": "2023-08-08",
             "end": "2026-08-07",
             "adjustment": "adjusted",
             "settings": {},
-            "source": {"name": "yfinance", "profile": "matrix-yfinance"},
+            "source": {"name": "yfinance", "profile": "market-yfinance"},
         },
         "source": {
             "name": "yfinance",
@@ -257,14 +260,15 @@ def test_matrix_commands_project_versioned_documents(monkeypatch: pytest.MonkeyP
         "field_count": 2,
         "failure_count": 1,
         "coverage": {"overall": "1", "indices": {"sp500": "1"}},
-        "quality_status": "ready",
-        "summary": {
-            "schema": "market-matrix-summary/v1",
+        "price_requirements_met": True,
+        "market": {
+            "schema": "market-snapshot-market/v1",
             "generated_at": "2026-08-07T00:00:00+00:00",
             "coverage": {"overall": "1", "indices": {"sp500": "1"}},
-            "quality_status": "ready",
-            "groups": {
+            "price_requirements_met": True,
+            "markets": {
                 name: {
+                    "latest_price_date": "2026-08-07",
                     "security_count": 2,
                     "price_count": 2,
                     "price_coverage": "1",
@@ -286,7 +290,7 @@ def test_matrix_commands_project_versioned_documents(monkeypatch: pytest.MonkeyP
                     "sectors": {},
                     "missing": {"fields": {}, "reasons": {}},
                 }
-                for name in ("all", "sp500")
+                for name in ("all", "jp", "us")
             },
         },
         "artifacts": {
@@ -294,20 +298,21 @@ def test_matrix_commands_project_versioned_documents(monkeypatch: pytest.MonkeyP
             for name in (
                 "README.md",
                 "manifest.json",
-                "fields.json",
-                "missing-reasons.json",
+                "definitions.json",
+                "quality.json",
+                "segments.jsonl",
                 "securities.jsonl",
-                "index-summary.json",
+                "market.json",
                 "failures.jsonl",
-                "matrix.csv",
-                "overview.html",
+                "securities.csv",
+                "explorer.html",
                 "summary.md",
             )
         },
     }
     row_document: dict[str, object] = {
-        "schema": "market-matrix-row/v1",
-        "matrix_id": matrix_id,
+        "schema": "market-snapshot-security-result/v1",
+        "snapshot_id": snapshot_id,
         "instrument_id": "XNAS:MSFT",
         "instrument": {
             "mic": "XNAS",
@@ -324,8 +329,8 @@ def test_matrix_commands_project_versioned_documents(monkeypatch: pytest.MonkeyP
         "missing": {"trailing_pe": "field_absent"},
     }
     comparison_document: dict[str, object] = {
-        "schema": "market-matrix-comparison/v1",
-        "matrix_id": matrix_id,
+        "schema": "market-snapshot-comparison/v1",
+        "snapshot_id": snapshot_id,
         "fields": ["close"],
         "rows": [
             {"instrument_id": "XNAS:MSFT", "values": {"close": "100"}, "missing": {}},
@@ -333,21 +338,21 @@ def test_matrix_commands_project_versioned_documents(monkeypatch: pytest.MonkeyP
         ],
     }
     list_document: dict[str, object] = {
-        "schema": "market-matrix-list/v1",
-        "matrices": [
+        "schema": "market-snapshot-list/v1",
+        "snapshots": [
             {
-                "matrix_id": matrix_id,
+                "snapshot_id": snapshot_id,
                 "created_at": "2026-08-07T00:00:00+00:00",
                 "row_count": 2,
                 "field_count": 2,
                 "coverage": {"overall": "1", "indices": {"sp500": "1"}},
-                "quality_status": "ready",
+                "price_requirements_met": True,
             }
         ],
     }
     query_document: dict[str, object] = {
-        "schema": "matrix-query-result/v1",
-        "matrix_id": matrix_id,
+        "schema": "market-snapshot-query-result/v1",
+        "snapshot_id": snapshot_id,
         "matched_count": 1,
         "fields": ["close"],
         "filters": {
@@ -373,45 +378,45 @@ def test_matrix_commands_project_versioned_documents(monkeypatch: pytest.MonkeyP
 
     def refresh(config: Path | None, *, resume: str | None) -> dict[str, object]:
         assert config is None and resume == "fixture-run"
-        return matrix_document
+        return snapshot_document
 
-    monkeypatch.setattr(cli_module, "refresh_market_matrix", refresh)
+    monkeypatch.setattr(cli_module, "refresh_market_snapshot", refresh)
     monkeypatch.setattr(
         cli_module,
-        "show_market_matrix",
+        "show_market_snapshot",
         lambda config, selected: (
-            matrix_document if config is None and selected == matrix_id else {}
+            snapshot_document if config is None and selected == snapshot_id else {}
         ),
     )
     monkeypatch.setattr(
         cli_module,
-        "read_market_matrix_row",
+        "read_market_snapshot_security",
         lambda config, selected, instrument: (
             row_document
-            if config is None and (selected, instrument) == (matrix_id, "XNAS:MSFT")
+            if config is None and (selected, instrument) == (snapshot_id, "XNAS:MSFT")
             else {}
         ),
     )
     monkeypatch.setattr(
         cli_module,
-        "compare_market_matrix_rows",
+        "compare_market_snapshot_securities",
         lambda config, selected, instruments, fields: (
             comparison_document
             if config is None
-            and selected == matrix_id
+            and selected == snapshot_id
             and instruments == ("XNAS:MSFT", "XTKS:7203")
             and fields == ("close",)
             else {}
         ),
     )
-    monkeypatch.setattr(cli_module, "list_market_matrices", lambda config: list_document)
+    monkeypatch.setattr(cli_module, "list_market_snapshots", lambda config: list_document)
     monkeypatch.setattr(
         cli_module,
-        "query_market_matrix",
+        "query_market_snapshot",
         lambda config, selected, **kwargs: (
             query_document
             if config is None
-            and selected == matrix_id
+            and selected == snapshot_id
             and kwargs["filters"] == {"market": ("us",)}
             and kwargs["minimums"] == {"close": Decimal("90")}
             and kwargs["fields"] == ("close",)
@@ -420,16 +425,16 @@ def test_matrix_commands_project_versioned_documents(monkeypatch: pytest.MonkeyP
     )
     runner = CliRunner()
     results = (
-        runner.invoke(main, ["matrix", "refresh", "--resume", "fixture-run", "--output", "json"]),
-        runner.invoke(main, ["matrix", "show", matrix_id, "--output", "json"]),
-        runner.invoke(main, ["matrix", "list", "--output", "json"]),
+        runner.invoke(main, ["market", "refresh", "--resume", "fixture-run", "--output", "json"]),
+        runner.invoke(main, ["market", "show", snapshot_id, "--output", "json"]),
+        runner.invoke(main, ["market", "list", "--output", "json"]),
         runner.invoke(
             main,
             [
-                "matrix",
+                "market",
                 "query",
-                "--matrix",
-                matrix_id,
+                "--snapshot",
+                snapshot_id,
                 "--market",
                 "us",
                 "--min",
@@ -442,17 +447,17 @@ def test_matrix_commands_project_versioned_documents(monkeypatch: pytest.MonkeyP
         ),
         runner.invoke(
             main,
-            ["matrix", "row", "XNAS:MSFT", "--matrix", matrix_id, "--output", "json"],
+            ["market", "security", "XNAS:MSFT", "--snapshot", snapshot_id, "--output", "json"],
         ),
         runner.invoke(
             main,
             [
-                "matrix",
+                "market",
                 "compare",
                 "XNAS:MSFT",
                 "XTKS:7203",
-                "--matrix",
-                matrix_id,
+                "--snapshot",
+                snapshot_id,
                 "--fields",
                 "close",
                 "--output",
@@ -463,27 +468,169 @@ def test_matrix_commands_project_versioned_documents(monkeypatch: pytest.MonkeyP
 
     assert all(result.exit_code == 0 for result in results)
     documents = [json.loads(result.stdout) for result in results]
-    validate("market-matrix", documents[0], major=2)
-    validate("market-matrix", documents[1], major=2)
-    validate("market-matrix-list", documents[2])
-    validate("matrix-query-result", documents[3])
-    validate("market-matrix-row", documents[4])
-    validate("market-matrix-comparison", documents[5])
+    validate("market-snapshot", documents[0], major=2)
+    validate("market-snapshot", documents[1], major=2)
+    validate("market-snapshot-list", documents[2])
+    validate("market-snapshot-query-result", documents[3])
+    validate("market-snapshot-security-result", documents[4])
+    validate("market-snapshot-comparison", documents[5])
+
+
+def test_research_commands_project_versioned_documents(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    research_id = "b" * 64
+    snapshot_id = "a" * 64
+    document: dict[str, object] = {
+        "schema": "security-research/v1",
+        "research_id": research_id,
+        "snapshot_id": snapshot_id,
+        "instrument_id": "XNAS:MSFT",
+        "provider_symbol": "MSFT",
+        "created_at": "2026-08-08T00:00:00+00:00",
+        "source": {"name": "yfinance", "version": "1.5.2", "response_hash": "c" * 64},
+        "request": {
+            "source_profile": "market-yfinance",
+            "start": "2016-08-07",
+            "end": "2026-08-08",
+            "adjustment": "adjusted",
+            "minimum_price_observations": 252,
+            "timeout_seconds": 30,
+            "max_retries": 3,
+            "retry_base_seconds": 2.0,
+        },
+        "price_requirements_met": True,
+        "quality": {
+            "schema": "security-research-quality/v1",
+            "minimum_price_observations": 252,
+            "price_observations": 2516,
+            "price_requirements_met": True,
+            "company_fields": 12,
+            "financial_facts": 40,
+            "financial_facts_by_period": {"annual": 20, "quarterly": 20},
+            "events": 8,
+            "failures": 0,
+            "failures_by_reason": {},
+            "failures_by_stage": {},
+            "price_date_range": {"start": "2016-08-08", "end": "2026-08-07"},
+        },
+        "artifacts": {
+            name: f"/fixture/{name}"
+            for name in (
+                "README.md",
+                "manifest.json",
+                "definitions.json",
+                "company.json",
+                "market-context.json",
+                "prices.jsonl",
+                "financials.jsonl",
+                "events.jsonl",
+                "failures.jsonl",
+                "quality.json",
+                "summary.md",
+                "explorer.html",
+            )
+        },
+    }
+    listing: dict[str, object] = {
+        "schema": "security-research-list/v1",
+        "research": [
+            {
+                "research_id": research_id,
+                "snapshot_id": snapshot_id,
+                "instrument_id": "XNAS:MSFT",
+                "created_at": "2026-08-08T00:00:00+00:00",
+                "price_requirements_met": True,
+            }
+        ],
+    }
+    cli_module = importlib.import_module("marketsieve_cli.interfaces.cli.main")
+    monkeypatch.setattr(
+        cli_module,
+        "build_security_research",
+        lambda config, snapshot, security: (
+            document
+            if config is None and snapshot == snapshot_id and security == "XNAS:MSFT"
+            else {}
+        ),
+    )
+    monkeypatch.setattr(
+        cli_module,
+        "list_security_research",
+        lambda config, **filters: (
+            listing
+            if config is None
+            and filters == {"snapshot_id": snapshot_id, "instrument_id": "XNAS:MSFT"}
+            else {}
+        ),
+    )
+    monkeypatch.setattr(
+        cli_module,
+        "show_security_research",
+        lambda config, selected, **filters: (
+            document
+            if config is None
+            and selected == research_id
+            and filters == {"snapshot_id": "latest", "instrument_id": None}
+            else {}
+        ),
+    )
+    runner = CliRunner()
+    results = (
+        runner.invoke(
+            main,
+            [
+                "research",
+                "build",
+                "XNAS:MSFT",
+                "--snapshot",
+                snapshot_id,
+                "--output",
+                "json",
+            ],
+        ),
+        runner.invoke(
+            main,
+            [
+                "research",
+                "list",
+                "--snapshot",
+                snapshot_id,
+                "--security",
+                "XNAS:MSFT",
+                "--output",
+                "json",
+            ],
+        ),
+        runner.invoke(main, ["research", "show", research_id, "--output", "json"]),
+    )
+
+    assert all(result.exit_code == 0 for result in results)
+    validate("security-research", json.loads(results[0].stdout))
+    validate("security-research-list", json.loads(results[1].stdout))
+    validate("security-research", json.loads(results[2].stdout))
 
 
 @pytest.mark.parametrize(
     ("target", "arguments", "error_code"),
     (
-        ("refresh_market_matrix", ("matrix", "refresh"), "matrix_refresh_failed"),
-        ("show_market_matrix", ("matrix", "show"), "matrix_show_failed"),
-        ("list_market_matrices", ("matrix", "list"), "matrix_list_failed"),
-        ("query_market_matrix", ("matrix", "query"), "matrix_query_failed"),
-        ("read_market_matrix_row", ("matrix", "row", "XNAS:MSFT"), "matrix_row_failed"),
+        ("refresh_market_snapshot", ("market", "refresh"), "market_refresh_failed"),
+        ("show_market_snapshot", ("market", "show"), "market_show_failed"),
+        ("list_market_snapshots", ("market", "list"), "market_list_failed"),
+        ("query_market_snapshot", ("market", "query"), "market_query_failed"),
         (
-            "compare_market_matrix_rows",
-            ("matrix", "compare", "XNAS:MSFT", "XTKS:7203"),
-            "matrix_compare_failed",
+            "read_market_snapshot_security",
+            ("market", "security", "XNAS:MSFT"),
+            "market_security_failed",
         ),
+        (
+            "compare_market_snapshot_securities",
+            ("market", "compare", "XNAS:MSFT", "XTKS:7203"),
+            "market_compare_failed",
+        ),
+        ("build_security_research", ("research", "build", "XNAS:MSFT"), "research_build_failed"),
+        ("list_security_research", ("research", "list"), "research_list_failed"),
+        ("show_security_research", ("research", "show", "a" * 64), "research_show_failed"),
     ),
 )
 def test_matrix_commands_normalize_failures(
@@ -495,7 +642,7 @@ def test_matrix_commands_normalize_failures(
     cli_module = importlib.import_module("marketsieve_cli.interfaces.cli.main")
 
     def fail(*_args: object, **_kwargs: object) -> None:
-        raise ValueError("fixture matrix failure")
+        raise ValueError("fixture market failure")
 
     monkeypatch.setattr(cli_module, target, fail)
     result = CliRunner().invoke(main, [*arguments, "--output", "json"])
@@ -686,7 +833,7 @@ def test_rakuten_empty_portfolio_import_is_offline_and_private() -> None:
         assert "watch_items" not in document
         assert document["source"] == "rakuten_assetbalance_empty"
         assert document["source_name"] == "rakuten"
-        assert document["source_version"] == "0.10.0"
+        assert document["source_version"] == "0.11.0"
         assert document["dataset"] == "assetbalance-all-empty/v1"
         assert document["diagnostics"] == ["empty_portfolio"]
         assert not any(

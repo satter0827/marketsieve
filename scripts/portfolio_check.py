@@ -52,12 +52,12 @@ def main() -> int:
         diagnostics = daily_source_diagnostics(arguments.config)
     except (LookupError, OSError, TypeError, ValueError) as error:
         print(f"[invalid] portfolio: {error}")
-        print("Next VS Code operation: 02 First Run: Import Rakuten Portfolio")
+        print("Next VS Code task: Setup: Import Rakuten Portfolio")
         return 2
     if not markets:
         print("[ready] portfolio and watchlist are empty")
-        print("Next: run 10 Market Matrix: Refresh All Indices (Network) for broad analysis,")
-        print("or run 30 Watchlist: Add Instrument to prepare daily analysis")
+        print("Next: run Market: Refresh Snapshot (Network) for broad analysis,")
+        print("or run Watchlist: Add to prepare daily analysis")
         return 0
     print(f"[ready] analysis markets: {', '.join(sorted(markets))}")
     runnable = runnable_markets(markets, diagnostics)
@@ -68,12 +68,10 @@ def main() -> int:
         if not diagnostic.ready and diagnostic.recovery:
             print(f"Next: {diagnostic.recovery}")
     if not runnable:
-        print("[blocked] fix the configured daily source, then rerun 03 First Run: Check Readiness")
+        print("[blocked] fix the configured daily source, then rerun Setup: Check Readiness")
         return 2
     operations = [
-        "40 Daily Use: Analyze JP Watchlist (Network)"
-        if market == "jp"
-        else "50 Daily Use: Analyze US Watchlist (Network)"
+        "Routine: Analyze JP (Network)" if market == "jp" else "Routine: Analyze US (Network)"
         for market in sorted(runnable)
     ]
     print(f"Next daily operation: {', or '.join(operations)}")
