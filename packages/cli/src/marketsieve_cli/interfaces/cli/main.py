@@ -264,8 +264,9 @@ def market_query(
 
     console = _console(context, output_mode)
     try:
+        option_names = {"index": "indices", "market": "markets"}
         filters = {
-            key: tuple(values[key if key != "index" else "indices"])
+            key: tuple(values[option_names.get(key, key)])
             for key in (
                 "market",
                 "index",
@@ -276,7 +277,7 @@ def market_query(
                 "sector",
                 "industry",
             )
-            if values[key if key != "index" else "indices"]
+            if values[option_names.get(key, key)]
         }
         document = query_market_snapshot(
             context.obj["settings_path"],
