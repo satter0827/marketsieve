@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:marketsieve:schema:security-research-manifest:6.0.0",
+  "type": "object",
+  "required": ["schema", "research_id", "snapshot_id", "instrument_id", "provider_symbol", "created_at", "source", "inputs", "runtime_settings", "runtime_settings_hash", "price_requirements_met", "artifacts"],
+  "properties": {
+    "schema": {"const": "security-research-manifest/v6"},
+    "research_id": {"$ref": "#/$defs/id"},
+    "snapshot_id": {"$ref": "#/$defs/id"},
+    "instrument_id": {"type": "string", "pattern": "^[A-Z0-9]+:.+$"},
+    "provider_symbol": {"type": "string", "minLength": 1},
+    "created_at": {"type": "string", "format": "date-time"},
+    "source": {
+      "type": "object",
+      "required": ["name", "version", "response_hash"],
+      "properties": {
+        "name": {"const": "yfinance"},
+        "version": {"type": "string"},
+        "response_hash": {"$ref": "#/$defs/id"}
+      },
+      "additionalProperties": false
+    },
+    "inputs": {"type": "object", "required": ["start", "end", "adjustment", "evidence"]},
+    "runtime_settings": {"type": "object"},
+    "runtime_settings_hash": {"$ref": "#/$defs/id"},
+    "price_requirements_met": {"type": "boolean"},
+    "artifacts": {"type": "object", "minProperties": 13, "additionalProperties": {"type": "string"}}
+  },
+  "$defs": {"id": {"type": "string", "pattern": "^[0-9a-f]{64}$"}},
+  "additionalProperties": false
+}

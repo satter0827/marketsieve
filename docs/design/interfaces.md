@@ -51,8 +51,8 @@ symlinks, and access outside the object.
 
 Current top-level contracts are `market-snapshot/v7`, `market-snapshot-list/v2`,
 `market-snapshot-query-result/v2`, `market-snapshot-comparison/v2`, `market-snapshot-diff/v1`,
-`security-research/v4`, `security-research-list/v2`, `security-research-batch/v1`,
-`explorer-data/v2` for Snapshot, and
+`security-research/v6`, `security-research-list/v2`, `security-research-batch/v1`,
+`explorer-data/v2` for Snapshot and Research, and
 `capabilities-result/v8`. Capture state uses `capture-run/v1`. Stable JSON keys and formal schemas
 are English. Human CLI output and Explorer labels may be localized without changing machine
 documents.

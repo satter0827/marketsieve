@@ -6,6 +6,9 @@ followed by `make market-preview` or `make market-query`. Explorer files are obj
 browser fetch APIs, so `market-preview` and `research-preview` are the supported viewing paths;
 opening `explorer.html` directly with `file://` is not. Build focused evidence
 with `make research-build INSTRUMENTS='MIC:SYMBOL ...'` only after selecting a Snapshot.
+Research Explorer defaults to one year and can switch among three months, six months, one year,
+three years, and all saved observations without another network request. The object folder remains
+the handoff unit; `research serve` is the supported browser path.
 
 `make market-build` remains the explicit combined-scope acquisition command. Direct CLI arguments select one
 market, one or more indices, narrower evidence domains, and different history lengths. Optional

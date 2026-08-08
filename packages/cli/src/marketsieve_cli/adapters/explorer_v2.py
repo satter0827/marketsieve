@@ -268,7 +268,7 @@ def build_snapshot_explorer_data(
     }
 
 
-def render_explorer(document: Mapping[str, Any]) -> str:
+def _render_snapshot_explorer(document: Mapping[str, Any]) -> str:
     """Render the shared no-CDN shell; evidence is loaded from sibling authorities."""
 
     metadata = document["metadata"]
@@ -316,5 +316,236 @@ async function copy(text){try{await navigator.clipboard.writeText(text)}catch{co
 function render(){document.querySelectorAll('nav button').forEach(b=>b.setAttribute('aria-selected',String(b.dataset.id===active)));const section=$('#section-'+active);document.querySelectorAll('.section').forEach(s=>{s.classList.toggle('active',s===section);if(s!==section)s.replaceChildren()});if(active==='securities')section.innerHTML=securities();else section.innerHTML=C.views.filter(v=>v.section===active).map(chart).join('')||'<div class="card empty">表示項目はありません。</div>';if(active==='securities'){section.querySelectorAll('tbody tr').forEach((tr,i)=>tr.onclick=()=>detail(filtered[(page-1)*pageSize+i].instrument_id));$('#page-size').onchange=e=>{pageSize=Number(e.target.value);page=1;render();saveState()};$('#prev').onclick=()=>{page--;render()};$('#next').onclick=()=>{page++;render()};$('#copy-compare').onclick=()=>copy(C.actions.compare.replace('{instrument_ids}',selected.join(' ')).replace('{object_id}',C.metadata.object_id))}}
 async function init(){C=await(await fetch('explorer-data.json',{cache:'no-store'})).json();if(C.schema!=='explorer-data/v2')throw new Error('unsupported Explorer contract');const loaded=await Promise.all(Object.entries(C.sources).map(async([k,v])=>[k,await load(v)]));D=Object.fromEntries(loaded);rows=D.securities;fieldMap=new Map(C.field_catalog.map(f=>[f.name,f]));$('#title').textContent=C.metadata.title;$('#identity').textContent=`Snapshot ${C.metadata.object_id} · 作成 ${C.metadata.created_at} · yfinance ${C.metadata.source.version}`;options('index',rows.flatMap(r=>r.memberships||[]),'全指数');options('currency',rows.map(r=>r.values?.currency),'全通貨');options('sector',rows.map(r=>r.values?.sector),'全セクター');options('industry',rows.map(r=>r.values?.industry),'全業種');$('#tabs').innerHTML=C.sections.map(s=>`<button data-id="${s.id}" aria-selected="false">${esc(s.label)}</button>`).join('');$('#main').innerHTML=C.sections.map(s=>`<section id="section-${s.id}" class="section" aria-label="${esc(s.label)}"></section>`).join('');restoreState();document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{active=b.dataset.id;render();saveState()});['search','market','index','currency','sector','industry'].forEach(id=>{$('#'+id).oninput=applyFilters;$('#'+id).onchange=applyFilters});$('#copy-state').onclick=()=>copy(JSON.stringify(state(),null,2));$('#copy-cli').onclick=()=>copy(C.actions.query.replace('{object_id}',C.metadata.object_id));applyFilters()}
 init().catch(e=>{$('#main').innerHTML=`<div class="card error"><h2>Explorerを読み込めませんでした</h2><pre>${esc(e.message)}</pre></div>`});
+</script></body></html>
+"""
+
+
+def build_research_explorer_data(
+    manifest: Mapping[str, Any], definitions: Mapping[str, Any]
+) -> dict[str, Any]:
+    """Build a reference-only Research Explorer contract."""
+
+    del definitions  # Definitions remain authoritative through the registered source.
+    source_paths = {
+        "manifest.json",
+        "definitions.json",
+        "company.json",
+        "market-context.json",
+        "prices.jsonl",
+        "benchmarks.jsonl",
+        "financials.jsonl",
+        "events.jsonl",
+        "failures.jsonl",
+        "quality.json",
+    }
+    artifacts = manifest.get("artifacts")
+    if not isinstance(artifacts, Mapping):
+        raise ValueError("Research Explorer sources are not registered artifacts: manifest")
+    if missing := sorted(source_paths - set(artifacts)):
+        raise ValueError(f"Research Explorer sources are not registered artifacts: {missing}")
+    catalog = [
+        {
+            "name": name,
+            "data_type": data_type,
+            "unit": unit,
+            "definition": definition,
+        }
+        for name, data_type, unit, definition in (
+            ("date", "date", "date", "Trading date."),
+            ("close", "decimal", "instrument_currency", "Adjusted closing price."),
+            ("volume", "integer", "split_adjusted_shares", "Daily traded volume."),
+            ("benchmark", "string", "identifier", "Benchmark membership identifier."),
+            ("concept", "string", "identifier", "Normalized financial concept."),
+            ("value", "decimal", "definition_specific", "Evidence value."),
+            ("period", "string", "period", "Annual or quarterly reporting period."),
+            ("event_type", "string", "identifier", "Corporate event type."),
+            ("effective_date", "date", "date", "Event effective date."),
+            ("status", "string", "state", "Independent evidence acquisition state."),
+        )
+    ]
+    views = [
+        _view(
+            "price",
+            "overview",
+            "line",
+            "株価と移動平均",
+            "prices",
+            ("date", "close"),
+            "instrument_currency",
+            "selected",
+        ),
+        _view(
+            "volume",
+            "overview",
+            "horizontal_bar",
+            "出来高",
+            "prices",
+            ("date", "volume"),
+            "split_adjusted_shares",
+            "selected",
+        ),
+        _view(
+            "relative",
+            "overview",
+            "line",
+            "ベンチマーク相対推移",
+            "benchmarks",
+            ("date", "close"),
+            "rebased_index",
+            "selected",
+        ),
+        _view(
+            "volatility",
+            "risk",
+            "line",
+            "20営業日ローリング・ボラティリティ",
+            "prices",
+            ("date", "close"),
+            "annualized_ratio",
+            "20 trading days",
+        ),
+        _view(
+            "drawdown",
+            "risk",
+            "line",
+            "ドローダウン",
+            "prices",
+            ("date", "close"),
+            "ratio",
+            "selected",
+        ),
+        _view(
+            "annual",
+            "financials",
+            "horizontal_bar",
+            "年次財務",
+            "financials",
+            ("concept", "value"),
+            "reporting_currency_or_per_share",
+            "annual",
+        ),
+        _view(
+            "quarterly",
+            "financials",
+            "horizontal_bar",
+            "四半期財務",
+            "financials",
+            ("concept", "value"),
+            "reporting_currency_or_per_share",
+            "quarterly",
+        ),
+        _view(
+            "events",
+            "events",
+            "horizontal_bar",
+            "企業イベント",
+            "events",
+            ("event_type", "effective_date"),
+            "event_specific",
+            "selected",
+        ),
+        _view(
+            "evidence",
+            "evidence",
+            "horizontal_bar",
+            "証拠状態と定義",
+            "quality",
+            ("status",),
+            "state",
+            None,
+        ),
+    ]
+    return {
+        "schema": EXPLORER_SCHEMA,
+        "metadata": {
+            "object_type": "security_research",
+            "object_id": manifest["research_id"],
+            "title": "Security Research Explorer",
+            "locale": "ja",
+            "created_at": manifest["created_at"],
+            "source": manifest["source"],
+            "object_contract": "security-research/v6",
+        },
+        "renderer": {"version": RENDERER_VERSION},
+        "sections": [
+            {"id": "overview", "label": "概要", "description": "価格、出来高、ベンチマーク"},
+            {"id": "risk", "label": "リスク", "description": "変動と下落、回復"},
+            {"id": "financials", "label": "財務", "description": "年次と四半期の証拠"},
+            {"id": "events", "label": "イベント", "description": "決算、配当、分割"},
+            {"id": "evidence", "label": "証拠", "description": "取得状態、定義、欠損、障害"},
+        ],
+        "sources": {
+            "manifest": {"path": "manifest.json", "format": "json"},
+            "definitions": {"path": "definitions.json", "format": "json"},
+            "company": {"path": "company.json", "format": "json"},
+            "market_context": {"path": "market-context.json", "format": "json"},
+            "prices": {"path": "prices.jsonl", "format": "jsonl"},
+            "benchmarks": {"path": "benchmarks.jsonl", "format": "jsonl"},
+            "financials": {"path": "financials.jsonl", "format": "jsonl"},
+            "events": {"path": "events.jsonl", "format": "jsonl"},
+            "failures": {"path": "failures.jsonl", "format": "jsonl"},
+            "quality": {"path": "quality.json", "format": "json"},
+        },
+        "facets": ["period", "event_type", "evidence_domain"],
+        "column_sets": {
+            "price": ["date", "close", "volume"],
+            "financial": ["period", "concept", "value"],
+            "event": ["effective_date", "event_type"],
+            "evidence": ["status"],
+        },
+        "field_catalog": catalog,
+        "views": views,
+        "actions": {
+            "query": f"marketsieve research show {manifest['research_id']}",
+            "compare": (
+                f"marketsieve market compare {{instrument_ids}} --snapshot {manifest['snapshot_id']}"
+            ),
+            "research": (
+                f"marketsieve research build {manifest['instrument_id']} "
+                f"--snapshot {manifest['snapshot_id']} --evidence price --evidence company "
+                "--evidence financials --evidence events --evidence benchmarks --history-days 3653"
+            ),
+        },
+    }
+
+
+def render_explorer(document: Mapping[str, Any]) -> str:
+    """Render the object-specific shell from the shared Explorer contract."""
+
+    object_type = document.get("metadata", {}).get("object_type")
+    if object_type == "market_snapshot":
+        return _render_snapshot_explorer(document)
+    if object_type == "security_research":
+        title = html.escape(str(document["metadata"]["title"]))
+        return _RESEARCH_HTML.replace("__TITLE__", title)
+    raise ValueError(f"unsupported Explorer object type: {object_type}")
+
+
+_RESEARCH_HTML = r"""<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>__TITLE__</title><style>
+:root{color-scheme:light dark;--bg:#f4f7fb;--panel:#fff;--text:#182234;--muted:#617086;--line:#d8e0ea;--accent:#1769aa;--accent2:#e78b22;--neg:#b42318;--shadow:0 8px 28px rgba(22,34,52,.08)}
+@media(prefers-color-scheme:dark){:root{--bg:#0f1724;--panel:#172235;--text:#e8eef7;--muted:#a9b7ca;--line:#324157;--accent:#66b5ef;--accent2:#f1ad5f;--neg:#ff8791;--shadow:none}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px/1.55 system-ui,-apple-system,sans-serif}button,select{font:inherit;color:inherit;background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:8px 11px}button{cursor:pointer}button:focus-visible,select:focus-visible{outline:3px solid color-mix(in srgb,var(--accent) 35%,transparent);outline-offset:2px}header{display:flex;justify-content:space-between;gap:18px;padding:22px clamp(14px,4vw,48px);background:var(--panel);border-bottom:1px solid var(--line)}h1{font-size:24px;margin:0 0 5px}.sub,.meta{color:var(--muted);font-size:12px}.sub{overflow-wrap:anywhere}.controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center}nav{display:flex;gap:7px;overflow:auto;padding:12px clamp(14px,4vw,48px)}nav button[aria-selected=true]{background:var(--accent);border-color:var(--accent);color:#fff}main{padding:0 clamp(14px,4vw,48px) 48px}.section{display:none}.section.active{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,460px),1fr));gap:16px}.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;min-width:0;box-shadow:var(--shadow)}.card.full{grid-column:1/-1}.card h2{font-size:16px;margin:0 0 4px}.chart{min-height:260px}.chart-meta{color:var(--muted);font-size:12px;margin-bottom:8px}svg{width:100%;height:260px}.axis{stroke:var(--line)}.series{fill:none;stroke:var(--accent);stroke-width:2}.series.s1{stroke:var(--accent2);stroke-dasharray:8 4}.series.s2{stroke:var(--muted);stroke-dasharray:2 4}.zero{stroke:var(--muted);stroke-dasharray:4 4}.table-wrap{overflow:auto;max-height:520px;border:1px solid var(--line);border-radius:10px}table{border-collapse:collapse;width:100%;font-size:12px}th,td{padding:8px 9px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}th{position:sticky;top:0;background:var(--panel);z-index:1}.empty{padding:36px 12px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:10px}.status{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:2px 7px}.acquisition_failed{color:var(--neg)}details{margin-top:10px}summary{cursor:pointer}
+@media(max-width:700px){header{display:block}.controls{margin-top:10px}.section.active{display:block}.card{margin-bottom:12px}h1{font-size:20px}}
+</style></head><body><header><div><h1 id="title">__TITLE__</h1><div id="identity" class="sub">読み込み中</div></div><div class="controls"><label>表示期間 <select id="period"><option value="3m">3か月</option><option value="6m">6か月</option><option value="1y" selected>1年</option><option value="3y">3年</option><option value="all">全期間</option></select></label><button id="copy-cli">CLIをコピー</button></div></header><nav id="tabs"></nav><main id="main"></main>
+<script>'use strict';
+const $=s=>document.querySelector(s),esc=v=>String(v??'—').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])),num=v=>{const n=Number(v);return Number.isFinite(n)?n:null};let C,D={},active='overview';
+const load=async s=>{const r=await fetch(s.path,{cache:'no-store'});if(!r.ok)throw new Error(`${s.path}: HTTP ${r.status}`);const t=await r.text();return s.format==='jsonl'?t.split(/\r?\n/).filter(Boolean).map(JSON.parse):JSON.parse(t)};
+function selected(rows,key='date'){const p=$('#period').value;if(p==='all'||!rows.length)return rows;const last=new Date(rows.at(-1)[key]),days={"3m":92,"6m":183,"1y":366,"3y":1096}[p],start=new Date(last);start.setUTCDate(start.getUTCDate()-days);return rows.filter(r=>new Date(r[key])>=start)}
+function table(rows,limit=500){if(!rows.length)return'<div class="empty">該当する保存済み証拠はありません。</div>';const keys=[...new Set(rows.slice(0,limit).flatMap(Object.keys))];return`<div class="table-wrap"><table><thead><tr>${keys.map(k=>`<th>${esc(k)}</th>`).join('')}</tr></thead><tbody>${rows.slice(0,limit).map(r=>`<tr>${keys.map(k=>`<td>${esc(typeof r[k]==='object'?JSON.stringify(r[k]):r[k])}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`}
+function line(series,unit){const all=series.flatMap(s=>s.rows.map(r=>num(r.value)).filter(v=>v!==null));if(all.length<2)return'';const W=720,H=260,p=38,min=Math.min(...all,0),max=Math.max(...all,0),y=v=>H-p-(v-min)/(max-min||1)*(H-2*p);return`<svg viewBox="0 0 ${W} ${H}" role="img"><line class="axis" x1="${p}" y1="${H-p}" x2="${W-p}" y2="${H-p}"/>${series.map((s,j)=>`<polyline class="series s${j%3}" points="${s.rows.map((r,i)=>`${p+i/(s.rows.length-1||1)*(W-2*p)},${y(num(r.value))}`).join(' ')}"><title>${esc(s.name)} · ${esc(unit)}</title></polyline>`).join('')}</svg>`}
+function card(title,unit,rows,visual=''){return`<article class="card"><h2>${esc(title)}</h2><div class="chart-meta">単位 ${esc(unit)} · 観測 ${rows.length}</div><div class="chart">${visual||table(rows)}</div>${visual?`<details><summary>表データ</summary>${table(rows)}</details>`:''}</article>`}
+function sma(rows,n){return rows.map((r,i)=>({date:r.date,value:i+1<n?null:rows.slice(i-n+1,i+1).reduce((a,x)=>a+num(x.close),0)/n})).filter(r=>r.value!==null)}
+function priceCards(){const rows=selected(D.prices),dates=new Set(rows.map(r=>r.date)),close=rows.map(r=>({date:r.date,value:num(r.close)})),vol=rows.map(r=>({date:r.date,value:num(r.volume)})),sma20=sma(D.prices,20).filter(r=>dates.has(r.date)),sma50=sma(D.prices,50).filter(r=>dates.has(r.date));return card('株価と20・50日移動平均','instrument currency',rows,line([{name:'close',rows:close},{name:'SMA20',rows:sma20},{name:'SMA50',rows:sma50}],'instrument currency'))+card('出来高','split-adjusted shares',vol,line([{name:'volume',rows:vol}],'shares'))+relative(rows)}
+function relative(prices){const byDate=new Map(prices.map(r=>[r.date,num(r.close)])),groups=new Map;for(const r of selected(D.benchmarks)){if(!byDate.has(r.date))continue;if(!groups.has(r.benchmark))groups.set(r.benchmark,[]);groups.get(r.benchmark).push({date:r.date,value:num(r.close)})}const security=prices.map(r=>({date:r.date,value:num(r.close)})),all=[['security',security],...groups];const rebased=all.flatMap(([name,rows])=>{const base=rows.find(r=>r.value>0)?.value;return base?[{name,rows:rows.map(r=>({...r,value:r.value/base*100}))}]:[]});return card('ベンチマーク相対推移','start = 100',rebased.flatMap(x=>x.rows),line(rebased,'rebased index'))}
+function riskCards(){const rows=selected(D.prices),returns=rows.map((r,i)=>i?Math.log(num(r.close)/num(rows[i-1].close)):null),rolling=rows.map((r,i)=>{const w=returns.slice(Math.max(1,i-19),i+1).filter(Number.isFinite);if(w.length<2)return{date:r.date,value:null};const mean=w.reduce((a,x)=>a+x,0)/w.length,variance=w.reduce((a,x)=>a+(x-mean)**2,0)/(w.length-1);return{date:r.date,value:Math.sqrt(variance*252)}}).filter(r=>r.value!==null);let peak=0;const dd=rows.map(r=>{const c=num(r.close);peak=Math.max(peak,c);return{date:r.date,value:c/peak-1}});const underwater=dd.filter(r=>r.value<0).length;return card('20営業日ローリング・ボラティリティ','annualized ratio',rolling,line([{name:'volatility',rows:rolling}],'ratio'))+card('ドローダウンと下落継続','ratio',dd,line([{name:`drawdown (underwater ${underwater} days)`,rows:dd}],'ratio'))}
+function financialCards(){return['annual','quarterly'].map(period=>{const rows=D.financials.filter(r=>r.period===period);return card(period==='annual'?'年次財務':'四半期財務','reporting currency / per share',rows)}).join('')}
+function eventCards(){const rows=selected(D.events,'effective_date');return card('企業イベント','event specific',rows)}
+function evidenceCards(){const states=Object.entries(D.quality.evidence_statuses||{}).map(([domain,status])=>({domain,status}));const company=Object.entries(D.company.values||{}).map(([field,value])=>({domain:'company',field,value,unit:(D.definitions.company_fields||[]).find(x=>x.name===field)?.unit||'text',basis:'retrieval'}));const failures=D.failures.map(x=>({domain:x.stage,field:x.field,value:x.reason,unit:'reason_code',basis:'retrieval'}));return card('証拠領域の取得状態','state',states)+card('会社情報','definition specific',company)+card('取得・計算障害','reason code',failures)+card('定義','contract',Object.entries(D.definitions).filter(([k])=>k!=='market_context').map(([field,value])=>({field,value:typeof value==='object'?JSON.stringify(value):value})))}
+function render(){document.querySelectorAll('nav button').forEach(b=>b.setAttribute('aria-selected',String(b.dataset.id===active)));document.querySelectorAll('.section').forEach(s=>{s.classList.toggle('active',s.id===`section-${active}`);if(s.id!==`section-${active}`)s.replaceChildren()});const target=$(`#section-${active}`);target.innerHTML=active==='overview'?priceCards():active==='risk'?riskCards():active==='financials'?financialCards():active==='events'?eventCards():evidenceCards()}
+async function copy(t){try{await navigator.clipboard.writeText(t)}catch{prompt('コピーしてください',t)}}
+async function init(){C=await(await fetch('explorer-data.json',{cache:'no-store'})).json();if(C.schema!=='explorer-data/v2'||C.metadata.object_type!=='security_research')throw new Error('unsupported Explorer contract');D=Object.fromEntries(await Promise.all(Object.entries(C.sources).map(async([k,v])=>[k,await load(v)])));$('#title').textContent=C.metadata.title;$('#identity').textContent=`${D.manifest.instrument_id} · Research ${C.metadata.object_id} · ${C.metadata.created_at}`;$('#tabs').innerHTML=C.sections.map(s=>`<button data-id="${s.id}" aria-selected="false">${esc(s.label)}</button>`).join('');$('#main').innerHTML=C.sections.map(s=>`<section id="section-${s.id}" class="section" aria-label="${esc(s.label)}"></section>`).join('');document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{active=b.dataset.id;render()});$('#period').onchange=render;$('#copy-cli').onclick=()=>copy(C.actions.query);render()}
+init().catch(e=>{$('#main').innerHTML=`<article class="card"><h2>Explorerを読み込めませんでした</h2><pre>${esc(e.message)}</pre></article>`});
 </script></body></html>
 """

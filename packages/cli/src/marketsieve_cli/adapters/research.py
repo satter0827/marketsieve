@@ -6,7 +6,7 @@ import hashlib
 import json
 import os
 import shutil
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -14,7 +14,7 @@ from typing import Any, cast
 
 from marketsieve_extension_api import ImportedSecurityResearch
 
-from .explorer import build_research_explorer_data, render_explorer
+from .explorer_v2 import build_research_explorer_data, render_explorer
 
 ARTIFACTS = (
     "README.md",
@@ -128,6 +128,91 @@ EVENT_FIELDS = {
     ),
     "split": (("ratio", "decimal", "new_shares_per_old_share"),),
 }
+
+EVIDENCE_STATES = (
+    "available",
+    "none_observed",
+    "not_requested",
+    "acquisition_failed",
+)
+
+
+def _evidence_statuses(
+    requested: set[str],
+    *,
+    prices: tuple[dict[str, Any], ...],
+    company: Mapping[str, Any],
+    financials: tuple[dict[str, Any], ...],
+    events: tuple[dict[str, Any], ...],
+    benchmarks: tuple[dict[str, Any], ...],
+    failures: tuple[dict[str, Any], ...],
+) -> dict[str, str]:
+    """Classify each independently retrievable evidence domain."""
+
+    failed_fields = {str(value["field"]) for value in failures if value["stage"] != "benchmark"}
+
+    def status(request: str, available: bool, failed: bool) -> str:
+        if request not in requested:
+            return "not_requested"
+        if available:
+            return "available"
+        if failed:
+            return "acquisition_failed"
+        return "none_observed"
+
+    annual_failures = {
+        "income_yearly",
+        "balance_sheet_yearly",
+        "cash_flow_yearly",
+        "annual_income",
+    }
+    quarterly_failures = {
+        "income_quarterly",
+        "balance_sheet_quarterly",
+        "cash_flow_quarterly",
+        "quarterly_income",
+        "quarterly_cash_flow",
+        "balance_sheet",
+    }
+    has_action_failure = "actions" in failed_fields
+    values = cast(Mapping[str, Any], company.get("values", {}))
+    result = {
+        "price": status("price", bool(prices), bool(failed_fields & {"price", "history"})),
+        "company": status("company", bool(values), "company" in failed_fields),
+        "annual_financials": status(
+            "financials",
+            any(value["period"] == "annual" for value in financials),
+            bool(failed_fields & annual_failures) or "company_financials" in failed_fields,
+        ),
+        "quarterly_financials": status(
+            "financials",
+            any(value["period"] == "quarterly" for value in financials),
+            bool(failed_fields & quarterly_failures) or "company_financials" in failed_fields,
+        ),
+        "earnings": status(
+            "events",
+            any(value["event_type"] == "earnings" for value in events),
+            "earnings" in failed_fields,
+        ),
+        "dividends": status(
+            "events",
+            any(value["event_type"] == "dividend" for value in events),
+            has_action_failure,
+        ),
+        "splits": status(
+            "events",
+            any(value["event_type"] == "split" for value in events),
+            has_action_failure,
+        ),
+        "benchmarks": status(
+            "benchmarks",
+            bool(benchmarks),
+            any(value["stage"] == "benchmark" for value in failures),
+        ),
+    }
+    if any(value not in EVIDENCE_STATES for value in result.values()):
+        raise AssertionError("unsupported evidence state")
+    return result
 
 
 def _json_bytes(value: object) -> bytes:
@@ -248,15 +333,14 @@ class ResearchStore:
             failures_by_reason[failure["reason"]] = failures_by_reason.get(failure["reason"], 0) + 1
             failures_by_stage[failure["stage"]] = failures_by_stage.get(failure["stage"], 0) + 1
         requested = set(imported.request.evidence)
-        event_failures = [value for value in failures if value["stage"] == "research"]
-        event_status = (
-            "not_requested"
-            if "events" not in requested
-            else "acquisition_failed"
-            if event_failures
-            else "available"
-            if events
-            else "none_observed"
+        evidence_statuses = _evidence_statuses(
+            requested,
+            prices=prices,
+            company=company,
+            financials=financials,
+            events=events,
+            benchmarks=benchmark_prices,
+            failures=failures,
         )
         financial_dates = [value["fiscal_period_end"] for value in financials]
         retrieved_date = imported.retrieved_at.date()
@@ -267,7 +351,7 @@ class ResearchStore:
             if name == "dividend_yield" and not Decimal(0) <= Decimal(value) <= Decimal(1)
         ]
         quality = {
-            "schema": "security-research-quality/v2",
+            "schema": "security-research-quality/v3",
             "requested_evidence": list(imported.request.evidence),
             "minimum_price_observations": minimum_price_observations,
             "price_observations": len(prices),
@@ -279,7 +363,7 @@ class ResearchStore:
                 for period in ("annual", "quarterly")
             },
             "events": len(events),
-            "event_status": event_status,
+            "evidence_statuses": evidence_statuses,
             "benchmark_observations": len(benchmark_prices),
             "failures": len(failures),
             "failures_by_reason": dict(sorted(failures_by_reason.items())),
@@ -308,7 +392,7 @@ class ResearchStore:
             },
         }
         definitions = {
-            "schema": "security-research-definitions/v2",
+            "schema": "security-research-definitions/v3",
             "availability_basis": {
                 "retrieval": (
                     "The provider did not expose publication time; "
@@ -418,19 +502,11 @@ class ResearchStore:
         }
         research_id = hashlib.sha256(_json_bytes(semantic)).hexdigest()
         manifest = {
-            "schema": "security-research-manifest/v4",
+            "schema": "security-research-manifest/v6",
             "research_id": research_id,
             **manifest_body,
         }
-        explorer_data = build_research_explorer_data(
-            manifest,
-            company,
-            quality,
-            prices,
-            benchmark_prices,
-            financials,
-            events,
-        )
+        explorer_data = build_research_explorer_data(manifest, definitions)
         self._ensure_directory(self.objects)
         destination = self.objects / research_id
         if destination.is_symlink():
@@ -478,7 +554,7 @@ class ResearchStore:
         manifest = self._read_json(path / "manifest.json")
         return {
             **manifest,
-            "schema": "security-research/v4",
+            "schema": "security-research/v6",
             "quality": self._read_json(path / "quality.json"),
             "artifacts": {name: str(path / name) for name in ARTIFACTS},
         }
@@ -562,7 +638,7 @@ class ResearchStore:
             raise ValueError("security research object is incomplete")
         manifest = cls._read_json(path / "manifest.json")
         if (
-            manifest.get("schema") != "security-research-manifest/v4"
+            manifest.get("schema") != "security-research-manifest/v6"
             or manifest.get("research_id") != research_id
         ):
             raise ValueError("security research manifest identity is invalid")
@@ -585,25 +661,12 @@ class ResearchStore:
         if hashlib.sha256(_json_bytes(semantic)).hexdigest() != research_id:
             raise ValueError("security research content identity is invalid")
         quality = semantic["quality"]
-        company = semantic["company"]
-        financials = semantic["financials"]
-        events = semantic["events"]
-        prices = semantic["prices"]
-        benchmarks = semantic["benchmarks"]
         if (path / "README.md").read_text(encoding="utf-8") != cls._readme(manifest):
             raise ValueError("security research README projection is invalid")
         if (path / "summary.md").read_text(encoding="utf-8") != cls._summary(manifest, quality):
             raise ValueError("security research summary projection is invalid")
         explorer_data = cls._read_json(path / "explorer-data.json")
-        expected_explorer_data = build_research_explorer_data(
-            manifest,
-            company,
-            quality,
-            prices,
-            benchmarks,
-            financials,
-            events,
-        )
+        expected_explorer_data = build_research_explorer_data(manifest, semantic["definitions"])
         if explorer_data != expected_explorer_data:
             raise ValueError("security research Explorer data projection is invalid")
         if (path / "explorer.html").read_text(encoding="utf-8") != render_explorer(explorer_data):
