@@ -553,18 +553,23 @@ class YFinanceSource:
         """Fetch price-only macro series without applying equity-specific checks."""
 
         requested = tuple(
-            EquityBatchInstrument(
-                Instrument.create(
-                    symbol=item.indicator_id.upper().replace("_", "")[:12],
-                    mic="XNAS",
-                    currency=("JPY" if item.unit == "JPY_per_USD" else "USD"),
-                    exchange_timezone="America/New_York",
+            sorted(
+                (
+                    EquityBatchInstrument(
+                        Instrument.create(
+                            symbol=item.indicator_id.upper().replace("_", "")[:12],
+                            mic="XNAS",
+                            currency=("JPY" if item.unit == "JPY_per_USD" else "USD"),
+                            exchange_timezone="America/New_York",
+                        ),
+                        item.provider_symbol,
+                        (f"indicator:{item.indicator_id}",),
+                        True,
+                    )
+                    for item in request.indicators
                 ),
-                item.provider_symbol,
-                (f"indicator:{item.indicator_id}",),
-                True,
+                key=lambda value: (value.instrument.mic, value.instrument.symbol),
             )
-            for item in request.indicators
         )
         batch = self.fetch(
             EquityBatchRequest(
