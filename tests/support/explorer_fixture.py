@@ -202,6 +202,7 @@ def main() -> None:
     }
     quality = {
         "schema": "market-snapshot-quality-summary/v4",
+        "price_coverage": {"overall": "1", "indices": {"sp500": "1"}},
         "domains": {"price": {"applicable": 2, "present": 2, "coverage": "1"}},
         "freshness": {
             "price_age_days": {"observation_count": 2, "median": 0, "p95": 0, "maximum": 0}
