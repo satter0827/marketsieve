@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import importlib
 import json
+from typing import Any
 
+import pytest
 from click.testing import CliRunner
 
 from marketsieve import __version__
@@ -62,3 +65,41 @@ def test_saved_data_commands_require_snapshot_identity() -> None:
     assert runner.invoke(main, ["market", "security", "XNAS:MSFT"]).exit_code == 2
     assert runner.invoke(main, ["market", "query"]).exit_code == 2
     assert runner.invoke(main, ["research", "build", "XNAS:MSFT"]).exit_code == 2
+
+
+def test_market_query_maps_repeatable_cli_classifications_to_canonical_names(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cli_module = importlib.import_module("marketsieve_cli.interfaces.cli.main")
+    captured: dict[str, Any] = {}
+
+    def query(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        captured.update(kwargs)
+        return {
+            "schema": "market-snapshot-query-result/v1",
+            "snapshot_id": "a" * 64,
+            "matched_count": 0,
+            "fields": [],
+            "rows": [],
+        }
+
+    monkeypatch.setattr(cli_module, "query_market_snapshot", query)
+
+    result = CliRunner().invoke(
+        main,
+        [
+            "market",
+            "query",
+            "--snapshot",
+            "latest",
+            "--market",
+            "jp",
+            "--index",
+            "nikkei225",
+            "--output",
+            "json",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert captured["filters"] == {"market": ("jp",), "index": ("nikkei225",)}
