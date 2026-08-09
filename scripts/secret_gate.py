@@ -19,7 +19,8 @@ ROOT = Path(__file__).parents[1]
 MAX_TEXT_BYTES = 5 * 1024 * 1024
 MAX_ARCHIVE_DEPTH = 3
 SENSITIVE_NAMES = re.compile(
-    r"(?:^|/)(?:\.env(?:\..+)?|(?:credentials?|secrets?)(?:\.[^/]+)?)(?:$|/)",
+    r"(?:^|/)(?:\.env(?:\..+)?|(?:credentials?|secrets?)(?:\."
+    r"(?:json|ya?ml|toml|ini|cfg|conf|txt|csv|env|xml|properties))?)(?:$|/)",
     re.IGNORECASE,
 )
 SENSITIVE_SUFFIXES = (".key", ".p12", ".pem", ".pfx", ".private-key")
