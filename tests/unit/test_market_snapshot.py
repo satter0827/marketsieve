@@ -185,6 +185,14 @@ def test_snapshot_is_self_contained_without_spreadsheets(tmp_path: Path) -> None
     assert "sectors.indexOf(d.y)" in html
     assert "Math.floor(i/2)" not in html
     assert 'return`<span class="meta"' not in html
+    assert "coverageValue(D.quality.price_coverage)" in html
+    assert "価格取得率 [object Object]" not in html
+    assert "横軸 ${esc(fieldLabel(xf))}" in html
+    assert "unitLabel(v.unit)" in html
+    assert "periodLabel(v.period)" in html
+    assert "denominator:present.length" in html
+    assert "未取得の市場指標" in html
+    assert "indicator.missing_reason" in html
     explorer_data = json.loads((root / "explorer-data.json").read_text())
     assert explorer_data["schema"] == "explorer-data/v4"
     assert "securities" not in explorer_data

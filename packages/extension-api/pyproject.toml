@@ -1,6 +1,6 @@
 [project]
 name = "marketsieve-extension-api"
-version = "0.19.1"
+version = "0.19.2"
 description = "Extension contracts for MarketSieve data sources."
 readme = "README.md"
 requires-python = ">=3.12,<3.15"
