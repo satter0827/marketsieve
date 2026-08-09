@@ -169,6 +169,38 @@ def test_operation_run_records_monotonic_progress_retry_and_heartbeat(tmp_path: 
     assert "heartbeat" in observed
 
 
+def test_operation_run_aggregates_concurrent_retries_by_phase(tmp_path: Path) -> None:
+    observed: list[str] = []
+    store = OperationRunStore(tmp_path)
+    with store.track(
+        "market build",
+        {"scope": "all"},
+        observer=lambda code, _progress, _elapsed: observed.append(code),
+    ) as context:
+        context(
+            AcquisitionProgress("company_financials", AcquisitionProgressState.STARTED, 0, 10, 0)
+        )
+        for completed in (2, 3, 4):
+            context(
+                AcquisitionProgress(
+                    "company_financials",
+                    AcquisitionProgressState.RETRYING,
+                    completed,
+                    10,
+                    0,
+                    attempt=2,
+                    max_attempts=3,
+                    retry_after_seconds=2,
+                )
+            )
+
+    run = store.list()["runs"][0]
+    events = store.events(run["run_id"])["events"]
+    assert [item["code"] for item in events].count("retry") == 1
+    assert observed.count("retry") == 1
+    assert run["current_progress"]["completed"] == 4
+
+
 def test_operation_context_is_thread_safe_and_retains_publications_on_cancel(
     tmp_path: Path,
 ) -> None:

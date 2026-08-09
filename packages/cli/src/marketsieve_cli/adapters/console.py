@@ -173,7 +173,7 @@ class ConsoleOutput:
                 f"完了={progress.completed} 総数={progress.total} "
                 f"失敗={progress.failure_count} 経過={elapsed_seconds:.1f}秒"
             )
-            if progress.attempt is not None:
+            if event_code == "retry":
                 line += (
                     f" 再試行={progress.attempt}/{progress.max_attempts} "
                     f"待機={progress.retry_after_seconds:.1f}秒"
@@ -184,7 +184,7 @@ class ConsoleOutput:
                 f"completed={progress.completed} total={progress.total} "
                 f"failures={progress.failure_count} elapsed={elapsed_seconds:.1f}s"
             )
-            if progress.attempt is not None:
+            if event_code == "retry":
                 line += (
                     f" attempt={progress.attempt}/{progress.max_attempts} "
                     f"retry_after={progress.retry_after_seconds:.1f}s"
