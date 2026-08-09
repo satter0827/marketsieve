@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.19.4] - 2026-08-09
+
+- Generate Research chart fallback tables only when they are opened, keeping full-history evidence
+  out of the initial DOM while preserving the canonical JSONL source and accessible table view.
+
 ## [0.19.3] - 2026-08-09
 
 - Validate current-contract objects independently during inventory and classify invalid projections
