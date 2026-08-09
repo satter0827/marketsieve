@@ -1,0 +1,8 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:marketsieve:schema:operation-event:1.0.0",
+  "type": "object",
+  "required": ["schema", "timestamp", "level", "code", "details"],
+  "properties": {"schema": {"const": "operation-event/v1"}, "timestamp": {"type": "string", "format": "date-time"}, "level": {"type": "string"}, "code": {"type": "string"}, "details": {"type": "object"}},
+  "additionalProperties": false
+}

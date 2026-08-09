@@ -5,10 +5,23 @@ import json
 from typing import Any
 
 import pytest
+from click import Group
 from click.testing import CliRunner
 
 from marketsieve import __version__
+from marketsieve_cli.contracts import COMMAND_CAPABILITIES
 from marketsieve_cli.interfaces.cli import main
+
+
+def _command_paths(group: Group, prefix: tuple[str, ...] = ()) -> set[str]:
+    paths: set[str] = set()
+    for name, command in group.commands.items():
+        path = (*prefix, name)
+        if isinstance(command, Group):
+            paths.update(_command_paths(command, path))
+        else:
+            paths.add(" ".join(path))
+    return paths
 
 
 def test_public_cli_is_small_and_explicit() -> None:
@@ -21,17 +34,27 @@ def test_public_cli_is_small_and_explicit() -> None:
     assert "market build --all" in landing.stdout
     assert version.output == f"marketsieve, version {__version__}\n"
     document = json.loads(capabilities.stdout)
-    assert document["schema"] == "capabilities-result/v10"
-    assert {item["name"].split()[0] for item in document["commands"]} == {
+    assert document["schema"] == "capabilities-result/v11"
+    assert set(main.commands) == {
         "market",
         "research",
+        "operations",
         "doctor",
         "capabilities",
+    }
+    assert _command_paths(main) == {item.name for item in COMMAND_CAPABILITIES}
+    assert {item["name"] for item in document["commands"]} == _command_paths(main)
+    for removed in (
         "preview",
         "artifacts",
         "run",
-    }
-    for removed in ("portfolio", "watchlist", "daily", "weekly", "source", "snapshot"):
+        "portfolio",
+        "watchlist",
+        "daily",
+        "weekly",
+        "source",
+        "snapshot",
+    ):
         assert runner.invoke(main, [removed]).exit_code == 2
 
 

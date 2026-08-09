@@ -1,0 +1,8 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:marketsieve:schema:security-research-event:1.0.0",
+  "type": "object",
+  "required": ["schema", "event_type", "effective_date", "values", "available_at", "availability_basis", "unpriced_event"],
+  "properties": {"schema": {"const": "security-research-event/v1"}, "event_type": {"type": "string"}, "effective_date": {"type": "string", "format": "date"}, "values": {"type": "object", "additionalProperties": {"type": "string"}}, "available_at": {"type": "string", "format": "date-time"}, "availability_basis": {"const": "retrieval"}, "unpriced_event": {"type": "boolean"}},
+  "additionalProperties": false
+}

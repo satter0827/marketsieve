@@ -34,28 +34,106 @@ QUERY_DOMAINS = (
     "valuation",
     "quality",
 )
+
+
+@dataclass(frozen=True, slots=True)
+class CommandCapability:
+    name: str
+    summary: str
+    output_schema: str
+    network: bool = False
+    writes: tuple[str, ...] = ()
+
+
 COMMAND_CAPABILITIES = (
-    ("market build", "market-snapshot/v8", True, ("market_snapshot", "operation_run")),
-    ("market capture", "market-snapshot/v8", True, ("market_snapshot", "operation_run")),
-    ("market reconstruct", "market-snapshot/v8", True, ("market_snapshot", "operation_run")),
-    ("market list", "market-snapshot-list/v3", False, ()),
-    ("market show", "market-snapshot/v8", False, ()),
-    ("market query", "market-snapshot-query-result/v3", False, ()),
-    ("market security", "market-snapshot-security-result/v1", False, ()),
-    ("market compare", "market-snapshot-comparison/v3", False, ()),
-    ("market diff", "market-snapshot-diff/v1", False, ()),
-    ("research build", "security-research-batch/v1", True, ("security_research", "operation_run")),
-    ("research list", "security-research-list/v3", False, ()),
-    ("research show", "security-research/v8", False, ()),
-    ("preview", "interactive-preview/v2", False, ()),
-    ("artifacts list", "artifact-list/v1", False, ()),
-    ("artifacts doctor", "artifact-doctor/v1", False, ()),
-    ("run list", "operation-run-list/v1", False, ()),
-    ("run show", "operation-run/v1", False, ()),
-    ("run events", "operation-events/v1", False, ()),
-    ("run prune", "operation-prune/v1", False, ("operation_run",)),
-    ("doctor", "doctor-result/v1", False, ("log_file",)),
-    ("capabilities", "capabilities-result/v10", False, ()),
+    CommandCapability(
+        "market build",
+        "Acquire one explicitly scoped Market Snapshot.",
+        "market-snapshot/v9",
+        True,
+        ("market_snapshot", "operation_run"),
+    ),
+    CommandCapability(
+        "market capture",
+        "Capture one selected market close.",
+        "market-snapshot/v9",
+        True,
+        ("market_snapshot", "operation_run"),
+    ),
+    CommandCapability(
+        "market reconstruct",
+        "Reconstruct historical price evidence.",
+        "market-snapshot/v9",
+        True,
+        ("market_snapshot", "operation_run"),
+    ),
+    CommandCapability("market list", "List verified Market Snapshots.", "market-snapshot-list/v3"),
+    CommandCapability("market show", "Show one verified Market Snapshot.", "market-snapshot/v9"),
+    CommandCapability(
+        "market query", "Filter saved Snapshot evidence.", "market-snapshot-query-result/v3"
+    ),
+    CommandCapability(
+        "market security",
+        "Show one security from a saved Snapshot.",
+        "market-snapshot-security-result/v1",
+    ),
+    CommandCapability(
+        "market compare",
+        "Compare compatible saved security fields.",
+        "market-snapshot-comparison/v3",
+    ),
+    CommandCapability(
+        "market diff", "Compare two compatible Market Snapshots.", "market-snapshot-diff/v1"
+    ),
+    CommandCapability(
+        "market preview", "Preview one verified Market Snapshot.", "interactive-preview/v2"
+    ),
+    CommandCapability(
+        "research build",
+        "Acquire focused evidence for Snapshot securities.",
+        "security-research-batch/v1",
+        True,
+        ("security_research", "operation_run"),
+    ),
+    CommandCapability(
+        "research list", "List verified Security Research packs.", "security-research-list/v3"
+    ),
+    CommandCapability(
+        "research show", "Show one verified Security Research pack.", "security-research/v9"
+    ),
+    CommandCapability(
+        "research preview", "Preview one verified Security Research pack.", "interactive-preview/v2"
+    ),
+    CommandCapability(
+        "operations artifacts list", "List evidence object health.", "artifact-list/v1"
+    ),
+    CommandCapability(
+        "operations artifacts doctor", "Diagnose evidence object health.", "artifact-doctor/v1"
+    ),
+    CommandCapability(
+        "operations run list", "List structured generation runs.", "operation-run-list/v1"
+    ),
+    CommandCapability(
+        "operations run show", "Show one structured generation run.", "operation-run/v1"
+    ),
+    CommandCapability(
+        "operations run events", "List events for one generation run.", "operation-events/v1"
+    ),
+    CommandCapability(
+        "operations run prune",
+        "Preview or apply generation-run cleanup.",
+        "operation-prune/v1",
+        writes=("operation_run",),
+    ),
+    CommandCapability(
+        "doctor",
+        "Check the installed runtime and source.",
+        "doctor-result/v1",
+        writes=("log_file",),
+    ),
+    CommandCapability(
+        "capabilities", "Describe commands, schemas, and side effects.", "capabilities-result/v11"
+    ),
 )
 
 
@@ -63,16 +141,20 @@ def capabilities_document(version: str) -> dict[str, object]:
     """Return the transport-independent public operation contract."""
 
     return {
-        "schema": "capabilities-result/v10",
+        "schema": "capabilities-result/v11",
         "version": version,
         "commands": [
             {
-                "name": name,
-                "summary": name,
-                "output_schema": schema,
-                "effects": {"network": network, "secrets": False, "writes": list(writes)},
+                "name": capability.name,
+                "summary": capability.summary,
+                "output_schema": capability.output_schema,
+                "effects": {
+                    "network": capability.network,
+                    "secrets": False,
+                    "writes": list(capability.writes),
+                },
             }
-            for name, schema, network, writes in COMMAND_CAPABILITIES
+            for capability in COMMAND_CAPABILITIES
         ],
     }
 

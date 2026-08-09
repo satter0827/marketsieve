@@ -14,8 +14,9 @@ from typing import Any, cast
 
 from marketsieve_extension_api import ImportedSecurityResearch
 
+from ..schema_registry import validate_document
 from .artifacts import ArtifactInventory
-from .explorer_v2 import build_research_explorer_data, render_explorer
+from .explorer import build_research_explorer_data, render_explorer
 
 ARTIFACTS = (
     "README.md",
@@ -233,6 +234,12 @@ def _write_jsonl(path: Path, documents: Iterable[object]) -> None:
     with path.open("wb") as stream:
         for document in documents:
             stream.write(_json_bytes(document))
+
+
+def _validate_documents(*groups: Iterable[dict[str, Any]]) -> None:
+    for group in groups:
+        for document in group:
+            validate_document(document)
 
 
 class ResearchStore:
@@ -552,11 +559,21 @@ class ResearchStore:
         }
         research_id = hashlib.sha256(_json_bytes(semantic)).hexdigest()
         manifest = {
-            "schema": "security-research-manifest/v8",
+            "schema": "security-research-manifest/v9",
             "research_id": research_id,
             **manifest_body,
         }
         explorer_data = build_research_explorer_data(manifest, definitions)
+        _validate_documents(
+            (manifest, definitions, company, market_context, quality_summary, explorer_data),
+            prices,
+            benchmark_prices,
+            financials,
+            events,
+            failures,
+            quality_details,
+            quality_outliers,
+        )
         self._ensure_directory(self.objects)
         destination = self.objects / research_id
         if destination.is_symlink():
@@ -606,7 +623,7 @@ class ResearchStore:
         manifest = self._read_json(path / "manifest.json")
         return {
             **manifest,
-            "schema": "security-research/v8",
+            "schema": "security-research/v9",
             "quality_summary": self._read_json(path / "quality-summary.json"),
             "artifacts": {name: str(path / name) for name in ARTIFACTS},
         }
@@ -643,7 +660,7 @@ class ResearchStore:
                 candidate = self._read_json(manifest_path)
             except (LookupError, OSError, TypeError, ValueError):
                 continue
-            if candidate.get("schema") != "security-research-manifest/v8":
+            if candidate.get("schema") != "security-research-manifest/v9":
                 continue
             try:
                 self._verify(path, path.name)
@@ -713,10 +730,11 @@ class ResearchStore:
         if any(not (path / name).is_file() or (path / name).is_symlink() for name in ARTIFACTS):
             raise ValueError("security research object is incomplete")
         manifest = cls._read_json(path / "manifest.json")
-        if (
-            manifest.get("schema") != "security-research-manifest/v8"
-            or manifest.get("research_id") != research_id
-        ):
+        if manifest.get("schema") != "security-research-manifest/v9":
+            raise ValueError(
+                "security research uses an incompatible schema; rebuild it with this version"
+            )
+        if manifest.get("research_id") != research_id:
             raise ValueError("security research manifest identity is invalid")
         semantic = {
             **{
@@ -736,6 +754,24 @@ class ResearchStore:
             "quality_details": tuple(cls._read_jsonl(path / "quality-details.jsonl")),
             "quality_outliers": tuple(cls._read_jsonl(path / "quality-outliers.jsonl")),
         }
+        explorer_data = cls._read_json(path / "explorer-data.json")
+        _validate_documents(
+            (
+                manifest,
+                semantic["definitions"],
+                semantic["company"],
+                semantic["market_context"],
+                semantic["quality_summary"],
+                explorer_data,
+            ),
+            semantic["prices"],
+            semantic["benchmarks"],
+            semantic["financials"],
+            semantic["events"],
+            semantic["failures"],
+            semantic["quality_details"],
+            semantic["quality_outliers"],
+        )
         if hashlib.sha256(_json_bytes(semantic)).hexdigest() != research_id:
             raise ValueError("security research content identity is invalid")
         quality = semantic["quality_summary"]
@@ -743,7 +779,6 @@ class ResearchStore:
             raise ValueError("security research README projection is invalid")
         if (path / "summary.md").read_text(encoding="utf-8") != cls._summary(manifest, quality):
             raise ValueError("security research summary projection is invalid")
-        explorer_data = cls._read_json(path / "explorer-data.json")
         expected_explorer_data = build_research_explorer_data(manifest, semantic["definitions"])
         if explorer_data != expected_explorer_data:
             raise ValueError("security research Explorer data projection is invalid")

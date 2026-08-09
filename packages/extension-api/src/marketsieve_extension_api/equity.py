@@ -8,8 +8,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Protocol, runtime_checkable
 
-from marketsieve.data.daily import Adjustment, DailyBar
-from marketsieve.domain import Instrument
+from marketsieve.model import Adjustment, DailyBar, Instrument
 
 
 @dataclass(frozen=True, slots=True)

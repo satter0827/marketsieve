@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:marketsieve:schema:market-snapshot-request:3.0.0",
+  "type": "object",
+  "required": ["schema", "inputs", "assets", "start", "end", "adjustment", "runtime_settings", "runtime_settings_hash", "source", "producer"],
+  "properties": {
+    "schema": {"const": "market-snapshot-request/v3"}, "inputs": {"type": "object"}, "assets": {"type": "array"}, "start": {"type": "string", "format": "date"}, "end": {"type": "string", "format": "date"}, "adjustment": {"type": "string"}, "runtime_settings": {"type": "object"}, "runtime_settings_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "source": {"type": "object"}, "producer": {"type": "object"}
+  },
+  "additionalProperties": false
+}

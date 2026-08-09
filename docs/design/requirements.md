@@ -13,6 +13,11 @@
 - **ART-02:** Every object is self-contained and has no external runtime or file reference.
 - **ART-03:** Excel and CSV artifacts are never generated.
 - **ART-04:** Artifacts contain no prompt, reasoning template, score, ranking, or recommendation.
+- **ART-05:** Every machine document is validated by a schema shipped in the CLI before publication
+  and whenever an immutable object is read.
 - **OPS-01:** Operational settings and invocation inputs are structurally separate.
-- **OPS-02:** Public CLI groups are limited to market, research, doctor, and capabilities.
+- **OPS-02:** Public CLI entries are limited to market, research, operations, doctor, and
+  capabilities.
 - **OPS-03:** Formatter, lint, type, test, package, installation, and release gates must pass.
+- **OPS-04:** Releases use GitHub Releases only and install on macOS and Ubuntu with Python 3.12
+  through 3.14.

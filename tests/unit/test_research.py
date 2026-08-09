@@ -11,11 +11,9 @@ from typing import Any
 import pytest
 from jsonschema import Draft202012Validator
 
-from marketsieve.data.daily import Adjustment
-from marketsieve.domain import Instrument
-from marketsieve.synthetic.daily import fixture_bars
+from marketsieve.model import Adjustment, Instrument
 from marketsieve_cli.adapters.config import Settings
-from marketsieve_cli.adapters.explorer_v2 import build_research_explorer_data
+from marketsieve_cli.adapters.explorer import build_research_explorer_data
 from marketsieve_cli.adapters.research import ResearchStore
 from marketsieve_cli.application.research import ResearchService
 from marketsieve_cli.contracts import ResearchBuildInputs
@@ -28,10 +26,22 @@ from marketsieve_extension_api import (
     ResearchFinancialFact,
     SecurityResearchRequest,
 )
+from marketsieve_extension_api.testing import fixture_bars
 
 INSTRUMENT = Instrument.create(
     symbol="MSFT", mic="XNAS", currency="USD", exchange_timezone="America/New_York"
 )
+
+
+def _context() -> dict[str, object]:
+    return {
+        "schema": "market-research-context/v1",
+        "snapshot_id": "a" * 64,
+        "security": {},
+        "market": {},
+        "segments": [],
+        "definitions": {},
+    }
 
 
 def test_research_events_require_an_explicit_history_window() -> None:
@@ -96,7 +106,7 @@ def test_research_pack_is_self_contained_and_charted(tmp_path: Path) -> None:
     )
     root = Path(document["artifacts"]["manifest.json"]).parent
 
-    assert document["schema"] == "security-research/v8"
+    assert document["schema"] == "security-research/v9"
     assert document["price_coverage_gate_passed"] is True
     assert not list(root.glob("*.csv")) and not list(root.glob("*.xlsx"))
     html = (root / "explorer.html").read_text()
@@ -109,12 +119,14 @@ def test_research_pack_is_self_contained_and_charted(tmp_path: Path) -> None:
     assert "CONCEPT[s.name]" in html
     assert "reason_code:status" in html
     explorer = json.loads((root / "explorer-data.json").read_text())
-    assert explorer["schema"] == "explorer-data/v4"
-    assert explorer["metadata"]["object_contract"] == "security-research/v8"
+    assert explorer["schema"] == "explorer-data/v5"
+    assert explorer["metadata"]["object_contract"] == "security-research/v9"
     assert explorer["sources"]["prices"]["path"] == "prices.jsonl"
     assert "prices" not in explorer
     explorer_schema = json.loads(
-        (Path(__file__).parents[2] / "schemas/explorer-data/v4/schema.json").read_text()
+        (
+            Path(__file__).parents[2] / "packages/cli/schemas/explorer-data/v5/schema.json"
+        ).read_text()
     )
     Draft202012Validator(explorer_schema).validate(explorer)
     incomplete_manifest = json.loads((root / "manifest.json").read_text())
@@ -122,7 +134,9 @@ def test_research_pack_is_self_contained_and_charted(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="not registered"):
         build_research_explorer_data(incomplete_manifest, {})
     schema = json.loads(
-        (Path(__file__).parents[2] / "schemas/security-research/v8/schema.json").read_text()
+        (
+            Path(__file__).parents[2] / "packages/cli/schemas/security-research/v9/schema.json"
+        ).read_text()
     )
     Draft202012Validator(schema).validate(document)
     store = ResearchStore(tmp_path / "research")
@@ -142,6 +156,53 @@ def test_research_pack_is_self_contained_and_charted(tmp_path: Path) -> None:
         ResearchStore(tmp_path / "research").show("invalid")
     with pytest.raises(LookupError, match="does not exist"):
         ResearchStore(tmp_path / "empty").latest("a" * 64, "XNAS:MSFT")
+
+
+def test_research_rejects_pre_contract_manifest_with_rebuild_guidance(tmp_path: Path) -> None:
+    request = SecurityResearchRequest(
+        "market-yfinance",
+        INSTRUMENT,
+        "MSFT",
+        date(2026, 1, 1),
+        date(2026, 8, 8),
+        Adjustment.ADJUSTED,
+        30,
+        3,
+        2.0,
+        {},
+        ("company",),
+    )
+    imported = ImportedSecurityResearch(
+        request,
+        "yfinance",
+        "1.5.2",
+        datetime(2026, 8, 8, tzinfo=UTC),
+        (),
+        (("name", "Microsoft"),),
+        (),
+        (),
+        (),
+        "d" * 64,
+    )
+    store = ResearchStore(tmp_path / "research")
+    document = store.put(
+        imported,
+        _context(),
+        minimum_price_observations=252,
+        runtime_settings={},
+        runtime_settings_hash="b" * 64,
+        benchmarks=None,
+    )
+    manifest_path = Path(document["artifacts"]["manifest.json"])
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["schema"] = "security-research-manifest/v8"
+    manifest_path.write_text(
+        json.dumps(manifest, ensure_ascii=False, separators=(",", ":"), sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="incompatible schema; rebuild"):
+        store.show(document["research_id"])
 
 
 def test_research_quality_preserves_independent_event_success(tmp_path: Path) -> None:
@@ -175,7 +236,7 @@ def test_research_quality_preserves_independent_event_success(tmp_path: Path) ->
     )
     document = ResearchStore(tmp_path / "research").put(
         imported,
-        {"snapshot_id": "a" * 64, "definitions": {}},
+        _context(),
         minimum_price_observations=252,
         runtime_settings={},
         runtime_settings_hash="b" * 64,
@@ -226,7 +287,7 @@ def test_benchmark_failure_does_not_mark_security_price_failed(tmp_path: Path) -
     )
     document = ResearchStore(tmp_path / "research").put(
         imported,
-        {"snapshot_id": "a" * 64, "definitions": {}},
+        _context(),
         minimum_price_observations=252,
         runtime_settings={},
         runtime_settings_hash="b" * 64,
@@ -260,7 +321,7 @@ class _Market:
 
     def research_context(self, snapshot_id: str, instrument_id: str) -> dict[str, object]:
         del snapshot_id, instrument_id
-        return {"snapshot_id": "a" * 64, "definitions": {}}
+        return _context()
 
 
 class _ResearchFetcher:

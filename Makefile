@@ -48,13 +48,13 @@ doctor: ## Check the local runtime and installed packages.
 	uv run marketsieve doctor
 
 artifacts-doctor: ## Classify current, legacy, damaged, and orphan artifacts.
-	uv run marketsieve artifacts doctor --output json
+	uv run marketsieve operations artifacts doctor --output json
 
 artifacts-list: ## List artifact inventory as stable JSON.
-	uv run marketsieve artifacts list --output json
+	uv run marketsieve operations artifacts list --output json
 
 run-list: ## List structured generation runs.
-	uv run marketsieve run list --output json
+	uv run marketsieve operations run list --output json
 
 market-build: ## Build a Snapshot; override SCOPE, EVIDENCE, and HISTORY_DAYS.
 	@if test -f "$(SETTINGS)"; then uv run marketsieve --settings "$(SETTINGS)" market build $(SCOPE) $(EVIDENCE) --history-days "$(HISTORY_DAYS)" --output json; else uv run marketsieve market build $(SCOPE) $(EVIDENCE) --history-days "$(HISTORY_DAYS)" --output json; fi
@@ -77,7 +77,7 @@ market-show: ## Show SNAPSHOT=latest or an exact Snapshot.
 	uv run marketsieve market show "$(SNAPSHOT)" --output json
 
 market-preview: ## Preview one Snapshot Explorer over loopback HTTP.
-	uv run marketsieve preview "snapshot:$(SNAPSHOT)" --port "$(PORT)" --open
+	uv run marketsieve market preview "$(SNAPSHOT)" --port "$(PORT)" --open
 
 market-query: ## Query a stored Snapshot; set QUERY_ARGS explicitly.
 	uv run marketsieve market query --snapshot "$(SNAPSHOT)" $(QUERY_ARGS) --output json
@@ -105,7 +105,7 @@ research-show: ## Show RESEARCH_ID; latest also needs INSTRUMENT and SNAPSHOT.
 	@if test "$(RESEARCH_ID)" = latest; then test -n "$(INSTRUMENT)" || { echo "INSTRUMENT is required for latest" >&2; exit 2; }; uv run marketsieve research show latest --security "$(INSTRUMENT)" --snapshot "$(SNAPSHOT)" --output json; else uv run marketsieve research show "$(RESEARCH_ID)" --output json; fi
 
 research-preview: ## Preview one Research Explorer over loopback HTTP.
-	@if test "$(RESEARCH_ID)" = latest; then test -n "$(INSTRUMENT)" || { echo "INSTRUMENT is required for latest" >&2; exit 2; }; uv run marketsieve preview research:latest --security "$(INSTRUMENT)" --port "$(PORT)" --open; else uv run marketsieve preview "research:$(RESEARCH_ID)" --port "$(PORT)" --open; fi
+	@if test "$(RESEARCH_ID)" = latest; then test -n "$(INSTRUMENT)" || { echo "INSTRUMENT is required for latest" >&2; exit 2; }; uv run marketsieve research preview latest --security "$(INSTRUMENT)" --port "$(PORT)" --open; else uv run marketsieve research preview "$(RESEARCH_ID)" --port "$(PORT)" --open; fi
 
 sync: ## Install the locked workspace and development dependencies.
 	uv sync --locked

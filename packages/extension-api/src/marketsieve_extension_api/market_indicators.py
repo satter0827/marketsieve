@@ -9,7 +9,7 @@ from datetime import date, datetime
 from enum import StrEnum
 from typing import Protocol, runtime_checkable
 
-from marketsieve.data.daily import DailyBar
+from marketsieve.model import DailyBar
 
 from .equity import SourceDiagnostic
 

@@ -13,8 +13,7 @@ import pandas as pd  # type: ignore[import-untyped]
 import pytest
 from curl_cffi.requests import Session
 
-from marketsieve.data.daily import Adjustment
-from marketsieve.domain import Instrument
+from marketsieve.model import Adjustment, Instrument
 from marketsieve_extension_api import (
     EquityBatchInstrument,
     EquityBatchRequest,
@@ -296,6 +295,40 @@ def test_yfinance_source_fetches_adjusted_batches_profiles_and_statements(
     assert financials["dividend_yield"] == "0.0075"
     assert financials["revenue_ttm"] == "520"
     assert float(financials["revenue_cagr_3y"]) == pytest.approx(0.169607, rel=1e-5)
+
+
+def test_yfinance_source_bounds_provider_bars_to_the_exact_request(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    dates = pd.to_datetime(["2026-07-31", "2026-08-03", "2026-08-08"])
+    columns = {
+        ("MSFT", "Open"): [100, 101, 102],
+        ("MSFT", "High"): [102, 103, 104],
+        ("MSFT", "Low"): [99, 100, 101],
+        ("MSFT", "Close"): [101, 102, 103],
+        ("MSFT", "Volume"): [1000, 1100, 1200],
+    }
+    monkeypatch.setattr(
+        source_module.YFINANCE,
+        "download",
+        lambda symbols, **kwargs: pd.DataFrame(columns, index=dates),
+    )
+    monkeypatch.setattr(source_module.YFINANCE, "set_tz_cache_location", lambda value: None)
+    request = replace(
+        _request(),
+        start=date(2026, 8, 1),
+        end=date(2026, 8, 7),
+        settings={"cache_dir": str(tmp_path / "cache")},
+        evidence=("price",),
+    )
+
+    observation = (
+        YFinanceSource(clock=lambda: datetime(2026, 8, 9, tzinfo=UTC))
+        .fetch(request)
+        .observations[0]
+    )
+
+    assert [bar.trading_date for bar in observation.bars] == [date(2026, 8, 3)]
 
 
 def test_yfinance_source_fetches_detailed_security_research(

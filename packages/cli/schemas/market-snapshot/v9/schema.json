@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:marketsieve:schema:market-snapshot:9.0.0",
+  "type": "object",
+  "required": ["schema", "snapshot_id", "created_at", "inputs", "runtime_settings", "source", "row_count", "field_count", "failure_count", "coverage", "price_coverage_gate_passed", "market", "artifacts"],
+  "properties": {
+    "schema": {"const": "market-snapshot/v9"},
+    "snapshot_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "created_at": {"type": "string", "format": "date-time"},
+    "inputs": {"type": "object"},
+    "runtime_settings": {"type": "object"},
+    "source": {"type": "object", "required": ["name", "version", "dataset", "response_hash"]},
+    "row_count": {"type": "integer", "minimum": 1},
+    "field_count": {"type": "integer", "minimum": 1},
+    "failure_count": {"type": "integer", "minimum": 0},
+    "coverage": {"type": "object", "required": ["overall", "indices"]},
+    "price_coverage_gate_passed": {"type": "boolean"},
+    "market": {"type": "object", "required": ["schema", "generated_at", "coverage", "price_coverage_gate_passed", "markets"]},
+    "artifacts": {"type": "object", "minProperties": 11, "additionalProperties": {"type": "string"}}
+  },
+  "additionalProperties": true
+}
