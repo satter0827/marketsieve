@@ -474,6 +474,10 @@ def test_secret_scan_rejects_sensitive_tracked_path(tmp_path: Path) -> None:
     assert [finding.kind for finding in scan_paths((path,))] == ["sensitive_path"]
 
 
+def test_secret_scan_accepts_repository_tracked_paths() -> None:
+    assert scan_paths(_tracked_paths()) == []
+
+
 def test_secret_scan_hashes_credential_bearing_path(tmp_path: Path) -> None:
     token = "sk-" + "A" * 24
     path = write(tmp_path / f"backup-{token}.txt", "safe\n")
