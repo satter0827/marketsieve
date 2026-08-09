@@ -31,6 +31,27 @@ make research-preview INSTRUMENT='XTKS:7203'
 Every analytical scope is an invocation input. The optional `marketsieve.settings.toml` contains
 only bounded execution and quality settings and can be created with `make setup-settings`.
 
+## Observe acquisition
+
+VS Code network launch entries show one stderr line for each bounded acquisition update. Every line
+uses the same order: time, state, phase, completed count, total count, failure count, and elapsed
+time. Retry details follow those fields. A heartbeat repeats the current phase after 15 seconds
+without another event, so a quiet provider call is still visibly running.
+
+Progress is written only when stderr is a TTY. stdout remains one final JSON document, and pipes and
+CI stay quiet. The same progress is always stored in operation history. From another terminal, find
+the running UUID and inspect its current state or events:
+
+```shell
+marketsieve operations run list --status running --output json
+marketsieve operations run show OPERATION_RUN_ID --output json
+marketsieve operations run events OPERATION_RUN_ID --output json
+```
+
+Pressing Ctrl+C records `cancelled` with exit code 130. Market acquisition prints the exact
+`marketsieve market build --resume TOKEN` command for its saved request. Research keeps every Pack
+published before cancellation in the operation record.
+
 ## Install a verified release
 
 Download all files from one GitHub Release, verify them against `SHA256SUMS`, then install the CLI
@@ -62,7 +83,7 @@ marketsieve operations artifacts doctor --output json
 Pre-1.0 objects are never migrated or deleted automatically. Rebuild them with the current command
 contract when they are reported as incompatible.
 
-If acquisition stops before publication, the error and failed operation record expose the same
+If acquisition fails before publication, the error and failed operation record expose the same
 16-character resume run ID. Resume only that saved request with
 `marketsieve market build --resume TOKEN`.
 

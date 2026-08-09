@@ -1,0 +1,1 @@
+{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"urn:marketsieve:schema:operation-run-list:2.0.0","type":"object","required":["schema","runs"],"properties":{"schema":{"const":"operation-run-list/v2"},"runs":{"type":"array"}},"additionalProperties":false}

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 from io import StringIO
 from pathlib import Path
@@ -13,8 +15,14 @@ from marketsieve.model import DailyBar, Instrument
 from marketsieve_cli.adapters.artifacts import ArtifactInventory
 from marketsieve_cli.adapters.console import ConsoleOutput, OutputMode
 from marketsieve_cli.adapters.operations import OperationRunStore
-from marketsieve_cli.application.market import MarketSnapshotRunInterrupted
-from marketsieve_extension_api import MarketIndicatorKind, MarketIndicatorSpec
+from marketsieve_cli.application.acquisition_errors import MarketSnapshotRunInterrupted
+from marketsieve_cli.schema_registry import validate_document
+from marketsieve_extension_api import (
+    AcquisitionProgress,
+    AcquisitionProgressState,
+    MarketIndicatorKind,
+    MarketIndicatorSpec,
+)
 
 
 def _manifest(path: Path, schema: str, object_id: str) -> None:
@@ -112,18 +120,119 @@ def test_non_tty_auto_output_is_untranslated_json() -> None:
 def test_operation_runs_persist_success_failure_and_dry_run_prune(tmp_path: Path) -> None:
     store = OperationRunStore(tmp_path)
     with store.track("market build", {"scope": "all"}) as context:
-        context["published_object_ids"].append("a" * 64)
-        context["metrics"]["acquired_count"] = 10
+        context.publish("a" * 64)
+        context.set_metrics(acquired_count=10, coverage=None)
     completed = store.list()["runs"][0]
     assert completed["status"] == "completed"
     assert completed["published_object_ids"] == ["a" * 64]
-    assert store.events(completed["run_id"])["events"][-1]["code"] == "operation_completed"
+    assert store.events(completed["run_id"])["events"][-1]["code"] == "completed"
     assert store.prune((completed["run_id"],))["dry_run"] is True
     assert store.show(completed["run_id"])["status"] == "completed"
+    validate_document(completed)
+    for event in store.events(completed["run_id"])["events"]:
+        validate_document(event)
 
     with pytest.raises(RuntimeError), store.track("research build", {"security": "XNAS:FAIL"}):
         raise RuntimeError("failed")
     assert store.list(status="failed")["runs"][0]["status"] == "failed"
+
+
+def test_operation_run_records_monotonic_progress_retry_and_heartbeat(tmp_path: Path) -> None:
+    observed: list[str] = []
+    store = OperationRunStore(tmp_path, heartbeat_interval_seconds=0.01)
+    with store.track(
+        "market build",
+        {"scope": "all"},
+        observer=lambda code, _progress, _elapsed: observed.append(code),
+    ) as context:
+        context(AcquisitionProgress("price", AcquisitionProgressState.STARTED, 0, 10, 0))
+        context(AcquisitionProgress("price", AcquisitionProgressState.RUNNING, 2, 10, 1))
+        context(
+            AcquisitionProgress(
+                "price",
+                AcquisitionProgressState.RETRYING,
+                2,
+                10,
+                1,
+                attempt=2,
+                max_attempts=3,
+                retry_after_seconds=15,
+            )
+        )
+        time.sleep(0.03)
+        context(AcquisitionProgress("price", AcquisitionProgressState.COMPLETED, 10, 10, 1))
+
+    run = store.list()["runs"][0]
+    events = store.events(run["run_id"])["events"]
+    assert run["current_progress"]["completed"] == 10
+    assert {item["code"] for item in events} >= {"progress", "retry", "heartbeat"}
+    assert "heartbeat" in observed
+
+
+def test_operation_run_aggregates_concurrent_retries_by_phase(tmp_path: Path) -> None:
+    observed: list[str] = []
+    store = OperationRunStore(tmp_path)
+    with store.track(
+        "market build",
+        {"scope": "all"},
+        observer=lambda code, _progress, _elapsed: observed.append(code),
+    ) as context:
+        context(
+            AcquisitionProgress("company_financials", AcquisitionProgressState.STARTED, 0, 10, 0)
+        )
+        for completed in (2, 3, 4):
+            context(
+                AcquisitionProgress(
+                    "company_financials",
+                    AcquisitionProgressState.RETRYING,
+                    completed,
+                    10,
+                    0,
+                    attempt=2,
+                    max_attempts=3,
+                    retry_after_seconds=2,
+                )
+            )
+
+    run = store.list()["runs"][0]
+    events = store.events(run["run_id"])["events"]
+    assert [item["code"] for item in events].count("retry") == 1
+    assert observed.count("retry") == 1
+    assert run["current_progress"]["completed"] == 4
+
+
+def test_operation_context_is_thread_safe_and_retains_publications_on_cancel(
+    tmp_path: Path,
+) -> None:
+    store = OperationRunStore(tmp_path)
+    with pytest.raises(KeyboardInterrupt), store.track("research build", {}) as context:
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            tuple(executor.map(context.publish, (f"research-{index}" for index in range(20))))
+        raise KeyboardInterrupt
+
+    cancelled = store.list(status="cancelled")["runs"][0]
+    assert cancelled["exit_code"] == 130
+    assert len(cancelled["published_object_ids"]) == 20
+    assert store.events(cancelled["run_id"])["events"][-1]["code"] == "cancelled"
+
+
+def test_operation_v2_list_excludes_legacy_v1_runs(tmp_path: Path) -> None:
+    store = OperationRunStore(tmp_path)
+    legacy = store.root / "00000000-0000-0000-0000-000000000001"
+    legacy.mkdir(parents=True)
+    store._write(
+        legacy / "run.json",
+        {
+            "schema": "operation-run/v1",
+            "run_id": legacy.name,
+            "started_at": "2026-08-09T00:00:00+00:00",
+            "status": "completed",
+        },
+    )
+
+    assert store.list()["schema"] == "operation-run-list/v2"
+    assert store.list()["runs"] == []
+    assert store.show(legacy.name)["schema"] == "operation-run/v1"
 
 
 def test_operation_run_carries_a_snapshot_acquisition_resume_run_id(tmp_path: Path) -> None:

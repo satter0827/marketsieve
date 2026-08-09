@@ -4,6 +4,7 @@ from io import StringIO
 
 from marketsieve_cli.adapters.console import ConsoleOutput, OutputMode
 from marketsieve_cli.application.diagnostics import DiagnosticCheck
+from marketsieve_extension_api import AcquisitionProgress, AcquisitionProgressState
 
 
 class TerminalBuffer(StringIO):
@@ -78,6 +79,43 @@ def test_capabilities_support_text_and_rich_projections() -> None:
     assert text_stdout.getvalue() == "report: Generate a report.\n"
     assert "CLI capabilities" in rich_stdout.getvalue()
     assert "urn:test" in rich_stdout.getvalue()
+
+
+def test_progress_is_line_oriented_localized_and_stderr_tty_only() -> None:
+    progress = AcquisitionProgress("price", AcquisitionProgressState.RUNNING, 2, 10, 1)
+    stdout, stderr = StringIO(), TerminalBuffer()
+    output = ConsoleOutput(OutputMode.JSON, stdout=stdout, stderr=stderr, locale="ja")
+
+    assert output.operation_observer is not None
+    output.emit_progress("progress", progress, 3.25)
+
+    assert stdout.getvalue() == ""
+    line = stderr.getvalue()
+    assert "状態=実行中 段階=価格 完了=2 総数=10 失敗=1 経過=3.2秒" in line
+    assert line.count("\n") == 1
+
+    non_tty = ConsoleOutput(OutputMode.JSON, stdout=StringIO(), stderr=StringIO(), locale="en")
+    assert non_tty.operation_observer is None
+
+
+def test_heartbeat_does_not_render_stale_retry_fields() -> None:
+    progress = AcquisitionProgress(
+        "company_financials",
+        AcquisitionProgressState.RETRYING,
+        2,
+        10,
+        0,
+        attempt=2,
+        max_attempts=3,
+        retry_after_seconds=2,
+    )
+    stderr = TerminalBuffer()
+    output = ConsoleOutput(OutputMode.JSON, stdout=StringIO(), stderr=stderr, locale="en")
+
+    output.emit_progress("heartbeat", progress, 15.0)
+
+    assert "state=heartbeat" in stderr.getvalue()
+    assert "attempt=" not in stderr.getvalue()
 
 
 def test_errors_follow_the_selected_output_contract() -> None:

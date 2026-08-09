@@ -13,7 +13,7 @@ from marketsieve_cli.adapters.artifacts import ArtifactInventory
 from marketsieve_cli.adapters.config import Settings
 from marketsieve_cli.adapters.console import ConsoleOutput, OutputMode
 from marketsieve_cli.adapters.market_snapshots import MarketSnapshotStore
-from marketsieve_cli.adapters.operations import OperationRunStore
+from marketsieve_cli.adapters.operations import OperationObserver, OperationRunStore
 from marketsieve_cli.adapters.plugins import SourcePluginRegistry
 from marketsieve_cli.adapters.preview import ObjectPreviewServer
 from marketsieve_cli.adapters.research import ResearchStore
@@ -115,19 +115,25 @@ def build_market_snapshot(
     inputs: MarketBuildInputs | None,
     *,
     resume: str | None = None,
+    command: str = "market build",
+    observer: OperationObserver | None = None,
 ) -> dict[str, Any]:
     runs = OperationRunStore(state_root())
     with runs.track(
-        "market build", {"inputs": _input_document(inputs), "resume": resume}
+        command,
+        {"inputs": _input_document(inputs), "resume": resume},
+        observer=observer,
     ) as operation:
-        document = build_market_service(settings_path).build(inputs, resume=resume)
+        document = build_market_service(settings_path).build(
+            inputs, resume=resume, progress=operation
+        )
         snapshot_id = document.get("snapshot_id")
         if isinstance(snapshot_id, str):
-            operation["published_object_ids"].append(snapshot_id)
-        operation["metrics"].update(
+            operation.publish(snapshot_id)
+        operation.set_metrics(
             acquired_count=document.get("row_count"), coverage=document.get("coverage")
         )
-        document["operation_run_id"] = operation["run_id"]
+        document["operation_run_id"] = operation.run_id
         return document
 
 
@@ -179,19 +185,20 @@ def build_research_service(
 
 
 def build_security_research(
-    settings_path: Path | None, inputs: ResearchBuildInputs
+    settings_path: Path | None,
+    inputs: ResearchBuildInputs,
+    *,
+    observer: OperationObserver | None = None,
 ) -> dict[str, Any]:
     runs = OperationRunStore(state_root())
-    with runs.track("research build", {"inputs": _input_document(inputs)}) as operation:
-        document = build_research_service(settings_path).build(inputs)
-        ids = [
-            item["research_id"]
-            for item in document.get("research", [])
-            if isinstance(item, dict) and isinstance(item.get("research_id"), str)
-        ]
-        operation["published_object_ids"].extend(ids)
-        operation["metrics"]["acquired_count"] = len(ids)
-        document["operation_run_id"] = operation["run_id"]
+    with runs.track(
+        "research build", {"inputs": _input_document(inputs)}, observer=observer
+    ) as operation:
+        document = build_research_service(settings_path).build(
+            inputs, progress=operation, published=operation.publish
+        )
+        operation.set_metrics(acquired_count=len(operation.published_object_ids), coverage=None)
+        document["operation_run_id"] = operation.run_id
         return document
 
 

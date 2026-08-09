@@ -18,6 +18,8 @@ from marketsieve_cli.adapters.research import ResearchStore
 from marketsieve_cli.application.research import ResearchService
 from marketsieve_cli.contracts import ResearchBuildInputs
 from marketsieve_extension_api import (
+    AcquisitionProgress,
+    AcquisitionProgressState,
     EquityAcquisitionFailure,
     EquityBatchObservation,
     ImportedEquityBatch,
@@ -325,7 +327,16 @@ class _Market:
 
 
 class _ResearchFetcher:
-    def fetch_research(self, request: SecurityResearchRequest) -> ImportedSecurityResearch:
+    def fetch_research(
+        self, request: SecurityResearchRequest, *, progress: Any = None
+    ) -> ImportedSecurityResearch:
+        if progress is not None:
+            progress(
+                AcquisitionProgress("research_company", AcquisitionProgressState.STARTED, 0, 1, 0)
+            )
+            progress(
+                AcquisitionProgress("research_company", AcquisitionProgressState.COMPLETED, 1, 1, 0)
+            )
         return ImportedSecurityResearch(
             request,
             "yfinance",
@@ -391,12 +402,47 @@ def test_research_service_preserves_partial_batch_success() -> None:
     assert result["failures"] == [{"instrument_id": "XNAS:MISSING", "error": "not present"}]
 
 
+def test_research_progress_sink_does_not_change_pack_identity(tmp_path: Path) -> None:
+    class Market(_Market):
+        def research_context(self, snapshot_id: str, instrument_id: str) -> dict[str, object]:
+            del snapshot_id, instrument_id
+            return {
+                **_context(),
+                "definitions": {
+                    "schema": "market-snapshot-definitions/v1",
+                    "fields": [],
+                    "missing_reasons": [],
+                },
+            }
+
+    inputs = ResearchBuildInputs("latest", ("XNAS:MSFT",), ("company",), None)
+    plain = ResearchService(
+        _Registry(),
+        Market(),
+        ResearchStore(tmp_path / "plain" / "research"),
+        Settings(None),
+        today=lambda: date(2026, 8, 8),
+    ).build(inputs)
+    events: list[AcquisitionProgress] = []
+    observed = ResearchService(
+        _Registry(),
+        Market(),
+        ResearchStore(tmp_path / "observed" / "research"),
+        Settings(None),
+        today=lambda: date(2026, 8, 8),
+    ).build(inputs, progress=events.append)
+
+    assert events
+    assert observed["research"][0]["research_id"] == plain["research"][0]["research_id"]
+
+
 class _BenchmarkRegistry(_Registry):
     def load_equity_batch_fetcher(self, name: str) -> Any:
         assert name == "yfinance"
 
         class Fetcher:
-            def fetch(self, request: Any) -> ImportedEquityBatch:
+            def fetch(self, request: Any, *, progress: Any = None) -> ImportedEquityBatch:
+                del progress
                 retrieved_at = datetime(2026, 8, 8, tzinfo=UTC)
                 return ImportedEquityBatch(
                     request,

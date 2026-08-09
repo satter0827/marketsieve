@@ -19,7 +19,7 @@ def test_workspace_catalog_has_unique_buildable_public_packages() -> None:
     }
     assert len({spec.distribution for spec in catalog}) == len(catalog)
     assert all(spec.pyproject.is_file() for spec in catalog)
-    assert all(spec.project_version == "1.0.0rc1" for spec in catalog)
+    assert all(spec.project_version == "1.0.0rc2" for spec in catalog)
 
 
 def test_workspace_dependencies_allow_external_minor_compatible_plugins() -> None:
@@ -34,7 +34,7 @@ def test_workspace_dependencies_allow_external_minor_compatible_plugins() -> Non
 
 
 def test_release_candidate_dependencies_accept_the_same_candidate_line() -> None:
-    assert compatible_range("1.0.0rc1") == ">=1.0.0rc1,<1.1"
+    assert compatible_range("1.0.0rc2") == ">=1.0.0rc2,<1.1"
 
 
 def test_publish_workflow_reuses_one_verified_main_artifact() -> None:

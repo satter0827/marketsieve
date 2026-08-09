@@ -27,6 +27,8 @@ from yfinance import utils as _yfinance_utils
 from marketsieve.indicators import CONTEXT
 from marketsieve.model import Adjustment, DailyBar, Instrument, Provenance
 from marketsieve_extension_api import (
+    AcquisitionProgress,
+    AcquisitionProgressState,
     EquityAcquisitionFailure,
     EquityBatchInstrument,
     EquityBatchObservation,
@@ -37,6 +39,7 @@ from marketsieve_extension_api import (
     MarketIndicatorFailure,
     MarketIndicatorObservation,
     MarketIndicatorRequest,
+    ProgressSink,
     ResearchEvent,
     ResearchFinancialFact,
     SecurityResearchRequest,
@@ -59,6 +62,67 @@ EXCHANGE_CALENDAR_BY_MIC = {
 MAX_MARKET_REFERENCE_LAG_DAYS = 7
 MAX_INSTRUMENT_REFERENCE_LAG_DAYS = 1
 PRICE_DATA_FIELDS = ("Open", "High", "Low", "Close")
+MAX_PROGRESS_UPDATES_PER_PHASE = 20
+
+
+class _ProgressPhase:
+    """Aggregate provider work into bounded, monotonic notifications."""
+
+    def __init__(self, sink: ProgressSink | None, phase: str, total: int) -> None:
+        self._sink = sink
+        self.phase = phase
+        self.total = total
+        self.completed = 0
+        self.failure_count = 0
+        self._step = max(
+            1, (total + MAX_PROGRESS_UPDATES_PER_PHASE - 1) // MAX_PROGRESS_UPDATES_PER_PHASE
+        )
+        self._last_emitted = 0
+        self._lock = Lock()
+
+    def start(self) -> None:
+        self._emit(AcquisitionProgressState.STARTED)
+
+    def advance(self, completed: int, failure_count: int) -> None:
+        with self._lock:
+            bounded_failures = min(failure_count, completed)
+            if completed < self.completed or bounded_failures < self.failure_count:
+                raise ValueError("provider progress must be monotonic")
+            self.completed = min(completed, self.total)
+            self.failure_count = bounded_failures
+            if self.completed == self.total or self.completed - self._last_emitted >= self._step:
+                self._emit(AcquisitionProgressState.RUNNING)
+                self._last_emitted = self.completed
+
+    def retry(self, attempt: int, max_attempts: int, delay: float) -> None:
+        with self._lock:
+            if self._sink is not None:
+                self._sink(
+                    AcquisitionProgress(
+                        self.phase,
+                        AcquisitionProgressState.RETRYING,
+                        self.completed,
+                        self.total,
+                        self.failure_count,
+                        attempt=attempt,
+                        max_attempts=max_attempts,
+                        retry_after_seconds=delay,
+                    )
+                )
+
+    def finish(self, failure_count: int) -> None:
+        with self._lock:
+            self.completed = self.total
+            self.failure_count = min(failure_count, self.total)
+            self._emit(AcquisitionProgressState.COMPLETED)
+
+    def _emit(self, state: AcquisitionProgressState) -> None:
+        if self._sink is not None:
+            self._sink(
+                AcquisitionProgress(
+                    self.phase, state, self.completed, self.total, self.failure_count
+                )
+            )
 
 
 class _ProfileAcquisitionCancelled(Exception):
@@ -452,7 +516,9 @@ class YFinanceSource:
             return SourceDiagnostic(False, "dependency_missing", "yfinance is not installed")
         return SourceDiagnostic(True, "ready", f"yfinance {version} is available")
 
-    def fetch(self, request: EquityBatchRequest) -> ImportedEquityBatch:
+    def fetch(
+        self, request: EquityBatchRequest, *, progress: ProgressSink | None = None
+    ) -> ImportedEquityBatch:
         with _YFINANCE_RUNTIME_LOCK:
             cache = Path(request.settings.get("cache_dir", ".marketsieve/cache/yfinance"))
             cache.mkdir(parents=True, exist_ok=True)
@@ -463,11 +529,13 @@ class YFinanceSource:
             YFINANCE.config.debug.hide_exceptions = False
             try:
                 if "price" in request.evidence:
-                    bars, price_failures = self._prices(request, version, session)
+                    bars, price_failures = self._prices(
+                        request, version, session, progress=progress, phase_name="price"
+                    )
                 else:
                     bars, price_failures = {}, ()
                 if {"company", "financials"} & set(request.evidence):
-                    profiles, profile_failures = self._profiles(request, session)
+                    profiles, profile_failures = self._profiles(request, session, progress=progress)
                 else:
                     profiles, profile_failures = {}, ()
             finally:
@@ -548,7 +616,9 @@ class YFinanceSource:
             response_hash=_digest(response_document),
         )
 
-    def fetch_market_indicators(self, request: MarketIndicatorRequest) -> ImportedMarketIndicators:
+    def fetch_market_indicators(
+        self, request: MarketIndicatorRequest, *, progress: ProgressSink | None = None
+    ) -> ImportedMarketIndicators:
         """Fetch price-only macro series without applying equity-specific checks."""
 
         requested = tuple(
@@ -570,21 +640,40 @@ class YFinanceSource:
                 key=lambda value: (value.instrument.mic, value.instrument.symbol),
             )
         )
-        batch = self.fetch(
-            EquityBatchRequest(
-                source_profile=request.source_profile,
-                instruments=requested,
-                start=request.start,
-                end=request.end,
-                adjustment=Adjustment.ADJUSTED,
-                batch_size=len(requested),
-                profile_workers=1,
-                timeout_seconds=request.timeout_seconds,
-                max_retries=request.max_retries,
-                retry_base_seconds=request.retry_base_seconds,
-                settings=request.settings,
-                evidence=("price",),
-            )
+
+        def indicator_progress(value: AcquisitionProgress) -> None:
+            if progress is not None:
+                progress(
+                    AcquisitionProgress(
+                        "market_indicators",
+                        value.state,
+                        value.completed,
+                        value.total,
+                        value.failure_count,
+                        value.attempt,
+                        value.max_attempts,
+                        value.retry_after_seconds,
+                    )
+                )
+
+        batch_request = EquityBatchRequest(
+            source_profile=request.source_profile,
+            instruments=requested,
+            start=request.start,
+            end=request.end,
+            adjustment=Adjustment.ADJUSTED,
+            batch_size=len(requested),
+            profile_workers=1,
+            timeout_seconds=request.timeout_seconds,
+            max_retries=request.max_retries,
+            retry_base_seconds=request.retry_base_seconds,
+            settings=request.settings,
+            evidence=("price",),
+        )
+        batch = (
+            self.fetch(batch_request)
+            if progress is None
+            else self.fetch(batch_request, progress=indicator_progress)
         )
         by_id = {
             item.requested.memberships[0].removeprefix("indicator:"): item
@@ -636,7 +725,9 @@ class YFinanceSource:
             ),
         )
 
-    def fetch_research(self, request: SecurityResearchRequest) -> ImportedSecurityResearch:
+    def fetch_research(
+        self, request: SecurityResearchRequest, *, progress: ProgressSink | None = None
+    ) -> ImportedSecurityResearch:
         """Fetch one detailed security evidence bundle without provider fallback."""
 
         item = EquityBatchInstrument(
@@ -669,11 +760,23 @@ class YFinanceSource:
             failures: list[EquityAcquisitionFailure] = []
             try:
                 if "price" in request.evidence:
-                    prices, price_failures = self._prices(batch_request, version, session)
+                    prices, price_failures = self._prices(
+                        batch_request,
+                        version,
+                        session,
+                        progress=progress,
+                        phase_name="research_price",
+                    )
                     failures.extend(price_failures)
                 else:
                     prices = {}
                 ticker = YFINANCE.Ticker(request.provider_symbol, session=session)
+                company_requested = bool({"company", "financials"} & set(request.evidence))
+                company_phase = _ProgressPhase(
+                    progress if company_requested else None, "research_company", 1
+                )
+                company_phase.start()
+                company_failure_start = len(failures)
                 info = (
                     self._research_attempt(
                         ticker.get_info,
@@ -681,10 +784,19 @@ class YFinanceSource:
                         failures,
                         request,
                         "company" if "company" in request.evidence else "financial_currency",
+                        progress_phase=company_phase,
                     )
-                    if {"company", "financials"} & set(request.evidence)
+                    if company_requested
                     else None
                 )
+                company_phase.finish(min(len(failures) - company_failure_start, 1))
+                financial_requested = "financials" in request.evidence
+                financial_phase = _ProgressPhase(
+                    progress if financial_requested else None, "research_financials", 6
+                )
+                financial_phase.start()
+                financial_failure_start = len(failures)
+                financial_completed = 0
                 frames = (
                     {
                         ("income", period): self._research_attempt(
@@ -693,37 +805,36 @@ class YFinanceSource:
                             failures,
                             request,
                             f"income_{period}",
+                            progress_phase=financial_phase,
                         )
                         for period in ("yearly", "quarterly")
                     }
-                    if "financials" in request.evidence
+                    if financial_requested
                     else {}
                 )
-                if "financials" in request.evidence:
-                    frames.update(
-                        {
-                            ("balance_sheet", period): self._research_attempt(
-                                partial(ticker.get_balance_sheet, freq=period),
+                financial_completed += len(frames)
+                financial_phase.advance(
+                    financial_completed, len(failures) - financial_failure_start
+                )
+                if financial_requested:
+                    for statement, method in (
+                        ("balance_sheet", ticker.get_balance_sheet),
+                        ("cash_flow", ticker.get_cash_flow),
+                    ):
+                        for period in ("yearly", "quarterly"):
+                            frames[(statement, period)] = self._research_attempt(
+                                partial(method, freq=period),
                                 batch_request,
                                 failures,
                                 request,
-                                f"balance_sheet_{period}",
+                                f"{statement}_{period}",
+                                progress_phase=financial_phase,
                             )
-                            for period in ("yearly", "quarterly")
-                        }
-                    )
-                    frames.update(
-                        {
-                            ("cash_flow", period): self._research_attempt(
-                                partial(ticker.get_cash_flow, freq=period),
-                                batch_request,
-                                failures,
-                                request,
-                                f"cash_flow_{period}",
+                            financial_completed += 1
+                            financial_phase.advance(
+                                financial_completed, len(failures) - financial_failure_start
                             )
-                            for period in ("yearly", "quarterly")
-                        }
-                    )
+                financial_phase.finish(min(len(failures) - financial_failure_start, 6))
                 for (statement, period), frame in frames.items():
                     if frame is not None and getattr(frame, "empty", True):
                         failures.append(
@@ -734,6 +845,12 @@ class YFinanceSource:
                                 "financials_unavailable",
                             )
                         )
+                events_requested = "events" in request.evidence
+                events_phase = _ProgressPhase(
+                    progress if events_requested else None, "research_events", 2
+                )
+                events_phase.start()
+                events_failure_start = len(failures)
                 actions = (
                     self._research_attempt(
                         lambda: ticker.get_actions(period="10y"),
@@ -741,10 +858,12 @@ class YFinanceSource:
                         failures,
                         request,
                         "actions",
+                        progress_phase=events_phase,
                     )
-                    if "events" in request.evidence
+                    if events_requested
                     else None
                 )
+                events_phase.advance(1, min(len(failures) - events_failure_start, 1))
                 earnings = (
                     self._research_attempt(
                         lambda: ticker.get_earnings_dates(limit=100),
@@ -752,12 +871,13 @@ class YFinanceSource:
                         failures,
                         request,
                         "earnings",
+                        progress_phase=events_phase,
                     )
-                    if "events" in request.evidence
+                    if events_requested
                     else None
                 )
                 if (
-                    "events" in request.evidence
+                    events_requested
                     and earnings is None
                     and not any(
                         failure.stage == "research" and failure.field == "earnings"
@@ -772,6 +892,7 @@ class YFinanceSource:
                             "field_absent",
                         )
                     )
+                events_phase.finish(min(len(failures) - events_failure_start, 2))
             finally:
                 YFINANCE.config.debug.hide_exceptions = hide_exceptions
                 session.close()
@@ -882,9 +1003,11 @@ class YFinanceSource:
         failures: list[EquityAcquisitionFailure],
         request: SecurityResearchRequest,
         field: str,
+        *,
+        progress_phase: _ProgressPhase,
     ) -> Any:
         try:
-            return self._retry(function, batch_request)
+            return self._retry(function, batch_request, progress_phase=progress_phase)
         except Exception as error:
             failures.append(
                 EquityAcquisitionFailure(
@@ -975,10 +1098,18 @@ class YFinanceSource:
         return tuple(sorted(events, key=lambda value: (value.effective_date, value.event_type)))
 
     def _prices(
-        self, request: EquityBatchRequest, version: str, session: Session[Response]
+        self,
+        request: EquityBatchRequest,
+        version: str,
+        session: Session[Response],
+        *,
+        progress: ProgressSink | None,
+        phase_name: str,
     ) -> tuple[dict[tuple[str, str], tuple[DailyBar, ...]], tuple[EquityAcquisitionFailure, ...]]:
         output: dict[tuple[str, str], tuple[DailyBar, ...]] = {}
         failures: list[EquityAcquisitionFailure] = []
+        progress_phase = _ProgressPhase(progress, phase_name, len(request.instruments))
+        progress_phase.start()
         session_as_of = self._retrieved_at()
         for offset in range(0, len(request.instruments), request.batch_size):
             batch = request.instruments[offset : offset + request.batch_size]
@@ -990,6 +1121,7 @@ class YFinanceSource:
                 symbols,
                 request=request,
                 session=session,
+                progress_phase=progress_phase,
             )
             symbol_errors.update(primary_errors)
             batch_retrieved_at = self._retrieved_at()
@@ -1018,6 +1150,7 @@ class YFinanceSource:
                         session=session,
                         frames=frames,
                         errors=symbol_errors,
+                        progress_phase=progress_phase,
                     )
 
             for value in batch:
@@ -1077,8 +1210,12 @@ class YFinanceSource:
                             ),
                         )
                     )
+            progress_phase.advance(
+                min(offset + len(batch), len(request.instruments)), len(failures)
+            )
         failures.extend(self._reject_stale_histories(output, request))
         failures.extend(self._missing_volume_failures(output, request))
+        progress_phase.finish(len(failures))
         return output, tuple(failures)
 
     def _price_batch(
@@ -1087,6 +1224,7 @@ class YFinanceSource:
         *,
         request: EquityBatchRequest,
         session: Session[Response],
+        progress_phase: _ProgressPhase,
     ) -> tuple[Any, dict[str, object], Exception | None]:
         def download() -> tuple[Any, Mapping[str, object]]:
             frame, raw_errors = _download_batch(
@@ -1113,7 +1251,7 @@ class YFinanceSource:
             return frame, errors
 
         try:
-            frame, errors = self._retry(download, request)
+            frame, errors = self._retry(download, request, progress_phase=progress_phase)
             return frame, dict(errors), None
         except _BatchDownloadError as error:
             return error.frame, error.errors, None
@@ -1128,6 +1266,7 @@ class YFinanceSource:
         session: Session[Response],
         frames: dict[str, tuple[Any, datetime]],
         errors: dict[str, object],
+        progress_phase: _ProgressPhase,
     ) -> None:
         """Retry one bounded same-market group from a silently omitted batch."""
 
@@ -1138,6 +1277,7 @@ class YFinanceSource:
             symbols,
             request=request,
             session=session,
+            progress_phase=progress_phase,
         )
         retrieved_at = self._retrieved_at()
         for item in items:
@@ -1354,7 +1494,11 @@ class YFinanceSource:
         return True
 
     def _profiles(
-        self, request: EquityBatchRequest, session: Session[Response]
+        self,
+        request: EquityBatchRequest,
+        session: Session[Response],
+        *,
+        progress: ProgressSink | None,
     ) -> tuple[
         dict[tuple[str, str], tuple[tuple[tuple[str, str], ...], tuple[tuple[str, str], ...]]],
         tuple[EquityAcquisitionFailure, ...],
@@ -1364,6 +1508,8 @@ class YFinanceSource:
         ] = {}
         failures: list[EquityAcquisitionFailure] = []
         cancelled = Event()
+        progress_phase = _ProgressPhase(progress, "company_financials", len(request.instruments))
+        progress_phase.start()
 
         def load(item: Any) -> ProfileLoadResult:
             if item.is_benchmark:
@@ -1376,7 +1522,12 @@ class YFinanceSource:
                     return function() if freq is None else function(freq=freq)
 
                 try:
-                    return self._retry(fetch, request, cancelled=cancelled)
+                    return self._retry(
+                        fetch,
+                        request,
+                        cancelled=cancelled,
+                        progress_phase=progress_phase,
+                    )
                 except _ProfileAcquisitionCancelled:
                     raise
                 except Exception as error:
@@ -1426,6 +1577,7 @@ class YFinanceSource:
                 for future in done:
                     pending.remove(future)
                     completed.append(future.result())
+                    progress_phase.advance(len(completed), 0)
                     submit_next()
         except BaseException:
             cancelled.set()
@@ -1574,14 +1726,18 @@ class YFinanceSource:
                     )
                 )
             output[identity] = (profile, financials)
+        progress_phase.finish(
+            len({(item.instrument.mic, item.instrument.symbol) for item in failures})
+        )
         return output, tuple(failures)
 
-    @staticmethod
     def _retry(
+        self,
         function: Callable[[], T],
         request: EquityBatchRequest,
         *,
         cancelled: Event | None = None,
+        progress_phase: _ProgressPhase,
     ) -> T:
         last_error: Exception | None = None
         best_batch_error: _BatchDownloadError | None = None
@@ -1598,6 +1754,7 @@ class YFinanceSource:
                     best_batch_error = error
                 if attempt + 1 < request.max_retries:
                     delay = request.retry_base_seconds * (2**attempt)
+                    progress_phase.retry(attempt + 2, request.max_retries, delay)
                     if cancelled is None:
                         time.sleep(delay)
                     elif cancelled.wait(delay):

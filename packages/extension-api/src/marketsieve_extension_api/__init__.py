@@ -18,6 +18,11 @@ from marketsieve_extension_api.market_indicators import (
     MarketIndicatorRequest,
     MarketIndicatorSpec,
 )
+from marketsieve_extension_api.progress import (
+    AcquisitionProgress,
+    AcquisitionProgressState,
+    ProgressSink,
+)
 from marketsieve_extension_api.research import (
     ImportedSecurityResearch,
     ResearchEvent,
@@ -27,6 +32,8 @@ from marketsieve_extension_api.research import (
 )
 
 __all__ = [
+    "AcquisitionProgress",
+    "AcquisitionProgressState",
     "EquityAcquisitionFailure",
     "EquityBatchFetcher",
     "EquityBatchInstrument",
@@ -41,6 +48,7 @@ __all__ = [
     "MarketIndicatorObservation",
     "MarketIndicatorRequest",
     "MarketIndicatorSpec",
+    "ProgressSink",
     "ResearchEvent",
     "ResearchFinancialFact",
     "SecurityResearchFetcher",

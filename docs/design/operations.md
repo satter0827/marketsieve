@@ -23,14 +23,26 @@ MarketSieve does not install cron jobs, run a daemon, or send notifications.
 Completed objects live below `.marketsieve/market-snapshots/objects` and
 `.marketsieve/research/objects`. Structured command history is retained below
 `.marketsieve/operations/runs`; `operations run prune` is a dry run unless `--apply` is explicit.
-Resumable acquisition state, operation history, caches, and published objects are separate. A
-failed acquisition operation exposes its acquisition `resume_run_id` and the CLI prints the exact
+`operation-run/v2` holds `updated_at`, current progress, running, completed, failed, or cancelled
+status, exit code, and published object IDs. Its event codes are limited to started, progress,
+retry, heartbeat, published, completed, failed, and cancelled. Version 1 operation records remain
+on disk but are excluded from version 2 lists. Resumable acquisition state, operation history,
+caches, and published objects are separate. A failed acquisition operation exposes its acquisition
+`resume_run_id` and the CLI prints the exact
 `marketsieve market build --resume TOKEN` command; a UUID operation-run ID is not a Snapshot resume
 run ID. Completed valid objects are retained as historical observations. Local live evidence is
 gitignored and must not be committed.
 
+Provider adapters aggregate large phases to at most about 20 monotonic updates and never emit raw
+provider messages or one line per symbol. Retry events retain bounded attempt and wait values. When
+15 seconds pass without an event, a named UI constant writes and renders a heartbeat containing the
+current phase and last counts. The interval does not enter settings, requests, evidence, or object
+identity. Ctrl+C cancels futures that have not started, records `cancelled` with exit code 130, and
+retains already published Research IDs.
+
 VS Code launch entries cover JP and US Capture, Snapshot preview and swing exploration, and Research
-build and preview. Tasks expose granular market, reconstruction, research,
+build and preview. Network entries show TTY stderr progress; a second terminal can inspect the same
+run with `operations run list`, `show`, and `events`. Tasks expose granular market, reconstruction, research,
 and developer actions. `.marketsieve` is visible in the Explorer but excluded from file watching.
 
 `operations artifacts doctor` classifies current, incompatible, corrupt, and orphan entries without

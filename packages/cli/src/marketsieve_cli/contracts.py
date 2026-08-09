@@ -111,13 +111,13 @@ COMMAND_CAPABILITIES = (
         "operations artifacts doctor", "Diagnose evidence object health.", "artifact-doctor/v1"
     ),
     CommandCapability(
-        "operations run list", "List structured generation runs.", "operation-run-list/v1"
+        "operations run list", "List structured generation runs.", "operation-run-list/v2"
     ),
     CommandCapability(
-        "operations run show", "Show one structured generation run.", "operation-run/v1"
+        "operations run show", "Show one structured generation run.", "operation-run/v2"
     ),
     CommandCapability(
-        "operations run events", "List events for one generation run.", "operation-events/v1"
+        "operations run events", "List events for one generation run.", "operation-events/v2"
     ),
     CommandCapability(
         "operations run prune",
@@ -132,7 +132,7 @@ COMMAND_CAPABILITIES = (
         writes=("log_file",),
     ),
     CommandCapability(
-        "capabilities", "Describe commands, schemas, and side effects.", "capabilities-result/v11"
+        "capabilities", "Describe commands, schemas, and side effects.", "capabilities-result/v12"
     ),
 )
 
@@ -141,7 +141,7 @@ def capabilities_document(version: str) -> dict[str, object]:
     """Return the transport-independent public operation contract."""
 
     return {
-        "schema": "capabilities-result/v11",
+        "schema": "capabilities-result/v12",
         "version": version,
         "commands": [
             {

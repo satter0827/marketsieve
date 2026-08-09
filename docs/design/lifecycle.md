@@ -1,16 +1,18 @@
 # Lifecycle
 
-A Market Snapshot run begins with explicit immutable inputs. A UUIDv7 `operation-run/v1` records
-the command, fingerprint, status, events, failures, timing, and published object IDs. Acquisition
+A Market Snapshot run begins with explicit immutable inputs. A UUIDv7 `operation-run/v2` records
+the command, fingerprint, updated time, current progress, status, events, failures, timing, exit
+code, and published object IDs. Acquisition
 writes a separate resumable run request. If acquisition stops before publication, the operation
-record is marked resumable and carries the exact 16-character acquisition `resume_run_id`; the CLI
+record is failed or cancelled and carries the exact 16-character acquisition `resume_run_id`; the CLI
 error prints the matching `marketsieve market build --resume TOKEN` recovery command. Acquisition
 acquires source evidence, calculates fields, writes a pending object, verifies every projection,
 atomically publishes the content-addressed object and latest reference, then removes the run.
 
 A Security Research run resolves a verified Snapshot row, acquires explicit evidence domains,
 writes and verifies one immutable object per successful instrument, and reports per-instrument
-failures. Objects are never updated in place.
+failures. Each publication is recorded immediately, so cancellation retains Pack IDs published
+before exit code 130. Objects are never updated in place.
 
 A close Capture returns `capture-run/v1` state with a deterministic run ID, status, exit code, and
 resume capability. An identical market, session, date, input, asset, setting, definition, producer,

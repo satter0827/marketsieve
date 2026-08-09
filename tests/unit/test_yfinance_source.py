@@ -15,6 +15,8 @@ from curl_cffi.requests import Session
 
 from marketsieve.model import Adjustment, Instrument
 from marketsieve_extension_api import (
+    AcquisitionProgress,
+    AcquisitionProgressState,
     EquityBatchInstrument,
     EquityBatchRequest,
     MarketIndicatorKind,
@@ -602,6 +604,61 @@ def test_yfinance_source_records_empty_partial_and_retry_failures(
         failure.stage == "profile" and failure.reason == "field_absent"
         for failure in imported.failures
     )
+
+
+def test_yfinance_progress_is_bounded_and_does_not_change_response_identity(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        source_module.YFINANCE, "download", lambda symbols, **kwargs: _history(symbols)
+    )
+    monkeypatch.setattr(source_module.YFINANCE, "Ticker", _Ticker)
+    monkeypatch.setattr(source_module.YFINANCE, "set_tz_cache_location", lambda value: None)
+
+    def clock() -> datetime:
+        return datetime(2026, 8, 8, tzinfo=UTC)
+
+    events: list[AcquisitionProgress] = []
+
+    without_progress = YFinanceSource(clock=clock).fetch(_request())
+    with_progress = YFinanceSource(clock=clock).fetch(_request(), progress=events.append)
+
+    assert with_progress.response_hash == without_progress.response_hash
+    assert [item.phase for item in events if item.state is AcquisitionProgressState.STARTED] == [
+        "price",
+        "company_financials",
+    ]
+    assert all(0 <= item.completed <= item.total for item in events)
+    assert all(0 <= item.failure_count <= item.completed for item in events)
+    for phase in {item.phase for item in events}:
+        assert len([item for item in events if item.phase == phase]) <= 22
+
+
+def test_yfinance_retry_progress_reports_the_bounded_wait(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    attempts = 0
+
+    def download(symbols: tuple[str, ...], **kwargs: Any) -> pd.DataFrame:
+        nonlocal attempts
+        del kwargs
+        attempts += 1
+        if attempts == 1:
+            raise RuntimeError("Too Many Requests")
+        return _history(symbols)
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(source_module.YFINANCE, "download", download)
+    monkeypatch.setattr(source_module.YFINANCE, "Ticker", _Ticker)
+    monkeypatch.setattr(source_module.YFINANCE, "set_tz_cache_location", lambda value: None)
+    monkeypatch.setattr("marketsieve_source_yfinance.source.time.sleep", lambda seconds: None)
+    events: list[AcquisitionProgress] = []
+
+    YFinanceSource().fetch(replace(_request(), retry_base_seconds=15.0), progress=events.append)
+
+    retry = next(item for item in events if item.state is AcquisitionProgressState.RETRYING)
+    assert (retry.attempt, retry.max_attempts, retry.retry_after_seconds) == (2, 3, 15.0)
 
 
 @pytest.mark.parametrize(

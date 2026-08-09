@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from enum import StrEnum
 from typing import Any, TextIO
 
@@ -12,7 +13,9 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
+from marketsieve_cli.adapters.operations import OperationObserver
 from marketsieve_cli.application.diagnostics import DiagnosticCheck
+from marketsieve_extension_api import AcquisitionProgress
 
 DOCTOR_SCHEMA_VERSION = "1.0.0"
 CAPABILITIES_SCHEMA_VERSION = "1.0.0"
@@ -46,6 +49,23 @@ JA_LABELS = {
     "invalid": "無効",
     "insufficient_history": "履歴不足",
     "not_present_in_snapshot": "スナップショットにデータがありません",
+}
+JA_PROGRESS_STATES = {
+    "started": "開始",
+    "running": "実行中",
+    "retrying": "再試行",
+    "completed": "完了",
+    "heartbeat": "実行中",
+}
+JA_PROGRESS_PHASES = {
+    "price": "価格",
+    "company_financials": "企業・財務",
+    "market_indicators": "市場指標",
+    "research_price": "Research価格",
+    "research_company": "Research企業",
+    "research_financials": "Research財務",
+    "research_events": "Researchイベント",
+    "research_benchmarks": "Researchベンチマーク",
 }
 
 
@@ -131,6 +151,46 @@ class ConsoleOutput:
     @property
     def mode(self) -> OutputMode:
         return self._mode
+
+    @property
+    def operation_observer(self) -> OperationObserver | None:
+        """Return TTY-only progress rendering without changing stdout."""
+
+        return self.emit_progress if self._stderr.isatty() else None
+
+    def emit_progress(
+        self, event_code: str, progress: AcquisitionProgress, elapsed_seconds: float
+    ) -> None:
+        if not self._stderr.isatty():
+            return
+        timestamp = datetime.now().astimezone().strftime("%H:%M:%S")
+        state = "heartbeat" if event_code == "heartbeat" else progress.state.value
+        if self._locale == "ja":
+            rendered_state = JA_PROGRESS_STATES[state]
+            phase = JA_PROGRESS_PHASES.get(progress.phase, progress.phase)
+            line = (
+                f"{timestamp} 状態={rendered_state} 段階={phase} "
+                f"完了={progress.completed} 総数={progress.total} "
+                f"失敗={progress.failure_count} 経過={elapsed_seconds:.1f}秒"
+            )
+            if event_code == "retry":
+                line += (
+                    f" 再試行={progress.attempt}/{progress.max_attempts} "
+                    f"待機={progress.retry_after_seconds:.1f}秒"
+                )
+        else:
+            line = (
+                f"{timestamp} state={state} phase={progress.phase} "
+                f"completed={progress.completed} total={progress.total} "
+                f"failures={progress.failure_count} elapsed={elapsed_seconds:.1f}s"
+            )
+            if event_code == "retry":
+                line += (
+                    f" attempt={progress.attempt}/{progress.max_attempts} "
+                    f"retry_after={progress.retry_after_seconds:.1f}s"
+                )
+        self._stderr.write(line + "\n")
+        self._stderr.flush()
 
     def emit_landing(self, version: str) -> None:
         if self._locale == "ja":

@@ -44,7 +44,7 @@ def test_workspace_contains_only_the_supported_public_packages() -> None:
     assert set(workspace["tool"]["uv"]["workspace"]["members"]) == {
         spec.path.relative_to(ROOT).as_posix() for spec in specs
     }
-    assert all(spec.project_version == "1.0.0rc1" for spec in specs)
+    assert all(spec.project_version == "1.0.0rc2" for spec in specs)
 
 
 def test_removed_capabilities_and_packages_are_absent() -> None:
