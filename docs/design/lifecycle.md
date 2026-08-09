@@ -2,7 +2,9 @@
 
 A Market Snapshot run begins with explicit immutable inputs. A UUIDv7 `operation-run/v1` records
 the command, fingerprint, status, events, failures, timing, and published object IDs. Acquisition
-writes a separate resumable run request,
+writes a separate resumable run request. If acquisition stops before publication, the operation
+record is marked resumable and carries the exact 16-character acquisition `resume_run_id`; the CLI
+error prints the matching `marketsieve market build --resume TOKEN` recovery command. Acquisition
 acquires source evidence, calculates fields, writes a pending object, verifies every projection,
 atomically publishes the content-addressed object and latest reference, then removes the run.
 
@@ -17,11 +19,13 @@ instead of reacquiring it. A producer or projection contract change creates a ne
 rewriting the old object. JP and US price dates remain separate evidence and are never presented as
 one hidden common timestamp.
 
-Research v8 objects are immutable and intentionally incompatible with earlier Research contracts.
+Research v9 objects are immutable and intentionally incompatible with earlier Research contracts.
 Changing the requested evidence or source response creates a new content identity; changing only
 the Explorer display period does not create or mutate an object.
 
-Historical objects remain addressable by ID. Artifact inventory isolates incompatible, corrupt,
-and orphan state so one entry cannot prevent current objects from being listed. Diff compares only fields with compatible type, unit,
-and definition version. Cleanup may remove caches, interrupted obsolete runs, build evidence, and
-legacy pre-0.12 local state only after new objects are verified.
+Historical current-contract objects remain addressable by ID. Artifact inventory isolates
+incompatible, corrupt, and orphan state so one entry cannot prevent current objects from being
+listed. Diff compares only fields with compatible type, unit, and definition version. Snapshot v9
+and Research v9 readers reject earlier object contracts with rebuild guidance. They do not migrate,
+reinterpret, or delete those objects. Cleanup may remove caches, interrupted obsolete runs, and
+build evidence only through an explicit operation.

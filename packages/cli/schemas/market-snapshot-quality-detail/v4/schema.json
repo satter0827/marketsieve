@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:marketsieve:schema:market-snapshot-quality-detail:4.0.0",
+  "type": "object",
+  "required": ["schema", "scope", "name"],
+  "properties": {
+    "schema": {"const": "market-snapshot-quality-detail/v4"},
+    "scope": {"enum": ["field", "segment_field", "unit_issue"]},
+    "name": {"type": "string"},
+    "applicable": {"type": "integer", "minimum": 0},
+    "present": {"type": "integer", "minimum": 0},
+    "missing": {"type": "integer", "minimum": 0},
+    "not_applicable": {"type": "integer", "minimum": 0},
+    "coverage": {"type": ["string", "null"]},
+    "fields": {"type": "object"},
+    "instrument_id": {"type": "string"},
+    "field": {"type": "string"},
+    "code": {"type": "string"}
+  },
+  "additionalProperties": false
+}

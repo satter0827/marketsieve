@@ -6,21 +6,22 @@ import hashlib
 import json
 import math
 import os
-import re
 import shutil
 import tempfile
 from collections.abc import Iterable
 from contextlib import suppress
 from datetime import UTC, date, datetime
 from decimal import Decimal
-from functools import cmp_to_key
 from pathlib import Path
 from typing import Any
 
-from marketsieve.matrix import INDEX_BENCHMARKS, MatrixField, MatrixRow
+from marketsieve._snapshot import SnapshotRow
+from marketsieve.fields import FieldDefinition
 
+from ..schema_registry import validate_document
 from .artifacts import ArtifactInventory
-from .explorer_v2 import build_snapshot_explorer_data, render_explorer
+from .explorer import build_snapshot_explorer_data, render_explorer
+from .snapshot_query import query_snapshot
 
 ARTIFACT_ROLES = {
     "README.md": "Self-contained description of the dataset and files.",
@@ -80,7 +81,13 @@ def _request_fingerprint(value: object) -> str:
     return hashlib.sha256(canonical).hexdigest()
 
 
-def _row_document(row: MatrixRow) -> dict[str, Any]:
+def _validate_documents(*groups: Iterable[dict[str, Any]]) -> None:
+    for group in groups:
+        for document in group:
+            validate_document(document)
+
+
+def _row_document(row: SnapshotRow) -> dict[str, Any]:
     instrument = row.security.instrument
     financials = dict(row.security.financials)
     price_as_of = dict(row.values).get("price_as_of")
@@ -94,7 +101,7 @@ def _row_document(row: MatrixRow) -> dict[str, Any]:
             "symbol": instrument.symbol,
             "currency": instrument.currency,
             "exchange_timezone": instrument.exchange_timezone.key,
-            "instrument_type": instrument.instrument_type.value,
+            "instrument_type": "equity",
         },
         "provider_symbol": row.security.provider_symbol,
         "memberships": list(row.security.memberships),
@@ -122,7 +129,7 @@ def _row_document(row: MatrixRow) -> dict[str, Any]:
     }
 
 
-def _field_document(field: MatrixField) -> dict[str, Any]:
+def _field_document(field: FieldDefinition) -> dict[str, Any]:
     return {
         "name": field.name,
         "group": field.group,
@@ -502,8 +509,8 @@ class MarketSnapshotStore:
         *,
         run_id: str,
         manifest_body: dict[str, Any],
-        fields: tuple[MatrixField, ...],
-        rows: tuple[MatrixRow, ...],
+        fields: tuple[FieldDefinition, ...],
+        rows: tuple[SnapshotRow, ...],
         summary: dict[str, Any],
         failures: tuple[dict[str, str], ...],
         market_indicators: tuple[dict[str, Any], ...] = (),
@@ -562,11 +569,20 @@ class MarketSnapshotStore:
         }
         snapshot_id = hashlib.sha256(_json_bytes(semantic)).hexdigest()
         manifest = {
-            "schema": "market-snapshot-manifest/v8",
+            "schema": "market-snapshot-manifest/v9",
             "snapshot_id": snapshot_id,
             **manifest_body,
         }
         explorer_data = build_snapshot_explorer_data(manifest, field_documents)
+        _validate_documents(
+            (manifest, definitions, market, quality_summary, explorer_data),
+            segments,
+            quality_details,
+            quality_outliers,
+            row_documents,
+            failures,
+            market_indicators,
+        )
         destination = self.objects / snapshot_id
         self._ensure_directory(self.objects)
         if destination.is_dir():
@@ -752,7 +768,7 @@ class MarketSnapshotStore:
         market = aggregates[0]
         return {
             **manifest,
-            "schema": "market-snapshot/v8",
+            "schema": "market-snapshot/v9",
             "market": market,
             "artifacts": {
                 name: str(path / name)
@@ -805,7 +821,7 @@ class MarketSnapshotStore:
                 continue
             if (
                 not isinstance(candidate, dict)
-                or candidate.get("schema") != "market-snapshot-manifest/v8"
+                or candidate.get("schema") != "market-snapshot-manifest/v9"
             ):
                 continue
             try:
@@ -855,7 +871,7 @@ class MarketSnapshotStore:
             if not manifest_path.is_file() or manifest_path.is_symlink():
                 continue
             manifest = self._read_json(manifest_path)
-            if manifest.get("schema") != "market-snapshot-manifest/v8":
+            if manifest.get("schema") != "market-snapshot-manifest/v9":
                 continue
             if manifest.get("request_fingerprint") == fingerprint:
                 return self.show(path.name)
@@ -883,306 +899,26 @@ class MarketSnapshotStore:
         self._require_directory(self.objects)
         resolved = self.resolve_id(snapshot_id)
         self._verify_object(self.objects / resolved, resolved)
-        allowed_filters = {
-            "market",
-            "index",
-            "mic",
-            "exchange",
-            "country",
-            "currency",
-            "sector",
-            "industry",
-        }
-        if unknown_filters := set(filters) - allowed_filters:
-            raise ValueError(
-                f"unknown market snapshot classification filters: {sorted(unknown_filters)}"
-            )
-        if any(not values for values in filters.values()):
-            raise ValueError("market snapshot classification filters cannot be empty")
-        if any(len(values) != len(set(values)) for values in filters.values()):
-            raise ValueError("market snapshot classification filter values must be unique")
-        if invalid_indices := set(filters.get("index", ())) - set(INDEX_BENCHMARKS):
-            raise ValueError(f"unknown market snapshot indices: {sorted(invalid_indices)}")
-        if any(len(values) != len(set(values)) for values in (present, missing, fields, domains)):
-            raise ValueError("market snapshot query field selections must be unique")
-        definitions_document = self._read_json(self.objects / resolved / "definitions.json")
-        definitions = definitions_document["fields"]
-        field_types = {value["name"]: value["data_type"] for value in definitions}
-        known = set(field_types)
-        order_fields: list[tuple[str, str]] = []
-        for item in order:
-            name, separator, direction = item.partition(":")
-            if not separator or direction not in {"asc", "desc"}:
-                raise ValueError("market snapshot order requires FIELD:asc or FIELD:desc")
-            order_fields.append((name, direction))
-        if len({name for name, _ in order_fields}) != len(order_fields):
-            raise ValueError("market snapshot order fields must be unique")
-        requested = (
-            set(fields)
-            | set(minimums)
-            | set(maximums)
-            | set(present)
-            | set(missing)
-            | {name for name, _ in order_fields}
+        return query_snapshot(
+            snapshot_id=resolved,
+            source_rows=self._rows(resolved),
+            definitions_document=self._read_json(self.objects / resolved / "definitions.json"),
+            market_indicators=self._read_jsonl(self.objects / resolved / "market-indicators.jsonl"),
+            filters=filters,
+            minimums=minimums,
+            maximums=maximums,
+            present=present,
+            missing=missing,
+            fields=fields,
+            order=order,
+            limit=limit,
+            domains=domains,
+            profile=profile,
+            budget=budget,
+            budget_currency=budget_currency,
+            trading_unit=trading_unit,
+            use_snapshot_fx=use_snapshot_fx,
         )
-        if unknown := requested - known:
-            raise ValueError(f"unknown market snapshot fields: {sorted(unknown)}")
-        numeric = {name for name, kind in field_types.items() if kind in {"decimal", "integer"}}
-        if invalid := (set(minimums) | set(maximums)) - numeric:
-            raise ValueError(
-                f"market snapshot numeric filters require numeric fields: {sorted(invalid)}"
-            )
-        if set(present) & set(missing):
-            raise ValueError("market snapshot fields cannot be both present and missing")
-        if invalid_bounds := {
-            name for name in set(minimums) & set(maximums) if minimums[name] > maximums[name]
-        }:
-            raise ValueError(f"market snapshot minimum exceeds maximum: {sorted(invalid_bounds)}")
-        known_domains = {value["group"] for value in definitions} | {"quality"}
-        if invalid_domains := set(domains) - known_domains:
-            raise ValueError(f"unknown market snapshot domains: {sorted(invalid_domains)}")
-        profile_windows = {
-            "short-swing": {1, 5, 20, 60},
-            "swing": {5, 20, 60, 120},
-            "position": {20, 60, 120, 252},
-        }
-        if profile is not None and profile not in profile_windows:
-            raise ValueError(f"unknown market snapshot profile: {profile}")
-        selected_by_domain = {value["name"] for value in definitions if value["group"] in domains}
-        if "quality" in domains:
-            selected_by_domain.update({"price_as_of"})
-        selected_source = set(fields) if fields else selected_by_domain or known
-        if profile is not None and not fields:
-            windows = profile_windows[profile]
-            selected_source = {
-                name
-                for name in selected_source
-                if not (match := re.search(r"_(\d+)(?:d)?(?:$|_)", name))
-                or int(match.group(1)) in windows
-            }
-            selected_source.update(
-                {"name", "exchange", "country", "currency", "sector", "industry", "close"} & known
-            )
-        selected = tuple(sorted(selected_source))
-
-        def matches(row: dict[str, Any]) -> bool:
-            values = row["values"]
-            classification = {
-                "market": "jp" if row["instrument"]["mic"] == "XTKS" else "us",
-                "index": tuple(row["memberships"]),
-                "mic": row["instrument"]["mic"],
-                "exchange": values.get("exchange"),
-                "country": values.get("country"),
-                "currency": values.get("currency", row["instrument"]["currency"]),
-                "sector": values.get("sector"),
-                "industry": values.get("industry"),
-            }
-            for name, accepted in filters.items():
-                actual = classification[name]
-                if name == "index":
-                    if not set(accepted) & set(actual):
-                        return False
-                elif actual not in accepted:
-                    return False
-            for name, threshold in minimums.items():
-                if name not in values or Decimal(values[name]) < threshold:
-                    return False
-            for name, threshold in maximums.items():
-                if name not in values or Decimal(values[name]) > threshold:
-                    return False
-            return all(name in values for name in present) and all(
-                name in row["missing"] for name in missing
-            )
-
-        def classification_matches(
-            row: dict[str, Any], name: str, accepted: tuple[str, ...]
-        ) -> bool:
-            values = row["values"]
-            actual: Any = {
-                "market": "jp" if row["instrument"]["mic"] == "XTKS" else "us",
-                "index": tuple(row["memberships"]),
-                "mic": row["instrument"]["mic"],
-                "exchange": values.get("exchange"),
-                "country": values.get("country"),
-                "currency": values.get("currency", row["instrument"]["currency"]),
-                "sector": values.get("sector"),
-                "industry": values.get("industry"),
-            }[name]
-            return bool(set(accepted) & set(actual)) if name == "index" else actual in accepted
-
-        source_rows = list(self._rows(resolved))
-        candidates = source_rows
-        funnel: list[dict[str, Any]] = [
-            {"condition": "input", "passed_count": len(candidates), "excluded_count": 0}
-        ]
-        conditions: list[tuple[str, Any]] = []
-        for name, accepted in sorted(filters.items()):
-            conditions.append(
-                (
-                    f"{name}={','.join(accepted)}",
-                    lambda row, name=name, accepted=accepted: classification_matches(
-                        row, name, accepted
-                    ),
-                )
-            )
-        for name, threshold in sorted(minimums.items()):
-            conditions.append(
-                (
-                    f"min:{name}={threshold}",
-                    lambda row, name=name, threshold=threshold: (
-                        name in row["values"] and Decimal(row["values"][name]) >= threshold
-                    ),
-                )
-            )
-        for name, threshold in sorted(maximums.items()):
-            conditions.append(
-                (
-                    f"max:{name}={threshold}",
-                    lambda row, name=name, threshold=threshold: (
-                        name in row["values"] and Decimal(row["values"][name]) <= threshold
-                    ),
-                )
-            )
-        conditions.extend(
-            (f"present:{name}", lambda row, name=name: name in row["values"])
-            for name in sorted(present)
-        )
-        conditions.extend(
-            (f"missing:{name}", lambda row, name=name: name in row["missing"])
-            for name in sorted(missing)
-        )
-        exclusion_reasons: dict[str, int] = {}
-        for label, predicate in conditions:
-            before = len(candidates)
-            candidates = [row for row in candidates if predicate(row)]
-            excluded = before - len(candidates)
-            funnel.append(
-                {"condition": label, "passed_count": len(candidates), "excluded_count": excluded}
-            )
-            if excluded:
-                exclusion_reasons[label] = excluded
-
-        fx = None
-        if use_snapshot_fx:
-            indicators = tuple(
-                self._read_jsonl(self.objects / resolved / "market-indicators.jsonl")
-            )
-            usd_jpy = next(
-                (item for item in indicators if item.get("indicator_id") == "usd_jpy"), None
-            )
-            if usd_jpy is None or not usd_jpy.get("observations"):
-                raise ValueError("Snapshot USD/JPY evidence is unavailable")
-            latest_fx = usd_jpy["observations"][-1]
-            fx = {
-                "value": latest_fx["value"],
-                "as_of": latest_fx["date"],
-                "retrieved_at": usd_jpy["retrieved_at"],
-                "source": "yfinance",
-                "unit": "JPY_per_USD",
-            }
-
-        rows: list[dict[str, Any]] = []
-        for row in candidates:
-            values_document = {
-                name: row["values"][name] for name in selected if name in row["values"]
-            }
-            purchase_projection = None
-            if budget is not None and budget_currency is not None:
-                currency = row["values"].get("currency", row["instrument"]["currency"])
-                close = row["values"].get("close")
-                unit = trading_unit or 1
-                native_purchase = Decimal(close) * unit if close is not None else None
-                minimum_purchase = native_purchase
-                if native_purchase is not None and currency != budget_currency and fx is not None:
-                    rate = Decimal(fx["value"])
-                    if currency == "USD" and budget_currency == "JPY":
-                        minimum_purchase = native_purchase * rate
-                    elif currency == "JPY" and budget_currency == "USD":
-                        minimum_purchase = native_purchase / rate
-                    else:
-                        minimum_purchase = None
-                purchase_projection = {
-                    "budget": str(budget),
-                    "budget_currency": budget_currency,
-                    "security_currency": currency,
-                    "trading_unit": unit,
-                    "minimum_purchase_amount": (
-                        str(minimum_purchase) if minimum_purchase is not None else None
-                    ),
-                    "affordable": (
-                        minimum_purchase <= budget if minimum_purchase is not None else None
-                    ),
-                    "reason": (None if minimum_purchase is not None else "currency_mismatch"),
-                    "fx": fx if currency != budget_currency else None,
-                }
-            rows.append(
-                {
-                    "instrument_id": row["instrument_id"],
-                    "instrument": row["instrument"],
-                    "provider_symbol": row["provider_symbol"],
-                    "memberships": row["memberships"],
-                    "retrieved_at": row["retrieved_at"],
-                    "values": values_document,
-                    "_order_values": {name: row["values"].get(name) for name, _ in order_fields},
-                    "missing": {
-                        name: row["missing"][name] for name in selected if name in row["missing"]
-                    },
-                    **(
-                        {"purchase_projection": purchase_projection}
-                        if purchase_projection is not None
-                        else {}
-                    ),
-                }
-            )
-
-        def compare(left: dict[str, Any], right: dict[str, Any]) -> int:
-            for name, direction in order_fields:
-                left_value = left["_order_values"].get(name)
-                right_value = right["_order_values"].get(name)
-                if left_value is None or right_value is None:
-                    if left_value is right_value:
-                        continue
-                    return 1 if left_value is None else -1
-                if name in numeric:
-                    left_value, right_value = Decimal(left_value), Decimal(right_value)
-                if left_value == right_value:
-                    continue
-                result = -1 if left_value < right_value else 1
-                return result if direction == "asc" else -result
-            left_id, right_id = str(left["instrument_id"]), str(right["instrument_id"])
-            return (left_id > right_id) - (left_id < right_id)
-
-        rows.sort(key=cmp_to_key(compare))
-        total_count = len(rows)
-        if limit is not None:
-            if limit <= 0:
-                raise ValueError("market snapshot query limit must be positive")
-            rows = rows[:limit]
-        for row in rows:
-            del row["_order_values"]
-        return {
-            "schema": "market-snapshot-query-result/v3",
-            "snapshot_id": resolved,
-            "input_count": len(source_rows),
-            "matched_count": len(rows),
-            "total_matched_count": total_count,
-            "fields": list(selected),
-            "profile": profile,
-            "domains": list(domains),
-            "order": list(order),
-            "limit": limit,
-            "filters": {
-                "classifications": {name: list(values) for name, values in sorted(filters.items())},
-                "minimums": {name: str(value) for name, value in sorted(minimums.items())},
-                "maximums": {name: str(value) for name, value in sorted(maximums.items())},
-                "present": list(sorted(present)),
-                "missing": list(sorted(missing)),
-            },
-            "filter_funnel": funnel,
-            "exclusion_reasons": exclusion_reasons,
-            "field_definitions_schema": definitions_document["schema"],
-            "rows": rows,
-        }
 
     def row(self, snapshot_id: str, instrument_id: str) -> dict[str, Any]:
         resolved = self.resolve_id(snapshot_id)
@@ -1383,10 +1119,11 @@ class MarketSnapshotStore:
         ):
             raise ValueError("market snapshot object inventory is invalid")
         manifest = MarketSnapshotStore._read_json(path / "manifest.json")
-        if (
-            manifest.get("snapshot_id") != snapshot_id
-            or manifest.get("schema") != "market-snapshot-manifest/v8"
-        ):
+        if manifest.get("schema") != "market-snapshot-manifest/v9":
+            raise ValueError(
+                "market snapshot uses an incompatible schema; rebuild it with this version"
+            )
+        if manifest.get("snapshot_id") != snapshot_id:
             raise ValueError("market snapshot manifest identity is invalid")
         definitions = MarketSnapshotStore._read_json(path / "definitions.json")
         fields = definitions["fields"]
@@ -1401,6 +1138,16 @@ class MarketSnapshotStore:
         rows = tuple(MarketSnapshotStore._read_jsonl(path / "securities.jsonl"))
         failures = tuple(MarketSnapshotStore._read_jsonl(path / "failures.jsonl"))
         market_indicators = tuple(MarketSnapshotStore._read_jsonl(path / "market-indicators.jsonl"))
+        explorer_data = MarketSnapshotStore._read_json(path / "explorer-data.json")
+        _validate_documents(
+            (manifest, definitions, market, quality_summary, explorer_data),
+            segments,
+            quality_details,
+            quality_outliers,
+            rows,
+            failures,
+            market_indicators,
+        )
         summary = {
             "schema": "market-snapshot-summary/v1",
             "generated_at": market["generated_at"],
@@ -1448,7 +1195,6 @@ class MarketSnapshotStore:
             summary,
         ):
             raise ValueError("market snapshot summary projection is invalid")
-        explorer_data = MarketSnapshotStore._read_json(path / "explorer-data.json")
         expected_explorer_data = build_snapshot_explorer_data(manifest, fields)
         if explorer_data != expected_explorer_data:
             raise ValueError("market snapshot Explorer data projection is invalid")

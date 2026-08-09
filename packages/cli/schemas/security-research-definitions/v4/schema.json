@@ -1,0 +1,8 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:marketsieve:schema:security-research-definitions:4.0.0",
+  "type": "object",
+  "required": ["schema", "availability_basis", "periods", "company_fields", "financial_concepts", "price_fields", "event_types", "market_context", "missing_policy"],
+  "properties": {"schema": {"const": "security-research-definitions/v4"}, "availability_basis": {"type": "object"}, "periods": {"type": "object"}, "company_fields": {"type": "array", "items": {"type": "object"}}, "financial_concepts": {"type": "array", "items": {"type": "object"}}, "price_fields": {"type": "array", "items": {"type": "object"}}, "event_types": {"type": "array", "items": {"type": "object"}}, "market_context": {"type": "object"}, "missing_policy": {"type": "string"}},
+  "additionalProperties": false
+}

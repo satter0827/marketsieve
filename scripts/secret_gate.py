@@ -24,7 +24,6 @@ SENSITIVE_NAMES = re.compile(
 )
 SENSITIVE_SUFFIXES = (".key", ".p12", ".pem", ".pfx", ".private-key")
 ARCHIVE_SUFFIXES = (".tar", ".tar.gz", ".tgz", ".whl", ".zip")
-PERMITTED_NAMES = {".env.example"}
 PLACEHOLDERS = {"", "example", "placeholder", "replace-me", "set-me"}
 TEMPLATE_PLACEHOLDER = re.compile(r"^(?:\{[^{}]+}|<[^<>]+>)$")
 REFERENCE_VALUE = re.compile(
@@ -410,9 +409,7 @@ def _is_archive(label: str) -> bool:
 
 
 def _is_sensitive_path(label: str, name: str) -> bool:
-    return name not in PERMITTED_NAMES and (
-        SENSITIVE_NAMES.search(label) is not None or name.lower().endswith(SENSITIVE_SUFFIXES)
-    )
+    return SENSITIVE_NAMES.search(label) is not None or name.lower().endswith(SENSITIVE_SUFFIXES)
 
 
 def _scan_archive_payload(payload: bytes, label: str, *, depth: int = 0) -> list[Finding]:

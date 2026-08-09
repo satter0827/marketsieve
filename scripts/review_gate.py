@@ -19,7 +19,7 @@ from scripts.secret_gate import scan_patch_text, scan_paths
 ROOT = Path(__file__).parents[1]
 STATE_ROOT = ROOT / ".marketsieve"
 SCHEMA_VERSION = "2.3.0"
-SCHEMA_PATH = ROOT / "schemas/review-report/v2/schema.json"
+SCHEMA_PATH = ROOT / "packages/cli/schemas/review-report/v2/schema.json"
 
 
 def capture(*command: str) -> str:

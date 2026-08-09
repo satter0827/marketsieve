@@ -4,14 +4,14 @@ from decimal import localcontext
 
 import pytest
 
-from marketsieve.analysis.indicators import (
+from marketsieve.indicators import (
     IndicatorName,
     IndicatorSpec,
     IndicatorStatus,
     calculate,
 )
-from marketsieve.data.daily import DailyBar
-from marketsieve.synthetic.daily import JP_INSTRUMENT, fixture_bars
+from marketsieve.model import DailyBar
+from marketsieve_extension_api.testing import JP_INSTRUMENT, fixture_bars
 
 
 def bars(*closes: str) -> tuple[DailyBar, ...]:

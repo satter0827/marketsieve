@@ -1,10 +1,10 @@
-name: Publish verified release
+name: Publish verified GitHub release
 
 on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing vX.Y.Z tag on the verified main commit
+        description: Existing vX.Y.Z or vX.Y.ZrcN tag on the verified main commit
         required: true
         type: string
       ci_run_id:
@@ -15,7 +15,6 @@ on:
 permissions:
   actions: read
   contents: write
-  id-token: write
 
 concurrency:
   group: publish-${{ inputs.tag }}
@@ -26,9 +25,6 @@ jobs:
     name: Publish verified artifacts
     runs-on: ubuntu-24.04
     timeout-minutes: 10
-    environment:
-      name: pypi
-      url: https://pypi.org/project/marketsieve/
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -43,7 +39,7 @@ jobs:
           CI_RUN_ID: ${{ inputs.ci_run_id }}
         run: |
           set -euo pipefail
-          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(rc[1-9][0-9]*)?$ ]]
           [[ "$CI_RUN_ID" =~ ^[0-9]+$ ]]
           commit="$(git rev-list -n 1 "$TAG")"
           test "$commit" = "$(git rev-parse HEAD)"
@@ -61,13 +57,12 @@ jobs:
           path: release
           run-id: ${{ inputs.ci_run_id }}
           github-token: ${{ github.token }}
-      - name: Verify and stage the build-once artifacts
+      - name: Verify the build-once artifacts
         run: >-
-          python3 -m scripts.release_gate export-pypi
+          python3 -m scripts.release_gate verify
           --version "${{ steps.provenance.outputs.version }}"
           --commit "${{ steps.provenance.outputs.commit }}"
           --dist-dir release
-          --output-dir pypi
       - name: Create a recoverable draft GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -79,15 +74,13 @@ jobs:
             test "$(<draft-state)" = true
             gh release upload "$TAG" release/* --clobber
           else
+            prerelease=()
+            [[ "$TAG" == *rc* ]] && prerelease=(--prerelease)
             gh release create "$TAG" release/* \
-              --draft --verify-tag --generate-notes --title "MarketSieve $TAG"
+              --draft --verify-tag --generate-notes --title "MarketSieve $TAG" \
+              "${prerelease[@]}"
           fi
-      - name: Publish repository distributions through PyPI OIDC
-        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
-        with:
-          packages-dir: pypi
-          attestations: true
-      - name: Publish the GitHub Release after PyPI succeeds
+      - name: Publish the GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ inputs.tag }}

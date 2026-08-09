@@ -67,11 +67,12 @@ def _one_artifact(dist_dir: Path, pattern: str) -> Path:
 def compatible_range(version: str) -> str:
     """Return the supported minor-series range for one public package version."""
 
-    match = re.fullmatch(r"([0-9]+)\.([0-9]+)\.[0-9]+", version)
+    match = re.fullmatch(r"([0-9]+)\.([0-9]+)\.[0-9]+(?:rc[1-9][0-9]*)?", version)
     if match is None:
-        raise RuntimeError(f"public package version must use X.Y.Z: {version}")
+        raise RuntimeError(f"public package version must use X.Y.Z or X.Y.ZrcN: {version}")
     major, minor = (int(value) for value in match.groups())
-    return f">={major}.{minor},<{major}.{minor + 1}"
+    lower_bound = version if "rc" in version else f"{major}.{minor}"
+    return f">={lower_bound},<{major}.{minor + 1}"
 
 
 def load_package_catalog(root: Path = ROOT) -> tuple[PackageSpec, ...]:

@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:marketsieve:schema:market-snapshot-quality-summary:4.0.0",
+  "type": "object",
+  "required": ["schema", "price_coverage_gate_passed", "price_coverage", "domains", "freshness", "failures", "temporal_misalignment_count", "unit_issue_count", "outlier_candidate_count"],
+  "properties": {
+    "schema": {"const": "market-snapshot-quality-summary/v4"},
+    "price_coverage_gate_passed": {"type": "boolean"}, "price_coverage": {"type": "object"}, "domains": {"type": "object"}, "freshness": {"type": "object"}, "failures": {"type": "object"}, "temporal_misalignment_count": {"type": "integer", "minimum": 0}, "unit_issue_count": {"type": "integer", "minimum": 0}, "outlier_candidate_count": {"type": "integer", "minimum": 0}
+  },
+  "additionalProperties": false
+}

@@ -19,6 +19,9 @@ def _wheel(path: Path, *, name: str = "example", version: str = "0.15.0") -> Pat
     with zipfile.ZipFile(path, "w") as archive:
         archive.writestr(f"{name}/__init__.py", "")
         archive.writestr(f"{name}/py.typed", "")
+        archive.writestr(f"{name}/schemas/example/v1/schema.json", "{}")
+        archive.writestr(f"{name}/adapters/templates/research.html", "<html></html>")
+        archive.writestr(f"{name}/adapters/templates/snapshot.html", "<html></html>")
         archive.writestr(
             f"{name}-{version}.dist-info/METADATA",
             f"Name: {name.replace('_', '-')}\nVersion: {version}\n",
@@ -86,6 +89,7 @@ def test_develop_gate_quality_structure_and_schema_commands(
         json.dumps({"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object"}),
         encoding="utf-8",
     )
+    monkeypatch.setattr(develop_gate, "PUBLIC_SCHEMAS", tmp_path / "schemas")
     develop_gate.validate_schemas()
     (schema_dir / "schema.json").unlink()
     with pytest.raises(RuntimeError, match="at least one"):
@@ -122,10 +126,16 @@ def test_develop_gate_coverage_shape_zero_and_failures() -> None:
         )
 
 
-def test_develop_gate_archive_checks_and_hash(tmp_path: Path) -> None:
+def test_develop_gate_archive_checks_and_hash(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     spec = _spec(tmp_path / "package")
     wheel = _wheel(tmp_path / "example-0.15.0-py3-none-any.whl")
     sdist = _sdist(tmp_path / "example-0.15.0.tar.gz")
+    schema = tmp_path / "schemas" / "example" / "v1"
+    schema.mkdir(parents=True)
+    (schema / "schema.json").write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(develop_gate, "PUBLIC_SCHEMAS", tmp_path / "schemas")
     assert develop_gate.verify_catalog_wheel(spec, wheel, (spec,))
     assert develop_gate.verify_catalog_sdist(sdist)
     assert develop_gate.sha256(wheel) == hashlib.sha256(wheel.read_bytes()).hexdigest()
@@ -199,23 +209,19 @@ def test_release_asset_helpers_and_integrity(
     monkeypatch.setattr(release_gate, "load_package_catalog", lambda: (spec,))
     assert release_gate.distributions(dist) == ((wheel,), (sdist,))
     assert release_gate.metadata_version(wheel) == "0.15.0"
-    assert release_gate.wheel_requirement(wheel) == "example==0.15.0"
     release_gate.verify_contents(dist)
-    release_gate.write_wheelhouse_assets(dist, "0.15.0")
-    release_gate.verify_wheelhouse_assets(dist, "0.15.0")
+    release_gate.write_release_assets(dist, "0.15.0")
+    release_gate.verify_release_assets(dist, "0.15.0")
     assert {path.name for path in release_gate.release_assets(dist)} >= {
-        "constraints.txt",
         "VERIFY.md",
         "SHA256SUMS",
     }
-    (dist / "constraints.txt").write_text("wrong==1\n", encoding="utf-8")
-    with pytest.raises(RuntimeError, match="constraints"):
-        release_gate.verify_wheelhouse_assets(dist, "0.15.0")
+    (dist / "VERIFY.md").write_text("wrong version\n", encoding="utf-8")
+    with pytest.raises(RuntimeError, match="instructions"):
+        release_gate.verify_release_assets(dist, "0.15.0")
 
 
-def test_release_directory_and_runtime_wheel_validation(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_release_directory_must_be_empty(tmp_path: Path) -> None:
     dist = tmp_path / "dist"
     release_gate.prepare_dist_dir(dist)
     assert dist.is_dir()
@@ -225,17 +231,6 @@ def test_release_directory_and_runtime_wheel_validation(
     (dist / "unexpected").unlink()
     (dist / ".gitignore").write_text("*", encoding="utf-8")
     release_gate.prepare_dist_dir(dist)
-
-    runtime = tmp_path / "runtime"
-    runtime.mkdir()
-    locked = runtime / "dependency.whl"
-    locked.write_bytes(b"same")
-    (dist / locked.name).write_bytes(b"same")
-    monkeypatch.setattr(release_gate, "RUNTIME_WHEELHOUSE", runtime)
-    release_gate.verify_runtime_wheels(dist)
-    (dist / locked.name).write_bytes(b"changed")
-    with pytest.raises(RuntimeError, match="locked"):
-        release_gate.verify_runtime_wheels(dist)
 
 
 def test_release_source_validation_errors(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -330,7 +325,7 @@ def test_develop_gate_smoke_and_package_workflows(
     root = tmp_path / "root"
     evidence = root / ".marketsieve" / "evidence"
     evidence.mkdir(parents=True)
-    for name in ("doctor-result/v1", "capabilities-result/v10", "log-record/v1"):
+    for name in ("doctor-result/v1", "capabilities-result/v11", "log-record/v1"):
         directory = root / "schemas" / name
         directory.mkdir(parents=True)
         (directory / "schema.json").write_text(
@@ -338,6 +333,7 @@ def test_develop_gate_smoke_and_package_workflows(
             encoding="utf-8",
         )
     monkeypatch.setattr(develop_gate, "ROOT", root)
+    monkeypatch.setattr(develop_gate, "PUBLIC_SCHEMAS", root / "schemas")
 
     def smoke_capture(command: Any, **_: Any) -> subprocess.CompletedProcess[str]:
         if "--version" in command:
@@ -348,7 +344,7 @@ def test_develop_gate_smoke_and_package_workflows(
             )
         if "capabilities" in command:
             return subprocess.CompletedProcess(
-                command, 0, stdout='{"schema":"capabilities-result/v10"}\n', stderr=""
+                command, 0, stdout='{"schema":"capabilities-result/v11"}\n', stderr=""
             )
         return subprocess.CompletedProcess(command, 0, stdout="help\n", stderr="")
 
@@ -356,6 +352,10 @@ def test_develop_gate_smoke_and_package_workflows(
     develop_gate.check_smoke(evidence)
     assert json.loads((evidence / "smoke.json").read_text())["version"]["exit_code"] == 0
 
+    package_schemas = root / "package-schemas" / "example" / "v1"
+    package_schemas.mkdir(parents=True)
+    (package_schemas / "schema.json").write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(develop_gate, "PUBLIC_SCHEMAS", root / "package-schemas")
     spec = _spec(tmp_path / "package")
     monkeypatch.setattr(develop_gate, "load_package_catalog", lambda: (spec,))
     monkeypatch.setattr(develop_gate, "EXTERNAL_PLUGIN_EXAMPLES", ())
@@ -385,18 +385,12 @@ def test_develop_gate_smoke_and_package_workflows(
     assert any(command[:2] == ("uv", "build") for command in commands)
 
 
-def test_release_build_verify_and_export_workflow(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_release_build_and_verify_workflow(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     root = tmp_path / "root"
     root.mkdir()
     (root / "CHANGELOG.md").write_text("## [0.15.0] - 2026-08-08\n", encoding="utf-8")
     spec = _spec(tmp_path / "package")
-    runtime = root / ".marketsieve" / "cache" / "runtime-wheelhouse"
-    runtime.mkdir(parents=True)
-    _wheel(runtime / "dependency-1.0-py3-none-any.whl", name="dependency", version="1.0")
     monkeypatch.setattr(release_gate, "ROOT", root)
-    monkeypatch.setattr(release_gate, "RUNTIME_WHEELHOUSE", runtime)
     monkeypatch.setattr(release_gate, "load_package_catalog", lambda: (spec,))
     monkeypatch.setattr(release_gate, "verify_secrets", lambda _: None)
     commit = "a" * 40
@@ -417,9 +411,6 @@ def test_release_build_verify_and_export_workflow(
     release_gate.build("0.15.0", commit, dist)
     assert (dist / "release.json").is_file()
     release_gate.verify("0.15.0", commit, dist)
-    output = tmp_path / "pypi"
-    release_gate.export_pypi("0.15.0", commit, dist, output)
-    assert {path.suffix for path in output.iterdir()} == {".whl", ".gz"}
 
     manifest = json.loads((dist / "release.json").read_text())
     manifest["commit"] = "b" * 40

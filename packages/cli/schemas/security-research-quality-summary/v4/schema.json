@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:marketsieve:schema:security-research-quality-summary:4.0.0",
+  "type": "object",
+  "required": ["schema", "requested_evidence", "minimum_price_observations", "price_observations", "price_coverage_gate_passed", "company_fields", "financial_facts", "financial_facts_by_period", "events", "evidence_statuses", "benchmark_observations", "failures", "failures_by_reason", "failures_by_stage", "price_date_range", "freshness", "unit_checks", "temporal_misalignment_count", "outlier_candidate_count"],
+  "properties": {
+    "schema": {"const": "security-research-quality-summary/v4"}, "requested_evidence": {"type": "array", "uniqueItems": true, "items": {"type": "string"}}, "minimum_price_observations": {"type": "integer", "minimum": 1}, "price_observations": {"type": "integer", "minimum": 0}, "price_coverage_gate_passed": {"type": "boolean"}, "company_fields": {"type": "integer", "minimum": 0}, "financial_facts": {"type": "integer", "minimum": 0}, "financial_facts_by_period": {"type": "object"}, "events": {"type": "integer", "minimum": 0}, "evidence_statuses": {"type": "object"}, "benchmark_observations": {"type": "integer", "minimum": 0}, "failures": {"type": "integer", "minimum": 0}, "failures_by_reason": {"type": "object"}, "failures_by_stage": {"type": "object"}, "price_date_range": {"type": "object"}, "freshness": {"type": "object"}, "unit_checks": {"type": "object"}, "temporal_misalignment_count": {"type": "integer", "minimum": 0}, "outlier_candidate_count": {"type": "integer", "minimum": 0}
+  },
+  "additionalProperties": false
+}

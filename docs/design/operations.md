@@ -8,7 +8,8 @@ opening `explorer.html` directly with `file://` is not. Build focused evidence
 with `make research-build INSTRUMENTS='MIC:SYMBOL ...'` only after selecting a Snapshot.
 Research Explorer defaults to one year and can switch among three months, six months, one year,
 three years, and all saved observations without another network request. The object folder remains
-the handoff unit; `marketsieve preview` is the supported browser path.
+the handoff unit; `marketsieve market preview` and `marketsieve research preview` are the supported
+browser paths.
 
 `make market-build` remains the explicit combined-scope acquisition command. Direct CLI arguments select one
 market, one or more indices, narrower evidence domains, and different history lengths. Optional
@@ -21,14 +22,22 @@ MarketSieve does not install cron jobs, run a daemon, or send notifications.
 
 Completed objects live below `.marketsieve/market-snapshots/objects` and
 `.marketsieve/research/objects`. Structured command history is retained below
-`.marketsieve/operations/runs`; `run prune` is a dry run unless `--apply` is explicit. Resumable
-acquisition state, operation history, caches, and published objects are separate. Completed valid objects are retained
-as historical observations. Local live evidence is gitignored and must not be committed.
+`.marketsieve/operations/runs`; `operations run prune` is a dry run unless `--apply` is explicit.
+Resumable acquisition state, operation history, caches, and published objects are separate. A
+failed acquisition operation exposes its acquisition `resume_run_id` and the CLI prints the exact
+`marketsieve market build --resume TOKEN` command; a UUID operation-run ID is not a Snapshot resume
+run ID. Completed valid objects are retained as historical observations. Local live evidence is
+gitignored and must not be committed.
 
 VS Code launch entries cover JP and US Capture, Snapshot preview and swing exploration, and Research
 build and preview. Tasks expose granular market, reconstruction, research,
 and developer actions. `.marketsieve` is visible in the Explorer but excluded from file watching.
 
-`artifacts doctor` classifies current, incompatible, corrupt, and orphan entries without reading an
-old object as a current contract. Legacy objects are archived only after replacement objects pass
-verification; they are never automatically migrated or deleted.
+`operations artifacts doctor` classifies current, incompatible, corrupt, and orphan entries without
+reading an old object as a current contract. Legacy objects are never automatically migrated or
+deleted.
+
+Verified releases contain the four repository distributions, checksums, installation guidance, and
+provenance in one GitHub Release. pip may resolve third-party dependencies from its configured
+package index. Release verification installs the same repository wheels on Ubuntu and macOS with
+Python 3.12, 3.13, and 3.14. PyPI is not a MarketSieve publication channel.

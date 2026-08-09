@@ -8,8 +8,8 @@ from collections.abc import Mapping, Sequence
 from dataclasses import asdict
 from pathlib import Path
 
-from marketsieve.matrix import field_definitions
-from marketsieve_cli.adapters.explorer_v2 import (
+from marketsieve.fields import field_definitions
+from marketsieve_cli.adapters.explorer import (
     build_research_explorer_data,
     build_snapshot_explorer_data,
     render_explorer,
@@ -52,7 +52,7 @@ def _build_research(output: Path) -> None:
         "explorer.html",
     )
     manifest = {
-        "schema": "security-research-manifest/v8",
+        "schema": "security-research-manifest/v9",
         "research_id": "1" * 64,
         "snapshot_id": "0" * 64,
         "instrument_id": "XNAS:MSFT",
@@ -189,7 +189,7 @@ def main() -> None:
         )
     }
     manifest = {
-        "schema": "market-snapshot-manifest/v8",
+        "schema": "market-snapshot-manifest/v9",
         "snapshot_id": "0" * 64,
         "created_at": "2026-08-08T00:00:00+00:00",
         "source": {"name": "yfinance", "version": "1.5.2"},

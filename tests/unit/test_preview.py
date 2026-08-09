@@ -16,7 +16,7 @@ def _object(tmp_path: Path) -> Path:
     path.mkdir()
     (path / "explorer.html").write_text("<!doctype html><title>Explorer</title>", encoding="utf-8")
     (path / "explorer-data.json").write_text(
-        json.dumps({"schema": "explorer-data/v4"}), encoding="utf-8"
+        json.dumps({"schema": "explorer-data/v5"}), encoding="utf-8"
     )
     (path / "securities.jsonl").write_text('{"instrument_id":"XNAS:MSFT"}\n', encoding="utf-8")
     (path / "manifest.json").write_text(
@@ -45,7 +45,7 @@ def test_preview_serves_only_one_explorer_object(tmp_path: Path) -> None:
             assert response.status == 200
             assert response.headers["X-Content-Type-Options"] == "nosniff"
         with urlopen(url.replace("/explorer.html", "/explorer-data.json"), timeout=2) as response:
-            assert json.loads(response.read())["schema"] == "explorer-data/v4"
+            assert json.loads(response.read())["schema"] == "explorer-data/v5"
         with urlopen(url.replace("/explorer.html", "/securities.jsonl"), timeout=2) as response:
             assert response.headers["Content-Type"].startswith("application/x-ndjson")
         with pytest.raises(HTTPError) as missing:

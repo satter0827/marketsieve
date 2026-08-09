@@ -4,7 +4,7 @@
     {"name": "01 Market: Capture JP Close (Network)", "type": "node-terminal", "request": "launch", "command": "make market-capture MARKET=jp", "cwd": "${workspaceFolder}"},
     {"name": "02 Market: Capture US Close (Network)", "type": "node-terminal", "request": "launch", "command": "make market-capture MARKET=us", "cwd": "${workspaceFolder}"},
     {"name": "03 Market: Preview Latest Explorer", "type": "node-terminal", "request": "launch", "command": "make market-preview", "cwd": "${workspaceFolder}"},
-    {"name": "04 Market: Explore Swing Candidates", "type": "node-terminal", "request": "launch", "command": "make market-query QUERY_ARGS='--market ${input:market} --profile swing --domain return --domain risk --order return_20d:desc --limit 30'", "cwd": "${workspaceFolder}"},
+    {"name": "04 Market: Explore Swing Evidence", "type": "node-terminal", "request": "launch", "command": "make market-query QUERY_ARGS='--market ${input:market} --profile swing --domain return --domain risk --order return_20d:desc --limit 30'", "cwd": "${workspaceFolder}"},
     {"name": "05 Research: Build Security Evidence (Network)", "type": "node-terminal", "request": "launch", "command": "make research-build INSTRUMENTS='${input:instruments}'", "cwd": "${workspaceFolder}"},
     {"name": "06 Research: Preview Latest Explorer", "type": "node-terminal", "request": "launch", "command": "make research-preview INSTRUMENT='${input:instrument}'", "cwd": "${workspaceFolder}"},
     {"name": "07 Operations: Diagnose Artifacts", "type": "node-terminal", "request": "launch", "command": "make artifacts-doctor", "cwd": "${workspaceFolder}"}

@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:marketsieve:schema:market-snapshot-definitions:4.0.0",
+  "type": "object",
+  "required": ["schema", "fields", "missing_reasons"],
+  "properties": {
+    "schema": {"const": "market-snapshot-definitions/v4"},
+    "fields": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["name", "group", "data_type", "unit", "source", "definition", "formula", "period", "applicable_to", "comparison_scope", "exclusion_conditions", "definition_version"],
+        "properties": {
+          "name": {"type": "string"}, "group": {"type": "string"}, "data_type": {"type": "string"}, "unit": {"type": ["string", "null"]}, "source": {"type": "string"}, "definition": {"type": "string"}, "formula": {"type": ["string", "null"]}, "period": {"type": ["string", "null"]}, "applicable_to": {"type": "string"}, "comparison_scope": {"type": "string"}, "exclusion_conditions": {"type": "array", "items": {"type": "string"}}, "definition_version": {"type": "string"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "missing_reasons": {"type": "array", "minItems": 1, "items": {"type": "object", "required": ["code", "category", "definition"], "properties": {"code": {"type": "string"}, "category": {"type": "string"}, "definition": {"type": "string"}}, "additionalProperties": false}}
+  },
+  "additionalProperties": false
+}

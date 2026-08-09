@@ -1,0 +1,8 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:marketsieve:schema:security-research-price:1.0.0",
+  "type": "object",
+  "required": ["schema", "date", "open", "high", "low", "close", "volume", "adjustment", "missing"],
+  "properties": {"schema": {"const": "security-research-price/v1"}, "date": {"type": "string", "format": "date"}, "open": {"type": "string"}, "high": {"type": "string"}, "low": {"type": "string"}, "close": {"type": "string"}, "volume": {"type": ["integer", "null"], "minimum": 0}, "adjustment": {"type": "string"}, "missing": {"type": "object", "additionalProperties": {"type": "string"}}},
+  "additionalProperties": false
+}

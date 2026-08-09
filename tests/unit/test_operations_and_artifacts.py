@@ -13,6 +13,7 @@ from marketsieve.model import DailyBar, Instrument
 from marketsieve_cli.adapters.artifacts import ArtifactInventory
 from marketsieve_cli.adapters.console import ConsoleOutput, OutputMode
 from marketsieve_cli.adapters.operations import OperationRunStore
+from marketsieve_cli.application.market import MarketSnapshotRunInterrupted
 from marketsieve_extension_api import MarketIndicatorKind, MarketIndicatorSpec
 
 
@@ -36,7 +37,7 @@ def _reject_object(_path: Path, _object_id: str) -> None:
 
 def test_artifact_inventory_isolates_legacy_corrupt_and_orphan(tmp_path: Path) -> None:
     objects = tmp_path / "market-snapshots" / "objects"
-    _manifest(objects / ("a" * 64), "market-snapshot-manifest/v8", "a" * 64)
+    _manifest(objects / ("a" * 64), "market-snapshot-manifest/v9", "a" * 64)
     _manifest(objects / ("b" * 64), "market-snapshot-manifest/v7", "b" * 64)
     (objects / ("c" * 64)).mkdir()
     (objects / ".DS_Store").write_text("ignored", encoding="utf-8")
@@ -63,7 +64,7 @@ def test_artifact_inventory_validates_filters_and_invalid_metadata(tmp_path: Pat
         inventory.list(status="deleted")
 
     objects = tmp_path / "research" / "objects"
-    _manifest(objects / ("a" * 64), "security-research-manifest/v8", "a" * 64)
+    _manifest(objects / ("a" * 64), "security-research-manifest/v9", "a" * 64)
     (objects / ("b" * 64)).mkdir()
     (objects / ("b" * 64) / "manifest.json").write_text("[]", encoding="utf-8")
     (objects / ("c" * 64)).mkdir()
@@ -85,7 +86,7 @@ def test_artifact_inventory_uses_object_validator_without_failing_the_list(
 ) -> None:
     objects = tmp_path / "market-snapshots" / "objects"
     object_id = "a" * 64
-    _manifest(objects / object_id, "market-snapshot-manifest/v8", object_id)
+    _manifest(objects / object_id, "market-snapshot-manifest/v9", object_id)
     inventory = ArtifactInventory(
         tmp_path,
         validators={"snapshot": _reject_object},
@@ -125,6 +126,18 @@ def test_operation_runs_persist_success_failure_and_dry_run_prune(tmp_path: Path
     assert store.list(status="failed")["runs"][0]["status"] == "failed"
 
 
+def test_operation_run_carries_a_snapshot_acquisition_resume_run_id(tmp_path: Path) -> None:
+    store = OperationRunStore(tmp_path)
+    error = MarketSnapshotRunInterrupted("0123456789abcdef", RuntimeError("provider unavailable"))
+
+    with pytest.raises(MarketSnapshotRunInterrupted), store.track("market build", {"scope": "jp"}):
+        raise error
+
+    failed = store.list(status="failed")["runs"][0]
+    assert failed["resumable"] is True
+    assert failed["resume_run_id"] == "0123456789abcdef"
+
+
 def test_operation_run_filters_events_validation_and_apply_prune(tmp_path: Path) -> None:
     store = OperationRunStore(tmp_path)
     with store.track("market build", {"scope": "jp"}):
@@ -150,8 +163,8 @@ def test_public_sdk_and_market_indicator_units_are_explicit() -> None:
     indicator = IndicatorSpec.create("sma", period=20)
     assert instrument.symbol == "MSFT"
     assert indicator.parameter("period") == 20
-    assert DailyBar.__module__ == "marketsieve.data.daily"
-    assert IndicatorResult.__module__ == "marketsieve.analysis.indicators"
+    assert DailyBar.__module__ == "marketsieve.model"
+    assert IndicatorResult.__module__ == "marketsieve.indicators"
     assert callable(calculate)
     definitions = field_definitions()
     assert definitions and isinstance(definitions[0], FieldDefinition)

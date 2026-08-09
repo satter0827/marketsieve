@@ -6,9 +6,8 @@ from collections.abc import Callable
 from datetime import date, timedelta
 from typing import Any, Protocol
 
-from marketsieve.data.daily import Adjustment
-from marketsieve.domain import Instrument
-from marketsieve.matrix import INDEX_BENCHMARKS
+from marketsieve._snapshot_fields import INDEX_BENCHMARKS
+from marketsieve.model import Adjustment, Instrument
 from marketsieve_cli.contracts import ResearchBuildInputs, RuntimeSettings
 from marketsieve_extension_api import (
     EquityBatchFetcher,

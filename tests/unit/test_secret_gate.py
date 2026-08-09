@@ -23,10 +23,10 @@ def test_tracked_paths_skip_files_deleted_in_the_worktree() -> None:
     assert all(path.is_file() for path in _tracked_paths())
 
 
-def test_secret_scan_accepts_empty_documented_environment(tmp_path: Path) -> None:
+def test_secret_scan_rejects_environment_template_path(tmp_path: Path) -> None:
     path = write(tmp_path / ".env.example", "OPENAI_API_KEY=\n")
 
-    assert scan_paths((path,)) == []
+    assert [finding.kind for finding in scan_paths((path,))] == ["sensitive_path"]
 
 
 def test_secret_scan_reports_location_without_value(tmp_path: Path) -> None:
