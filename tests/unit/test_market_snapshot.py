@@ -21,9 +21,9 @@ from marketsieve_cli.adapters import explorer
 from marketsieve_cli.adapters.config import Settings
 from marketsieve_cli.adapters.explorer import build_snapshot_explorer_data
 from marketsieve_cli.adapters.market_snapshots import MarketSnapshotStore, _request_fingerprint
+from marketsieve_cli.application.acquisition_errors import MarketSnapshotRunInterrupted
 from marketsieve_cli.application.market import (
     MarketService,
-    MarketSnapshotRunInterrupted,
     _load_universe,
     _not_requested_fields,
     _provider_failure_fields,
@@ -507,7 +507,8 @@ class _BatchFetcher:
     def doctor(self) -> SourceDiagnostic:
         return SourceDiagnostic(True, "ready", "ready")
 
-    def fetch(self, request: EquityBatchRequest) -> ImportedEquityBatch:
+    def fetch(self, request: EquityBatchRequest, *, progress: Any = None) -> ImportedEquityBatch:
+        del progress
         self.request = request
         retrieved_at = datetime(2026, 8, 8, tzinfo=UTC)
         observations = tuple(
@@ -625,6 +626,24 @@ def test_market_service_builds_explicit_company_only_scope(tmp_path: Path) -> No
         ).read_text()
     )
     Draft202012Validator(schema).validate(document)
+
+
+def test_market_progress_sink_does_not_change_snapshot_identity(tmp_path: Path) -> None:
+    inputs = MarketBuildInputs(("dow30",), ("company",), None)
+    without_progress = MarketService(
+        _Registry(),
+        MarketSnapshotStore(tmp_path / "plain" / "market-snapshots"),
+        Settings(None),
+        today=lambda: date(2026, 8, 8),
+    ).build(inputs)
+    with_progress = MarketService(
+        _Registry(),
+        MarketSnapshotStore(tmp_path / "observed" / "market-snapshots"),
+        Settings(None),
+        today=lambda: date(2026, 8, 8),
+    ).build(inputs, progress=lambda value: None)
+
+    assert with_progress["snapshot_id"] == without_progress["snapshot_id"]
 
 
 def test_market_service_requires_exactly_one_new_or_resumed_request(tmp_path: Path) -> None:

@@ -32,6 +32,20 @@ Before the candidate is tagged:
 5. Formatter, lint, type checking, tests, package checks, the complete development gate, and the
    release gate pass for the candidate commit.
 
+`1.0.0rc1` remained an unpublished repository milestone. It has no tag or GitHub Release.
+
+## 1.0.0rc2
+
+The second candidate corrects the frozen extension and operation contracts before first public
+publication. Acquisition exposes typed progress without changing evidence identity. Operation v2
+persists progress, retry, heartbeat, publication, failure, and cancellation state; TTY stderr shows
+the same bounded status while stdout remains one final JSON document. Ctrl+C records exit code 130,
+preserves published Research Packs, and provides the exact Market resume command.
+
+The repeated JP and US operational checks and the complete release gate restart from the final rc2
+develop commit. `v1.0.0rc2` is published as a GitHub prerelease only after the verified main build is
+matched to its annotated tag. PyPI remains outside the publication path.
+
 ## 1.0.0
 
 Only release-blocking corrections are accepted after `1.0.0rc1`. A correction that changes a frozen

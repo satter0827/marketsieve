@@ -12,6 +12,7 @@ from typing import Protocol, runtime_checkable
 from marketsieve.model import DailyBar
 
 from .equity import SourceDiagnostic
+from .progress import ProgressSink
 
 
 class MarketIndicatorKind(StrEnum):
@@ -102,5 +103,5 @@ class MarketIndicatorFetcher(Protocol):
     def doctor(self) -> SourceDiagnostic: ...
 
     def fetch_market_indicators(
-        self, request: MarketIndicatorRequest
+        self, request: MarketIndicatorRequest, *, progress: ProgressSink | None = None
     ) -> ImportedMarketIndicators: ...

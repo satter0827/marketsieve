@@ -12,6 +12,11 @@ packages. `marketsieve-extension-api` owns typed provider contracts. `marketsiev
 implements those contracts. `marketsieve-cli` owns explicit invocation inputs, optional operational
 settings, orchestration, storage, projections, and console interfaces.
 
+Typed acquisition progress flows from a provider adapter through an optional extension sink into a
+CLI-owned operation context. The context serializes progress, retry, heartbeat, publication, and
+terminal events and may project them to TTY stderr. Evidence construction never reads that channel,
+so enabling observation cannot change provider requests, normalized responses, or object identity.
+
 ## Market Snapshot
 
 Versioned constituent assets define Nikkei 225, TOPIX 500, S&P 500, Dow 30, and Nasdaq-100.

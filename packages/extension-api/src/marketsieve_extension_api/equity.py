@@ -10,6 +10,8 @@ from typing import Protocol, runtime_checkable
 
 from marketsieve.model import Adjustment, DailyBar, Instrument
 
+from .progress import ProgressSink
+
 
 @dataclass(frozen=True, slots=True)
 class SourceDiagnostic:
@@ -217,4 +219,6 @@ class EquityBatchFetcher(Protocol):
 
     def doctor(self) -> SourceDiagnostic: ...
 
-    def fetch(self, request: EquityBatchRequest) -> ImportedEquityBatch: ...
+    def fetch(
+        self, request: EquityBatchRequest, *, progress: ProgressSink | None = None
+    ) -> ImportedEquityBatch: ...

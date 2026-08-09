@@ -30,6 +30,27 @@ make research-preview INSTRUMENT='XTKS:7203'
 分析対象と証拠領域は実行ごとに指定します。任意の`marketsieve.settings.toml`には、取得並列数、
 再試行、品質閾値などの運用設定だけを置き、`make setup-settings`で作成できます。
 
+## 取得状況を確認する
+
+VS Codeのネットワーク実行項目では、取得状況をstderrへ1行ずつ表示します。各行は、時刻、状態、
+段階、完了数、総数、失敗数、経過時間の順です。再試行時は、その後に試行回数と待機時間を表示します。
+新しいイベントが15秒間ない場合は、現在の段階をハートビートとして再表示するため、取得元から応答を
+待っている間も実行中であることを確認できます。
+
+進捗を表示するのはstderrがTTYの場合だけです。stdoutは最後のJSON 1件だけに保ち、パイプとCIでは
+進捗を表示しません。操作履歴には実行環境にかかわらず同じ進捗を保存します。別のターミナルでは、
+実行中のUUIDを調べて、現在の状態とイベントを確認できます。
+
+```shell
+marketsieve operations run list --status running --output json
+marketsieve operations run show OPERATION_RUN_ID --output json
+marketsieve operations run events OPERATION_RUN_ID --output json
+```
+
+Ctrl+Cを押すと、状態を`cancelled`、終了コードを130として保存します。Market取得では、保存した
+リクエストを再開する正確な`marketsieve market build --resume TOKEN`コマンドを表示します。
+Researchでは、中断前に公開済みのPack IDを操作履歴に残します。
+
 ## 検証済みリリースをインストールする
 
 1件のGitHub Releaseから全ファイルをダウンロードし、`SHA256SUMS`で検証してから、同じ
@@ -60,7 +81,7 @@ marketsieve operations artifacts doctor --output json
 1.0以前の成果物は自動移行も自動削除もしません。非互換と判定された場合は、現行コマンドで
 再生成します。
 
-公開前に取得が中断した場合、エラーと失敗した操作履歴に同じ16文字の再開run IDが表示されます。
+公開前に取得が失敗した場合、エラーと失敗した操作履歴に同じ16文字の再開run IDが表示されます。
 保存済みの同一リクエストだけを`marketsieve market build --resume TOKEN`で再開します。
 
 公開CLIは`market`、`research`、`operations`、`doctor`、`capabilities`です。公開SDKは

@@ -54,6 +54,18 @@ Purpose profiles affect stored-data selection only and never alter Snapshot acqu
 trading-unit projections are invocation-only and are not persisted. Ordering is neutral and does
 not produce a score or recommendation.
 
+`EquityBatchFetcher`, `MarketIndicatorFetcher`, and `SecurityResearchFetcher` accept an optional
+keyword-only `ProgressSink`. `AcquisitionProgress` always carries phase, state, completed, total,
+and failure count. Retrying progress additionally carries attempt, maximum attempts, and bounded
+wait seconds. Counts are validated at construction. A sink is an observation channel: it is not
+part of a request, response hash, Snapshot identity, or Research identity.
+
+Network acquisition writes line-oriented progress only to TTY stderr. The stable field order is
+time, state, phase, completed, total, failures, and elapsed time, followed by retry fields when
+present. stdout contains only the final command document. Non-TTY execution, pipes, and CI do not
+render progress but still persist operation events. Stored-data query, show, compare, and preview
+commands have no acquisition progress path.
+
 `preview` binds to `127.0.0.1`, selects an available port by default, and exposes only the selected
 verified object's manifest-registered files. It disables directory listing, path traversal,
 symlinks, and access outside the object.
@@ -63,7 +75,7 @@ symlinks, and access outside the object.
 Current top-level contracts are `market-snapshot/v9`, `market-snapshot-list/v3`,
 `market-snapshot-query-result/v3`, `market-snapshot-comparison/v3`, `market-snapshot-diff/v1`,
 `security-research/v9`, `security-research-list/v3`, `security-research-batch/v1`,
-`explorer-data/v5`, `operation-run/v1`, and `capabilities-result/v11`. Every emitted record schema is
+`explorer-data/v5`, `operation-run/v2`, and `capabilities-result/v12`. Every emitted record schema is
 registered and packaged in `marketsieve-cli`. Stable JSON keys and formal schemas are English.
 Human CLI output and Explorer labels may be localized without changing machine documents.
 

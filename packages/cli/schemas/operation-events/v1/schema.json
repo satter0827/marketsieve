@@ -1,1 +1,0 @@
-{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"urn:marketsieve:schema:operation-events:1.0.0","type":"object","required":["schema","run_id","events"],"properties":{"schema":{"const":"operation-events/v1"},"run_id":{"type":"string"},"events":{"type":"array"}},"additionalProperties":false}
