@@ -19,6 +19,10 @@ from marketsieve._snapshot import (
 from marketsieve._snapshot_fields import INDEX_BENCHMARKS, field_definitions
 from marketsieve.fields import FieldDefinition
 from marketsieve.model import Adjustment, Instrument
+from marketsieve_cli.application.acquisition_errors import (
+    MarketSnapshotRunCancelled,
+    MarketSnapshotRunInterrupted,
+)
 from marketsieve_cli.application.market_summary import _failures, _summary
 from marketsieve_cli.contracts import (
     MarketBuildInputs,
@@ -36,6 +40,7 @@ from marketsieve_extension_api import (
     MarketIndicatorKind,
     MarketIndicatorRequest,
     MarketIndicatorSpec,
+    ProgressSink,
 )
 
 
@@ -117,18 +122,6 @@ class MarketSnapshotRepository(Protocol):
     ) -> dict[str, Any]: ...
 
 
-class MarketSnapshotRunInterrupted(RuntimeError):
-    """Report a persisted acquisition request that can be resumed exactly."""
-
-    def __init__(self, run_id: str, error: Exception) -> None:
-        self.resume_run_id = run_id
-        super().__init__(
-            "market snapshot acquisition stopped before publication: "
-            f"{error}; resume the exact saved request with "
-            f"marketsieve market build --resume {run_id}"
-        )
-
-
 class MarketService:
     """Acquire one complete fixed universe and persist a Market Snapshot."""
 
@@ -146,7 +139,11 @@ class MarketService:
         self._today = today
 
     def build(
-        self, inputs: MarketBuildInputs | None, *, resume: str | None = None
+        self,
+        inputs: MarketBuildInputs | None,
+        *,
+        resume: str | None = None,
+        progress: ProgressSink | None = None,
     ) -> dict[str, Any]:
         runtime = self._settings.runtime()
         if resume is None and inputs is None:
@@ -260,9 +257,15 @@ class MarketService:
             diagnostic = fetcher.doctor()
             if not diagnostic.ready:
                 raise RuntimeError(diagnostic.message)
-            imported = fetcher.fetch(request)
+            imported = (
+                fetcher.fetch(request)
+                if progress is None
+                else fetcher.fetch(request, progress=progress)
+            )
             if imported.request != request:
                 raise ValueError("source fetch result must preserve the exact market request")
+        except KeyboardInterrupt as error:
+            raise MarketSnapshotRunCancelled(run_id) from error
         except Exception as error:
             raise MarketSnapshotRunInterrupted(run_id, error) from error
         if inputs.mode == "current" and self._today() != acquisition_date:
@@ -283,9 +286,17 @@ class MarketService:
                 settings={"cache_dir": ".marketsieve/cache/yfinance"},
             )
             try:
-                indicator_import = indicator_fetcher.fetch_market_indicators(indicator_request)
+                indicator_import = (
+                    indicator_fetcher.fetch_market_indicators(indicator_request)
+                    if progress is None
+                    else indicator_fetcher.fetch_market_indicators(
+                        indicator_request, progress=progress
+                    )
+                )
                 if indicator_import.request != indicator_request:
                     raise ValueError("source must preserve the exact market indicator request")
+            except KeyboardInterrupt as error:
+                raise MarketSnapshotRunCancelled(run_id) from error
             except Exception as error:
                 raise MarketSnapshotRunInterrupted(run_id, error) from error
         benchmark_ids = {

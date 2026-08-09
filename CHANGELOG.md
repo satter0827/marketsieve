@@ -5,6 +5,25 @@ Versioning for stable releases.
 
 ## [Unreleased]
 
+## [1.0.0rc2] - 2026-08-09
+
+### Changed
+
+- Added typed, evidence-neutral acquisition progress for equity batches, market indicators, and
+  Security Research domains, with bounded updates, retry observations, and TTY-only stderr lines.
+- Advanced operation runs and events to v2 with current progress, updated time, heartbeat events,
+  published object IDs, cancelled status, and exit code 130.
+- Advanced capabilities to v12 while retaining Snapshot v9, Research v9, and Explorer v5.
+
+### Fixed
+
+- Cancelled unstarted parallel acquisition work, retained Research Packs published before Ctrl+C,
+  and recorded the exact 16-character Market resume ID and command.
+- Restricted the secret path gate to credential data, dedicated secret directories, and private-key
+  file types so the scanner no longer rejects its own Python implementation.
+
+`1.0.0rc1` was not tagged or published. `1.0.0rc2` is the first public 1.0 release candidate.
+
 ## [1.0.0rc1] - 2026-08-09
 
 ### Changed

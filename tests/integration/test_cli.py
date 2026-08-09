@@ -9,6 +9,7 @@ from click import Group
 from click.testing import CliRunner
 
 from marketsieve import __version__
+from marketsieve_cli.application.acquisition_errors import MarketSnapshotRunCancelled
 from marketsieve_cli.contracts import COMMAND_CAPABILITIES
 from marketsieve_cli.interfaces.cli import main
 
@@ -34,7 +35,7 @@ def test_public_cli_is_small_and_explicit() -> None:
     assert "market build --all" in landing.stdout
     assert version.output == f"marketsieve, version {__version__}\n"
     document = json.loads(capabilities.stdout)
-    assert document["schema"] == "capabilities-result/v11"
+    assert document["schema"] == "capabilities-result/v12"
     assert set(main.commands) == {
         "market",
         "research",
@@ -83,6 +84,36 @@ def test_market_build_requires_explicit_scope_evidence_and_history() -> None:
     assert "evidence" in missing_evidence.output
     assert benchmark_without_price.exit_code == 1
     assert "requires price evidence" in benchmark_without_price.output
+
+
+def test_market_build_cancel_returns_130_and_exact_resume_command(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cli_module = importlib.import_module("marketsieve_cli.interfaces.cli.main")
+
+    def cancel(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        del args, kwargs
+        raise MarketSnapshotRunCancelled("0123456789abcdef")
+
+    monkeypatch.setattr(cli_module, "build_market_snapshot", cancel)
+    result = CliRunner().invoke(
+        main,
+        [
+            "market",
+            "build",
+            "--all",
+            "--evidence",
+            "price",
+            "--history-days",
+            "365",
+            "--output",
+            "json",
+        ],
+    )
+
+    assert result.exit_code == 130
+    assert result.stdout == ""
+    assert "marketsieve market build --resume 0123456789abcdef" in result.stderr
 
 
 def test_saved_data_commands_require_snapshot_identity() -> None:

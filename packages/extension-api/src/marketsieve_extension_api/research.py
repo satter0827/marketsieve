@@ -12,6 +12,7 @@ from typing import Protocol, runtime_checkable
 from marketsieve.model import Adjustment, DailyBar, Instrument
 
 from .equity import EquityAcquisitionFailure
+from .progress import ProgressSink
 
 
 @dataclass(frozen=True, slots=True)
@@ -151,4 +152,6 @@ class ImportedSecurityResearch:
 
 @runtime_checkable
 class SecurityResearchFetcher(Protocol):
-    def fetch_research(self, request: SecurityResearchRequest) -> ImportedSecurityResearch: ...
+    def fetch_research(
+        self, request: SecurityResearchRequest, *, progress: ProgressSink | None = None
+    ) -> ImportedSecurityResearch: ...

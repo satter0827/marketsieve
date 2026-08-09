@@ -99,6 +99,20 @@ def _emit_failure(console: Any, code: str, error: Exception) -> None:
     raise click.exceptions.Exit(1)
 
 
+def _emit_cancelled(console: Any, error: KeyboardInterrupt, locale: str) -> None:
+    resume_command = getattr(error, "resume_command", None)
+    if locale == "ja":
+        message = "取得を中断しました。"
+        if isinstance(resume_command, str):
+            message += f" 次のコマンドで再開できます: {resume_command}"
+    else:
+        message = "Acquisition was cancelled."
+        if isinstance(resume_command, str):
+            message += f" Resume with: {resume_command}"
+    console.emit_error("operation_cancelled", message)
+    raise click.exceptions.Exit(130)
+
+
 @click.group(context_settings={"help_option_names": ["-h", "--help"]}, invoke_without_command=True)
 @click.version_option(version=sdk_version(), prog_name="marketsieve")
 @click.option("--settings", "settings_path", type=click.Path(path_type=Path, dir_okay=False))
@@ -185,7 +199,15 @@ def market_build(
             )
         elif all_indices or markets or indices or evidence or history_days is not None:
             raise ValueError("--resume cannot be combined with build inputs")
-        document = build_market_snapshot(context.obj["settings_path"], inputs, resume=run_id)
+        document = build_market_snapshot(
+            context.obj["settings_path"],
+            inputs,
+            resume=run_id,
+            command="market build",
+            observer=console.operation_observer,
+        )
+    except KeyboardInterrupt as error:
+        _emit_cancelled(console, error, context.obj["locale"])
     except (LookupError, OSError, RuntimeError, TypeError, ValueError) as error:
         _emit_failure(console, "market_build_failed", error)
     console.emit_document(document, title="Market Snapshot")
@@ -222,7 +244,15 @@ def market_capture(
                 history_days,
                 session=session,
             )
-        document = build_market_snapshot(context.obj["settings_path"], inputs, resume=run_id)
+        document = build_market_snapshot(
+            context.obj["settings_path"],
+            inputs,
+            resume=run_id,
+            command="market capture",
+            observer=console.operation_observer,
+        )
+    except KeyboardInterrupt as error:
+        _emit_cancelled(console, error, context.obj["locale"])
     except (LookupError, OSError, RuntimeError, TypeError, ValueError) as error:
         _emit_failure(console, "market_capture_failed", error)
     console.emit_document(document, title="Market Capture")
@@ -255,7 +285,14 @@ def market_reconstruct(
             mode="historical_price_reconstruction",
             session="close",
         )
-        document = build_market_snapshot(context.obj["settings_path"], inputs)
+        document = build_market_snapshot(
+            context.obj["settings_path"],
+            inputs,
+            command="market reconstruct",
+            observer=console.operation_observer,
+        )
+    except KeyboardInterrupt as error:
+        _emit_cancelled(console, error, context.obj["locale"])
     except (LookupError, OSError, RuntimeError, TypeError, ValueError) as error:
         _emit_failure(console, "market_reconstruct_failed", error)
     console.emit_document(document, title="Historical Price Reconstruction")
@@ -458,7 +495,11 @@ def research_build(
         inputs = ResearchBuildInputs(
             snapshot_id, instrument_ids, tuple(sorted(set(evidence))), history_days
         )
-        document = build_security_research(context.obj["settings_path"], inputs)
+        document = build_security_research(
+            context.obj["settings_path"], inputs, observer=console.operation_observer
+        )
+    except KeyboardInterrupt as error:
+        _emit_cancelled(console, error, context.obj["locale"])
     except (LookupError, OSError, RuntimeError, TypeError, ValueError) as error:
         _emit_failure(console, "research_build_failed", error)
     console.emit_document(document, title="Security Research")

@@ -250,7 +250,7 @@ def check_smoke(path: Path, *, jobs: int = 1) -> None:
         "capabilities-result": json.loads(capabilities.stdout),
     }
     for name, document in documents.items():
-        major = "v11" if name == "capabilities-result" else "v1"
+        major = "v12" if name == "capabilities-result" else "v1"
         schema = json.loads(
             (PUBLIC_SCHEMAS / name / major / "schema.json").read_text(encoding="utf-8")
         )

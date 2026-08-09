@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:marketsieve:schema:operation-event:2.0.0",
+  "type": "object",
+  "required": ["schema", "timestamp", "level", "code", "details"],
+  "properties": {
+    "schema": {"const": "operation-event/v2"},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "level": {"enum": ["INFO", "ERROR"]},
+    "code": {"enum": ["started", "progress", "retry", "heartbeat", "published", "completed", "failed", "cancelled"]},
+    "details": {"type": "object"}
+  },
+  "additionalProperties": false
+}
