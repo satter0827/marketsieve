@@ -1,6 +1,6 @@
 [project]
 name = "marketsieve-source-yfinance"
-version = "0.19.2"
+version = "0.19.3"
 description = "No-key yfinance equity batch source for MarketSieve."
 readme = "README.md"
 requires-python = ">=3.12,<3.15"

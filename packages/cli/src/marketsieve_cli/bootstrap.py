@@ -221,11 +221,22 @@ def list_security_research(
 def artifact_inventory(
     *, object_type: str | None = None, status: str | None = None
 ) -> dict[str, Any]:
-    return ArtifactInventory(state_root()).list(object_type=object_type, status=status)
+    return _artifact_inventory().list(object_type=object_type, status=status)
 
 
 def artifact_doctor() -> dict[str, Any]:
-    return ArtifactInventory(state_root()).doctor()
+    return _artifact_inventory().doctor()
+
+
+def _artifact_inventory() -> ArtifactInventory:
+    root = state_root()
+    return ArtifactInventory(
+        root,
+        validators={
+            "snapshot": MarketSnapshotStore._verify_object,
+            "research": ResearchStore._verify,
+        },
+    )
 
 
 def operation_runs() -> OperationRunStore:
