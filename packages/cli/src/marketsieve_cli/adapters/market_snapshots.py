@@ -775,13 +775,15 @@ class MarketSnapshotStore:
         }
 
     def list(self) -> dict[str, Any]:
+        inventory = ArtifactInventory(
+            self.root.parent,
+            validators={"snapshot": self._verify_object},
+        )
         if not self.objects.exists():
             return {
                 "schema": "market-snapshot-list/v3",
                 "snapshots": [],
-                "inventory_counts": ArtifactInventory(self.root.parent).list(
-                    object_type="snapshot"
-                )["counts"],
+                "inventory_counts": inventory.list(object_type="snapshot")["counts"],
             }
         self._require_directory(self.objects)
         snapshots = []
@@ -806,7 +808,10 @@ class MarketSnapshotStore:
                 or candidate.get("schema") != "market-snapshot-manifest/v8"
             ):
                 continue
-            self._verify_object(path, path.name)
+            try:
+                self._verify_object(path, path.name)
+            except (LookupError, OSError, TypeError, ValueError):
+                continue
             manifest = candidate
             snapshots.append(
                 {
@@ -836,9 +841,7 @@ class MarketSnapshotStore:
         return {
             "schema": "market-snapshot-list/v3",
             "snapshots": ordered,
-            "inventory_counts": ArtifactInventory(self.root.parent).list(object_type="snapshot")[
-                "counts"
-            ],
+            "inventory_counts": inventory.list(object_type="snapshot")["counts"],
         }
 
     def find_by_request_fingerprint(self, fingerprint: str) -> dict[str, Any] | None:

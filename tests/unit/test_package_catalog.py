@@ -19,7 +19,7 @@ def test_workspace_catalog_has_unique_buildable_public_packages() -> None:
     }
     assert len({spec.distribution for spec in catalog}) == len(catalog)
     assert all(spec.pyproject.is_file() for spec in catalog)
-    assert all(spec.project_version == "0.19.2" for spec in catalog)
+    assert all(spec.project_version == "0.19.3" for spec in catalog)
 
 
 def test_workspace_dependencies_allow_external_minor_compatible_plugins() -> None:
