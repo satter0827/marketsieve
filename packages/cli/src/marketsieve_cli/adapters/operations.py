@@ -22,6 +22,7 @@ from marketsieve_extension_api import (
 )
 
 HEARTBEAT_INTERVAL_SECONDS = 15.0
+RETRY_EVENT_INTERVAL_SECONDS = 15.0
 OperationObserver = Callable[[str, AcquisitionProgress, float], None]
 
 
@@ -91,6 +92,7 @@ class OperationContext:
             daemon=True,
         )
         self._progress_by_phase: dict[str, AcquisitionProgress] = {}
+        self._last_retry_event_by_phase: dict[str, float] = {}
         self._current_progress: AcquisitionProgress | None = None
         self._published_object_ids: list[str] = []
         self._acquired_count: int | None = None
@@ -125,6 +127,15 @@ class OperationContext:
             self._current_progress = progress
             code = "retry" if progress.state is AcquisitionProgressState.RETRYING else "progress"
             self._run["current_progress"] = _progress_document(progress)
+            if code == "retry":
+                now = time.monotonic()
+                last_retry = self._last_retry_event_by_phase.get(progress.phase)
+                if (
+                    last_retry is not None
+                    and now - last_retry < self._store.retry_event_interval_seconds
+                ):
+                    return
+                self._last_retry_event_by_phase[progress.phase] = now
             self._record(code, {"progress": self._run["current_progress"]})
             self._write_run()
             self._observe(code, progress)
@@ -232,12 +243,19 @@ class OperationContext:
 
 class OperationRunStore:
     def __init__(
-        self, state_root: Path, *, heartbeat_interval_seconds: float = HEARTBEAT_INTERVAL_SECONDS
+        self,
+        state_root: Path,
+        *,
+        heartbeat_interval_seconds: float = HEARTBEAT_INTERVAL_SECONDS,
+        retry_event_interval_seconds: float = RETRY_EVENT_INTERVAL_SECONDS,
     ) -> None:
         if heartbeat_interval_seconds <= 0:
             raise ValueError("heartbeat interval must be positive")
+        if retry_event_interval_seconds <= 0:
+            raise ValueError("retry event interval must be positive")
         self.root = state_root / "operations" / "runs"
         self.heartbeat_interval_seconds = heartbeat_interval_seconds
+        self.retry_event_interval_seconds = retry_event_interval_seconds
 
     @contextmanager
     def track(

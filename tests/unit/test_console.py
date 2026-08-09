@@ -98,6 +98,26 @@ def test_progress_is_line_oriented_localized_and_stderr_tty_only() -> None:
     assert non_tty.operation_observer is None
 
 
+def test_heartbeat_does_not_render_stale_retry_fields() -> None:
+    progress = AcquisitionProgress(
+        "company_financials",
+        AcquisitionProgressState.RETRYING,
+        2,
+        10,
+        0,
+        attempt=2,
+        max_attempts=3,
+        retry_after_seconds=2,
+    )
+    stderr = TerminalBuffer()
+    output = ConsoleOutput(OutputMode.JSON, stdout=StringIO(), stderr=stderr, locale="en")
+
+    output.emit_progress("heartbeat", progress, 15.0)
+
+    assert "state=heartbeat" in stderr.getvalue()
+    assert "attempt=" not in stderr.getvalue()
+
+
 def test_errors_follow_the_selected_output_contract() -> None:
     text_output, _, text_stderr = console(OutputMode.TEXT)
     rich_output, _, rich_stderr = console(OutputMode.RICH)
