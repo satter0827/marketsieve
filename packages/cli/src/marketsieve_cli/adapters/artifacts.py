@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import builtins
 import json
+from collections.abc import Callable, Mapping
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -16,8 +17,14 @@ OBJECT_ROOTS = {"snapshot": "market-snapshots", "research": "research"}
 
 
 class ArtifactInventory:
-    def __init__(self, state_root: Path) -> None:
+    def __init__(
+        self,
+        state_root: Path,
+        *,
+        validators: Mapping[str, Callable[[Path, str], None]] | None = None,
+    ) -> None:
         self.state_root = state_root
+        self.validators = dict(validators or {})
 
     def list(self, *, object_type: str | None = None, status: str | None = None) -> dict[str, Any]:
         types = (object_type,) if object_type is not None else ("snapshot", "research")
@@ -116,6 +123,17 @@ class ArtifactInventory:
                 "created_at": None,
                 "reason": str(error) or type(error).__name__,
             }
+        if schema == CURRENT_SCHEMAS[object_type] and object_type in self.validators:
+            try:
+                self.validators[object_type](path, path.name)
+            except (LookupError, OSError, TypeError, ValueError) as error:
+                return {
+                    **base,
+                    "status": "corrupt",
+                    "schema": schema,
+                    "created_at": created_at,
+                    "reason": str(error) or type(error).__name__,
+                }
         return {
             **base,
             "status": ("current" if schema == CURRENT_SCHEMAS[object_type] else "incompatible"),

@@ -220,6 +220,13 @@ def test_snapshot_is_self_contained_without_spreadsheets(tmp_path: Path) -> None
     assert units["position_52w"] == "bounded_ratio"
     assert units["trailing_pe"] == "multiple"
     assert store.list()["schema"] == "market-snapshot-list/v3"
+    explorer_html = root / "explorer.html"
+    original_html = explorer_html.read_text(encoding="utf-8")
+    explorer_html.write_text("obsolete projection", encoding="utf-8")
+    isolated = store.list()
+    assert isolated["snapshots"] == []
+    assert isolated["inventory_counts"]["corrupt"] == 1
+    explorer_html.write_text(original_html, encoding="utf-8")
     assert (
         store.query(
             "latest",

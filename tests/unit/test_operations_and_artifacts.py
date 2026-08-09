@@ -30,6 +30,10 @@ def _manifest(path: Path, schema: str, object_id: str) -> None:
     )
 
 
+def _reject_object(_path: Path, _object_id: str) -> None:
+    raise ValueError("projection_invalid")
+
+
 def test_artifact_inventory_isolates_legacy_corrupt_and_orphan(tmp_path: Path) -> None:
     objects = tmp_path / "market-snapshots" / "objects"
     _manifest(objects / ("a" * 64), "market-snapshot-manifest/v8", "a" * 64)
@@ -74,6 +78,24 @@ def test_artifact_inventory_validates_filters_and_invalid_metadata(tmp_path: Pat
     assert len(current["artifacts"]) == 1
     assert inventory.list(status="corrupt")["counts"]["corrupt"] == 2
     assert inventory.list(status="orphan")["counts"]["orphan"] == 1
+
+
+def test_artifact_inventory_uses_object_validator_without_failing_the_list(
+    tmp_path: Path,
+) -> None:
+    objects = tmp_path / "market-snapshots" / "objects"
+    object_id = "a" * 64
+    _manifest(objects / object_id, "market-snapshot-manifest/v8", object_id)
+    inventory = ArtifactInventory(
+        tmp_path,
+        validators={"snapshot": _reject_object},
+    )
+
+    document = inventory.list(object_type="snapshot")
+
+    assert document["counts"]["corrupt"] == 1
+    assert document["counts"]["current"] == 0
+    assert document["artifacts"][0]["reason"] == "projection_invalid"
 
 
 def test_non_tty_auto_output_is_untranslated_json() -> None:

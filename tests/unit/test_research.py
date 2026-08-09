@@ -123,10 +123,15 @@ def test_research_pack_is_self_contained_and_charted(tmp_path: Path) -> None:
         (Path(__file__).parents[2] / "schemas/security-research/v8/schema.json").read_text()
     )
     Draft202012Validator(schema).validate(document)
-    assert (
-        ResearchStore(tmp_path / "research").list()["research"][0]["research_id"]
-        == document["research_id"]
-    )
+    store = ResearchStore(tmp_path / "research")
+    assert store.list()["research"][0]["research_id"] == document["research_id"]
+    explorer_html = root / "explorer.html"
+    original_html = explorer_html.read_text(encoding="utf-8")
+    explorer_html.write_text("obsolete projection", encoding="utf-8")
+    isolated = store.list()
+    assert isolated["research"] == []
+    assert isolated["inventory_counts"]["corrupt"] == 1
+    explorer_html.write_text(original_html, encoding="utf-8")
     assert (
         ResearchStore(tmp_path / "research").latest("a" * 64, "XNAS:MSFT")["research_id"]
         == document["research_id"]

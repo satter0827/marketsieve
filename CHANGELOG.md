@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.19.3] - 2026-08-09
+
+- Validate current-contract objects independently during inventory and classify invalid projections
+  as corrupt without failing the full list.
+- Keep valid Snapshot and Research history available when an older object uses an obsolete Explorer
+  projection.
+
 ## [0.19.2] - 2026-08-09
 
 - Correct Snapshot Explorer coverage rendering for structured quality summaries.

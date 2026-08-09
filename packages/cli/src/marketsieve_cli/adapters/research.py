@@ -623,13 +623,15 @@ class ResearchStore:
     def list(
         self, *, snapshot_id: str | None = None, instrument_id: str | None = None
     ) -> dict[str, Any]:
+        inventory = ArtifactInventory(
+            self.root.parent,
+            validators={"research": self._verify},
+        )
         if not self.objects.exists():
             return {
                 "schema": "security-research-list/v3",
                 "research": [],
-                "inventory_counts": ArtifactInventory(self.root.parent).list(
-                    object_type="research"
-                )["counts"],
+                "inventory_counts": inventory.list(object_type="research")["counts"],
             }
         self._require_directory(self.objects)
         items = []
@@ -643,7 +645,10 @@ class ResearchStore:
                 continue
             if candidate.get("schema") != "security-research-manifest/v8":
                 continue
-            self._verify(path, path.name)
+            try:
+                self._verify(path, path.name)
+            except (LookupError, OSError, TypeError, ValueError):
+                continue
             manifest = candidate
             if snapshot_id is not None and manifest["snapshot_id"] != snapshot_id:
                 continue
@@ -665,9 +670,7 @@ class ResearchStore:
         return {
             "schema": "security-research-list/v3",
             "research": items,
-            "inventory_counts": ArtifactInventory(self.root.parent).list(object_type="research")[
-                "counts"
-            ],
+            "inventory_counts": inventory.list(object_type="research")["counts"],
         }
 
     @staticmethod
