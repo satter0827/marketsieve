@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:marketsieve:schema:market-snapshot-failure:2.0.0",
+  "type": "object",
+  "required": ["schema", "instrument_id", "stage", "field", "reason"],
+  "properties": {
+    "schema": {"const": "market-snapshot-failure/v2"},
+    "instrument_id": {"type": "string", "minLength": 1},
+    "indicator_id": {"type": "string", "minLength": 1},
+    "stage": {"type": "string", "minLength": 1},
+    "field": {"type": "string", "minLength": 1},
+    "reason": {"type": "string", "minLength": 1}
+  },
+  "additionalProperties": false
+}

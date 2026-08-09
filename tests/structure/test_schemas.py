@@ -9,40 +9,23 @@ from jsonschema import Draft202012Validator
 from jsonschema.exceptions import ValidationError
 
 ROOT = Path(__file__).parents[2]
-SCHEMAS = ROOT / "schemas"
+SCHEMAS = ROOT / "packages" / "cli" / "schemas"
 
 
 def test_public_schemas_are_current_and_valid() -> None:
     paths = sorted(SCHEMAS.glob("*/v*/schema.json"))
-    names = {path.parent.parent.name for path in paths}
-
-    assert names == {
-        "artifact-doctor",
-        "artifact-list",
-        "capabilities-result",
-        "capture-run",
-        "cli-error",
-        "doctor-result",
-        "explorer-data",
-        "log-record",
-        "market-snapshot",
-        "market-snapshot-comparison",
-        "market-snapshot-diff",
-        "market-snapshot-list",
-        "market-snapshot-manifest",
-        "market-snapshot-query-result",
-        "market-snapshot-security",
-        "market-snapshot-security-result",
-        "operation-events",
-        "operation-prune",
-        "operation-run",
-        "operation-run-list",
-        "review-report",
-        "security-research",
-        "security-research-batch",
-        "security-research-list",
-        "security-research-manifest",
+    registered_ids = {f"{path.parent.parent.name}/{path.parent.name}" for path in paths}
+    runtime_ids = {
+        match.group(1)
+        for path in (ROOT / "packages").glob("*/src/**/*.py")
+        for match in re.finditer(
+            r'["\']schema["\']\s*:\s*["\']([a-z][a-z0-9-]*/v[1-9][0-9]*)["\']',
+            path.read_text(encoding="utf-8"),
+        )
     }
+
+    assert runtime_ids <= registered_ids
+    assert len(paths) == len({path.parent.parent.name for path in paths})
     for path in paths:
         schema = json.loads(path.read_text(encoding="utf-8"))
         Draft202012Validator.check_schema(schema)
@@ -68,22 +51,22 @@ def test_removed_feature_schemas_do_not_exist() -> None:
 @pytest.mark.parametrize(
     ("name", "version", "document"),
     (
-        ("market-snapshot", "v8", {"schema": "market-snapshot/v8", "market": {}}),
+        ("market-snapshot", "v9", {"schema": "market-snapshot/v9", "market": {}}),
         (
             "market-snapshot-manifest",
-            "v8",
-            {"schema": "market-snapshot-manifest/v8", "artifacts": {}},
+            "v9",
+            {"schema": "market-snapshot-manifest/v9", "artifacts": {}},
         ),
         ("market-snapshot-list", "v3", {"schema": "market-snapshot-list/v3", "snapshots": [{}]}),
         (
             "security-research",
-            "v8",
-            {"schema": "security-research/v8", "quality_summary": {}, "artifacts": {}},
+            "v9",
+            {"schema": "security-research/v9", "quality_summary": {}, "artifacts": {}},
         ),
         (
             "security-research-manifest",
-            "v8",
-            {"schema": "security-research-manifest/v8", "artifacts": {}},
+            "v9",
+            {"schema": "security-research-manifest/v9", "artifacts": {}},
         ),
         (
             "security-research-list",

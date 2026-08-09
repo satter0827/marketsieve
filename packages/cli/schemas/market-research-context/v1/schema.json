@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:marketsieve:schema:market-research-context:1.0.0",
+  "type": "object",
+  "required": ["schema", "snapshot_id", "security", "market", "segments"],
+  "properties": {
+    "schema": {"const": "market-research-context/v1"},
+    "snapshot_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "security": {"type": "object"},
+    "market": {"type": "object"},
+    "segments": {"type": "array", "items": {"type": "object"}},
+    "definitions": {"type": "object"}
+  },
+  "additionalProperties": false
+}

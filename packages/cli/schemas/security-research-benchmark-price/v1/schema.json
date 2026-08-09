@@ -1,0 +1,8 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:marketsieve:schema:security-research-benchmark-price:1.0.0",
+  "type": "object",
+  "required": ["schema", "benchmark", "provider_symbol", "date", "close", "adjustment"],
+  "properties": {"schema": {"const": "security-research-benchmark-price/v1"}, "benchmark": {"type": "string"}, "provider_symbol": {"type": "string"}, "date": {"type": "string", "format": "date"}, "close": {"type": "string"}, "adjustment": {"type": "string"}},
+  "additionalProperties": false
+}

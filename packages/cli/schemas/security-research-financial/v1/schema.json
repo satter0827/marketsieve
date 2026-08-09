@@ -1,0 +1,8 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:marketsieve:schema:security-research-financial:1.0.0",
+  "type": "object",
+  "required": ["schema", "concept", "statement", "period", "fiscal_period_end", "currency", "value", "available_at", "availability_basis"],
+  "properties": {"schema": {"const": "security-research-financial/v1"}, "concept": {"type": "string"}, "statement": {"type": "string"}, "period": {"enum": ["annual", "quarterly"]}, "fiscal_period_end": {"type": "string", "format": "date"}, "currency": {"type": "string"}, "value": {"type": "string"}, "available_at": {"type": "string", "format": "date-time"}, "availability_basis": {"const": "retrieval"}},
+  "additionalProperties": false
+}

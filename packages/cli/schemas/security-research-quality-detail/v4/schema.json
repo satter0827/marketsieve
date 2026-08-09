@@ -1,0 +1,8 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:marketsieve:schema:security-research-quality-detail:4.0.0",
+  "type": "object",
+  "required": ["schema", "scope", "field", "reason"],
+  "properties": {"schema": {"const": "security-research-quality-detail/v4"}, "scope": {"const": "unit_issue"}, "field": {"type": "string"}, "reason": {"type": "string"}},
+  "additionalProperties": false
+}

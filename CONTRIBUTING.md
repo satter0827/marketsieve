@@ -57,7 +57,7 @@ evidence.
 
 ## Release policy
 
-`0.1.0` is the first stable release. Starting with the 0.2 development line, `marketsieve` and
-`marketsieve-cli` are independently built public distributions and retain the same version. Release
-artifacts are published through GitHub Releases only. PyPI publication remains disabled until
-Trusted Publishing has a separate approved design.
+The 1.0 line freezes four independently built public distributions: `marketsieve`,
+`marketsieve-extension-api`, `marketsieve-source-yfinance`, and `marketsieve-cli`. They retain the
+same version and are published together through GitHub Releases only. PyPI is not a MarketSieve
+publication channel.

@@ -65,24 +65,12 @@ def test_extension_and_source_packages_follow_inward_dependencies() -> None:
     assert "marketsieve_extension_api" in source_imports
 
 
-def test_analysis_and_synthetic_sources_do_not_reference_each_other() -> None:
-    analysis = SDK_SOURCE / "analysis"
-    synthetic = SDK_SOURCE / "synthetic"
-    analysis_imports = {
-        node.module
-        for path in analysis.rglob("*.py")
-        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
-        if isinstance(node, ast.ImportFrom) and node.module
+def test_sdk_exposes_only_the_supported_public_modules() -> None:
+    assert {path.name for path in SDK_SOURCE.glob("*.py") if not path.name.startswith("_")} == {
+        "fields.py",
+        "indicators.py",
+        "model.py",
     }
-    synthetic_imports = {
-        node.module
-        for path in synthetic.rglob("*.py")
-        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
-        if isinstance(node, ast.ImportFrom) and node.module
-    }
-
-    assert not any(module.startswith("marketsieve.synthetic") for module in analysis_imports)
-    assert not any(module.startswith("marketsieve.analysis") for module in synthetic_imports)
 
 
 def test_cli_depends_on_composition_root_only() -> None:

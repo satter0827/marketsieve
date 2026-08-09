@@ -1,0 +1,8 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:marketsieve:schema:operation-failure:1.0.0",
+  "type": "object",
+  "required": ["schema", "command", "reason", "message"],
+  "properties": {"schema": {"const": "operation-failure/v1"}, "command": {"type": "string"}, "reason": {"type": "string"}, "message": {"type": "string"}},
+  "additionalProperties": false
+}

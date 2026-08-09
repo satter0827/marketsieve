@@ -19,7 +19,7 @@ def test_workspace_catalog_has_unique_buildable_public_packages() -> None:
     }
     assert len({spec.distribution for spec in catalog}) == len(catalog)
     assert all(spec.pyproject.is_file() for spec in catalog)
-    assert all(spec.project_version == "0.19.4" for spec in catalog)
+    assert all(spec.project_version == "1.0.0rc1" for spec in catalog)
 
 
 def test_workspace_dependencies_allow_external_minor_compatible_plugins() -> None:
@@ -33,14 +33,18 @@ def test_workspace_dependencies_allow_external_minor_compatible_plugins() -> Non
                 assert requirement.endswith(expected_range)
 
 
+def test_release_candidate_dependencies_accept_the_same_candidate_line() -> None:
+    assert compatible_range("1.0.0rc1") == ">=1.0.0rc1,<1.1"
+
+
 def test_publish_workflow_reuses_one_verified_main_artifact() -> None:
     workflow = (package_catalog.ROOT / ".github/workflows/publish.yml").read_text(encoding="utf-8")
 
     assert "workflow_dispatch:" in workflow
-    assert "environment:\n      name: pypi" in workflow
-    assert "id-token: write" in workflow
+    assert "pypa/gh-action-pypi-publish" not in workflow
+    assert "id-token: write" not in workflow
     assert "run-id: ${{ inputs.ci_run_id }}" in workflow
-    assert "python3 -m scripts.release_gate export-pypi" in workflow
+    assert "python3 -m scripts.release_gate verify" in workflow
     assert "gh release create" in workflow and "--draft" in workflow
     assert 'gh release edit "$TAG" --draft=false' in workflow
     assert "uv build" not in workflow

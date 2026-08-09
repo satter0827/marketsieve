@@ -1,0 +1,66 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:marketsieve:schema:market-snapshot-manifest:9.0.0",
+    "type": "object",
+    "required": [
+        "schema",
+        "snapshot_id",
+        "created_at",
+        "request",
+        "inputs",
+        "runtime_settings",
+        "runtime_settings_hash",
+        "request_fingerprint",
+        "source",
+        "input_snapshot_id",
+        "universe_assets",
+        "row_count",
+        "field_count",
+        "failure_count",
+        "coverage",
+        "price_coverage_gate_passed",
+        "artifacts"
+    ],
+    "properties": {
+        "schema": {"const": "market-snapshot-manifest/v9"},
+        "snapshot_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "created_at": {"type": "string", "format": "date-time"},
+        "request": {"type": "object"},
+        "inputs": {"type": "object"},
+        "runtime_settings": {"type": "object"},
+        "runtime_settings_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "request_fingerprint": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "source": {
+            "type": "object",
+            "required": ["name", "version", "dataset", "response_hash"],
+            "properties": {
+                "name": {"type": "string", "minLength": 1},
+                "version": {"type": "string", "minLength": 1},
+                "dataset": {"type": "string", "minLength": 1},
+                "response_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+            },
+            "additionalProperties": false
+        },
+        "input_snapshot_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "universe_assets": {"type": "object"},
+        "row_count": {"type": "integer", "minimum": 1},
+        "field_count": {"type": "integer", "minimum": 1},
+        "failure_count": {"type": "integer", "minimum": 0},
+        "coverage": {"type": "object", "required": ["overall", "indices"]},
+        "price_coverage_gate_passed": {"type": "boolean"},
+        "artifacts": {
+            "type": "object",
+            "minProperties": 13,
+            "additionalProperties": {
+                "type": "object",
+                "required": ["path", "role"],
+                "properties": {
+                    "path": {"type": "string", "minLength": 1},
+                    "role": {"type": "string", "minLength": 1}
+                },
+                "additionalProperties": false
+            }
+        }
+    },
+    "additionalProperties": false
+}

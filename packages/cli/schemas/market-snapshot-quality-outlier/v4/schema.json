@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:marketsieve:schema:market-snapshot-quality-outlier:4.0.0",
+  "type": "object",
+  "required": ["schema", "rule_id", "instrument_id", "field", "value", "market", "comparison_population", "threshold", "severity", "value_origin"],
+  "properties": {
+    "schema": {"const": "market-snapshot-quality-outlier/v4"},
+    "rule_id": {"type": "string"}, "instrument_id": {"type": "string"}, "field": {"type": "string"}, "value": {"type": "string"}, "market": {"enum": ["jp", "us"]}, "comparison_population": {"type": "string"}, "threshold": {"type": "string"}, "severity": {"type": "string"}, "value_origin": {"type": "string"}
+  },
+  "additionalProperties": false
+}

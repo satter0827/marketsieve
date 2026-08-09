@@ -508,21 +508,13 @@ def research_show(
     _console(context, output_mode).emit_document(document, title="Security Research")
 
 
-@main.command("preview")
-@click.argument("object_ref")
-@click.option("--security")
-@click.option("--port", type=click.IntRange(0, 65535), default=0, show_default=True)
-@click.option("--open", "open_browser", is_flag=True)
-@click.pass_context
-def preview(
+def _preview(
     context: click.Context,
     object_ref: str,
     security: str | None,
     port: int,
     open_browser: bool,
 ) -> None:
-    """Preview one verified Snapshot or Research object over loopback HTTP."""
-
     try:
         server = build_preview(
             context.obj["settings_path"], object_ref, security=security, port=port
@@ -533,7 +525,41 @@ def preview(
     server.serve_forever(open_browser=open_browser)
 
 
+@market.command("preview")
+@click.argument("snapshot_id", default="latest")
+@click.option("--port", type=click.IntRange(0, 65535), default=0, show_default=True)
+@click.option("--open", "open_browser", is_flag=True)
+@click.pass_context
+def market_preview(context: click.Context, snapshot_id: str, port: int, open_browser: bool) -> None:
+    """Preview one verified Market Snapshot over loopback HTTP."""
+
+    _preview(context, f"snapshot:{snapshot_id}", None, port, open_browser)
+
+
+@research.command("preview")
+@click.argument("research_id", default="latest")
+@click.option("--security")
+@click.option("--port", type=click.IntRange(0, 65535), default=0, show_default=True)
+@click.option("--open", "open_browser", is_flag=True)
+@click.pass_context
+def research_preview(
+    context: click.Context,
+    research_id: str,
+    security: str | None,
+    port: int,
+    open_browser: bool,
+) -> None:
+    """Preview one verified Security Research object over loopback HTTP."""
+
+    _preview(context, f"research:{research_id}", security, port, open_browser)
+
+
 @main.group()
+def operations() -> None:
+    """Inspect evidence health and generation history."""
+
+
+@operations.group()
 def artifacts() -> None:
     """Inspect current, incompatible, and damaged evidence objects."""
 
@@ -557,7 +583,7 @@ def artifacts_list(
     _console(context, output_mode).emit_document(document, title="Artifacts")
 
 
-@main.group("run")
+@operations.group("run")
 def run_group() -> None:
     """Inspect and prune structured generation history."""
 

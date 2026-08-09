@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:marketsieve:schema:market-snapshot-market:1.0.0",
+  "type": "object",
+  "required": ["schema", "generated_at", "coverage", "price_coverage_gate_passed", "markets"],
+  "properties": {
+    "schema": {"const": "market-snapshot-market/v1"},
+    "generated_at": {"type": "string", "format": "date-time"},
+    "coverage": {"type": "object"},
+    "price_coverage_gate_passed": {"type": "boolean"},
+    "markets": {"type": "object", "required": ["all", "jp", "us"], "properties": {"all": {"type": "object"}, "jp": {"type": "object"}, "us": {"type": "object"}}, "additionalProperties": false}
+  },
+  "additionalProperties": false
+}

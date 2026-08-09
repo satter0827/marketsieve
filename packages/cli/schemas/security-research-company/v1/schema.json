@@ -1,0 +1,8 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:marketsieve:schema:security-research-company:1.0.0",
+  "type": "object",
+  "required": ["schema", "instrument_id", "provider_symbol", "retrieved_at", "availability_basis", "values"],
+  "properties": {"schema": {"const": "security-research-company/v1"}, "instrument_id": {"type": "string"}, "provider_symbol": {"type": "string"}, "retrieved_at": {"type": "string", "format": "date-time"}, "availability_basis": {"const": "retrieval"}, "values": {"type": "object", "additionalProperties": {"type": "string"}}},
+  "additionalProperties": false
+}

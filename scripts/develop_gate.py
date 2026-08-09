@@ -23,6 +23,7 @@ from scripts.package_catalog import PackageSpec, load_package_catalog
 from scripts.parallel import Task, TaskGroupError, run_tasks, worker_count
 
 ROOT = Path(__file__).parents[1]
+PUBLIC_SCHEMAS = ROOT / "packages" / "cli" / "schemas"
 STATE_ROOT = ROOT / ".marketsieve"
 RUNTIME_WHEELHOUSE = STATE_ROOT / "cache" / "runtime-wheelhouse"
 EXTERNAL_PLUGIN_EXAMPLES: tuple[Path, ...] = ()
@@ -191,7 +192,7 @@ def validate_coverage(metrics: dict[str, object]) -> None:
 
 
 def validate_schemas() -> None:
-    schemas = sorted((ROOT / "schemas").glob("*/v*/schema.json"))
+    schemas = sorted(PUBLIC_SCHEMAS.glob("*/v*/schema.json"))
     if not schemas:
         raise RuntimeError("at least one versioned schema is required")
     for path in schemas:
@@ -249,9 +250,9 @@ def check_smoke(path: Path, *, jobs: int = 1) -> None:
         "capabilities-result": json.loads(capabilities.stdout),
     }
     for name, document in documents.items():
-        major = "v10" if name == "capabilities-result" else "v1"
+        major = "v11" if name == "capabilities-result" else "v1"
         schema = json.loads(
-            (ROOT / f"schemas/{name}/{major}/schema.json").read_text(encoding="utf-8")
+            (PUBLIC_SCHEMAS / name / major / "schema.json").read_text(encoding="utf-8")
         )
         Draft202012Validator(schema, format_checker=FormatChecker()).validate(document)
     smoke = {
@@ -272,7 +273,7 @@ def check_smoke(path: Path, *, jobs: int = 1) -> None:
     (path / "logs.jsonl").write_text(logs, encoding="utf-8")
 
     log_schema = json.loads(
-        (ROOT / "schemas/log-record/v1/schema.json").read_text(encoding="utf-8")
+        (PUBLIC_SCHEMAS / "log-record" / "v1" / "schema.json").read_text(encoding="utf-8")
     )
     validator = Draft202012Validator(log_schema)
     for line in logs.splitlines():
@@ -293,14 +294,26 @@ def verify_catalog_wheel(
     with zipfile.ZipFile(wheel) as archive:
         names = sorted(archive.namelist())
     required = [f"{spec.module}/__init__.py"]
-    if spec.role == "sdk":
+    if spec.role in {"sdk", "extension-api", "adapter"}:
         required.append(f"{spec.module}/py.typed")
     if any(not any(name.endswith(suffix) for name in names) for suffix in required):
         raise RuntimeError(f"wheel is missing required files for {spec.distribution}")
+    if spec.role == "cli":
+        expected_schemas = {
+            f"{spec.module}/schemas/{path.relative_to(PUBLIC_SCHEMAS).as_posix()}"
+            for path in PUBLIC_SCHEMAS.glob("*/v*/schema.json")
+        }
+        if not expected_schemas <= set(names):
+            raise RuntimeError("CLI wheel is missing registered machine schemas")
+        expected_templates = {
+            f"{spec.module}/adapters/templates/{name}"
+            for name in ("research.html", "snapshot.html")
+        }
+        if not expected_templates <= set(names):
+            raise RuntimeError("CLI wheel is missing Explorer renderer templates")
     forbidden = (
         *(f"{other.module}/" for other in catalog if other.distribution != spec.distribution),
         "/tests/",
-        "/schemas/",
         ".marketsieve/",
         "__pycache__",
     )
@@ -313,7 +326,7 @@ def verify_catalog_wheel(
 def verify_catalog_sdist(sdist: Path) -> list[str]:
     with tarfile.open(sdist) as archive:
         names = sorted(archive.getnames())
-    forbidden = ("/packages/", "/tests/", "/schemas/", ".marketsieve", "__pycache__")
+    forbidden = ("/packages/", "/tests/", ".marketsieve", "__pycache__")
     violations = [name for name in names if any(fragment in name for fragment in forbidden)]
     if violations:
         raise RuntimeError(f"sdist contains private or generated files: {violations}")
@@ -441,8 +454,8 @@ def check_package(path: Path, *, jobs: int = 1) -> None:
                 str(isolated),
                 "-c",
                 "; ".join(f"import {spec.module}" for spec in catalog)
-                + "; import marketsieve.analysis.indicators; import marketsieve.data.daily; "
-                "import marketsieve.domain; import marketsieve.synthetic.daily; "
+                + "; import marketsieve.model; import marketsieve.indicators; "
+                "import marketsieve.fields; import marketsieve_extension_api.testing; "
                 "print(marketsieve.__version__)",
             )
         ).stdout.strip()

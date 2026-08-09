@@ -19,25 +19,29 @@ marketsieve market query --snapshot SNAPSHOT_ID|latest [FILTERS...]
 marketsieve market security MIC:SYMBOL --snapshot SNAPSHOT_ID|latest
 marketsieve market compare MIC:SYMBOL... --snapshot SNAPSHOT_ID|latest [--fields FIELD...]
 marketsieve market diff LEFT_SNAPSHOT RIGHT_SNAPSHOT [--fields FIELD...]
+marketsieve market preview SNAPSHOT_ID|latest [--port PORT] [--open]
 
 marketsieve [--settings FILE] research build MIC:SYMBOL...
   --snapshot SNAPSHOT_ID|latest --evidence DOMAIN... [--history-days DAYS]
 marketsieve research list [--snapshot ID] [--security MIC:SYMBOL]
 marketsieve research show RESEARCH_ID|latest [--snapshot ID --security MIC:SYMBOL]
-marketsieve preview snapshot:SNAPSHOT_ID|latest [--port PORT] [--open]
-marketsieve preview research:RESEARCH_ID [--port PORT] [--open]
-marketsieve preview research:latest --security MIC:SYMBOL [--port PORT] [--open]
-marketsieve artifacts doctor
-marketsieve artifacts list [--type snapshot|research] [--status STATUS]
-marketsieve run list [--status STATUS] [--command COMMAND]
-marketsieve run show RUN_ID
-marketsieve run events RUN_ID [--level LEVEL]
-marketsieve run prune RUN_ID... [--apply]
-marketsieve run prune --before YYYY-MM-DD [--status STATUS] [--apply]
+marketsieve research preview RESEARCH_ID [--port PORT] [--open]
+marketsieve research preview latest --security MIC:SYMBOL [--port PORT] [--open]
+marketsieve operations artifacts doctor
+marketsieve operations artifacts list [--type snapshot|research] [--status STATUS]
+marketsieve operations run list [--status STATUS] [--command COMMAND]
+marketsieve operations run show RUN_ID
+marketsieve operations run events RUN_ID [--level LEVEL]
+marketsieve operations run prune RUN_ID... [--apply]
+marketsieve operations run prune --before YYYY-MM-DD [--status STATUS] [--apply]
 
 marketsieve doctor
 marketsieve capabilities
 ```
+
+The public CLI has exactly five top-level entries: `market`, `research`, `operations`, `doctor`,
+and `capabilities`. Preview belongs to its evidence workflow; artifact inventory and run history
+belong to `operations`.
 
 Scope, evidence domains, history, instruments, Snapshot identity, query filters, and comparison
 fields are invocation inputs. They are never read from settings. `[yfinance]`, `[quality.market]`,
@@ -56,12 +60,12 @@ symlinks, and access outside the object.
 
 ## Documents
 
-Current top-level contracts are `market-snapshot/v8`, `market-snapshot-list/v3`,
+Current top-level contracts are `market-snapshot/v9`, `market-snapshot-list/v3`,
 `market-snapshot-query-result/v3`, `market-snapshot-comparison/v3`, `market-snapshot-diff/v1`,
-`security-research/v8`, `security-research-list/v3`, `security-research-batch/v1`,
-`explorer-data/v4`, `operation-run/v1`, and `capabilities-result/v10`. Stable JSON keys and formal schemas
-are English. Human CLI output and Explorer labels may be localized without changing machine
-documents.
+`security-research/v9`, `security-research-list/v3`, `security-research-batch/v1`,
+`explorer-data/v5`, `operation-run/v1`, and `capabilities-result/v11`. Every emitted record schema is
+registered and packaged in `marketsieve-cli`. Stable JSON keys and formal schemas are English.
+Human CLI output and Explorer labels may be localized without changing machine documents.
 
 `--output json` never translates keys or enum values. Non-TTY `--output auto` resolves to JSON;
 Rich output is used only for a TTY, and plain text requires `--output text`.

@@ -33,7 +33,9 @@ def test_json_formatter_emits_stable_structured_fields() -> None:
     assert payload["attributes"] == {"count": 1}
     assert payload["resource"] == {"service.name": "marketsieve-cli"}
     assert payload["timestamp"].endswith("Z")
-    schema = json.loads((ROOT / "schemas/log-record/v1/schema.json").read_text(encoding="utf-8"))
+    schema = json.loads(
+        (ROOT / "packages/cli/schemas/log-record/v1/schema.json").read_text(encoding="utf-8")
+    )
     Draft202012Validator(schema).validate(payload)
 
 

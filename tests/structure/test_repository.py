@@ -9,6 +9,27 @@ from scripts.package_catalog import load_package_catalog
 
 ROOT = Path(__file__).parents[2]
 
+MAX_MODULE_LINES = {
+    "packages/cli/src/marketsieve_cli/adapters/explorer.py": 500,
+    "packages/cli/src/marketsieve_cli/adapters/market_snapshots.py": 1300,
+    "packages/cli/src/marketsieve_cli/adapters/snapshot_query.py": 350,
+    "packages/cli/src/marketsieve_cli/application/market.py": 900,
+    "packages/cli/src/marketsieve_cli/application/market_summary.py": 350,
+    "packages/cli/src/marketsieve_cli/interfaces/cli/main.py": 700,
+    "packages/core/src/marketsieve/_snapshot.py": 550,
+    "packages/core/src/marketsieve/_snapshot_fields.py": 650,
+}
+
+
+def test_high_change_modules_stay_within_one_responsibility_budget() -> None:
+    oversized = {
+        name: len(ROOT.joinpath(name).read_text(encoding="utf-8").splitlines())
+        for name, maximum in MAX_MODULE_LINES.items()
+        if len(ROOT.joinpath(name).read_text(encoding="utf-8").splitlines()) > maximum
+    }
+
+    assert oversized == {}
+
 
 def test_workspace_contains_only_the_supported_public_packages() -> None:
     workspace = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
@@ -23,7 +44,7 @@ def test_workspace_contains_only_the_supported_public_packages() -> None:
     assert set(workspace["tool"]["uv"]["workspace"]["members"]) == {
         spec.path.relative_to(ROOT).as_posix() for spec in specs
     }
-    assert all(spec.project_version == "0.19.4" for spec in specs)
+    assert all(spec.project_version == "1.0.0rc1" for spec in specs)
 
 
 def test_removed_capabilities_and_packages_are_absent() -> None:
@@ -81,7 +102,7 @@ def test_vscode_exposes_simple_launches_and_complete_tasks_in_english() -> None:
         "01 Market: Capture JP Close (Network)",
         "02 Market: Capture US Close (Network)",
         "03 Market: Preview Latest Explorer",
-        "04 Market: Explore Swing Candidates",
+        "04 Market: Explore Swing Evidence",
         "05 Research: Build Security Evidence (Network)",
         "06 Research: Preview Latest Explorer",
         "07 Operations: Diagnose Artifacts",

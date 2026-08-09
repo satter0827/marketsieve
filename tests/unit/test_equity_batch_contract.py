@@ -6,8 +6,7 @@ from typing import Any, cast
 
 import pytest
 
-from marketsieve.data.daily import Adjustment
-from marketsieve.synthetic.daily import JP_INSTRUMENT, US_INSTRUMENT, fixture_bars
+from marketsieve.model import Adjustment
 from marketsieve_extension_api import (
     EquityAcquisitionFailure,
     EquityBatchInstrument,
@@ -15,6 +14,7 @@ from marketsieve_extension_api import (
     EquityBatchRequest,
     ImportedEquityBatch,
 )
+from marketsieve_extension_api.testing import JP_INSTRUMENT, US_INSTRUMENT, fixture_bars
 
 
 def _request() -> EquityBatchRequest:

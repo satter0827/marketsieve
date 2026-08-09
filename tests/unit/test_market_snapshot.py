@@ -10,20 +10,25 @@ import pytest
 from jsonschema import Draft202012Validator
 
 from marketsieve import __version__
-from marketsieve.domain import Instrument
-from marketsieve.matrix import MatrixRow, MatrixSecurity, build_matrix_row, field_definitions
-from marketsieve.synthetic.daily import JP_INSTRUMENT, US_INSTRUMENT, fixture_bars
-from marketsieve_cli.adapters import explorer_v2
+from marketsieve._snapshot import (
+    SnapshotRow,
+    SnapshotSecurityEvidence,
+    build_snapshot_row,
+)
+from marketsieve._snapshot_fields import field_definitions
+from marketsieve.model import Instrument
+from marketsieve_cli.adapters import explorer
 from marketsieve_cli.adapters.config import Settings
-from marketsieve_cli.adapters.explorer_v2 import build_snapshot_explorer_data
+from marketsieve_cli.adapters.explorer import build_snapshot_explorer_data
 from marketsieve_cli.adapters.market_snapshots import MarketSnapshotStore, _request_fingerprint
 from marketsieve_cli.application.market import (
     MarketService,
+    MarketSnapshotRunInterrupted,
     _load_universe,
     _not_requested_fields,
     _provider_failure_fields,
-    _summary,
 )
+from marketsieve_cli.application.market_summary import _summary
 from marketsieve_cli.contracts import MarketBuildInputs, RuntimeSettings
 from marketsieve_extension_api import (
     EquityAcquisitionFailure,
@@ -34,6 +39,7 @@ from marketsieve_extension_api import (
     MarketIndicatorObservation,
     SourceDiagnostic,
 )
+from marketsieve_extension_api.testing import JP_INSTRUMENT, US_INSTRUMENT, fixture_bars
 
 
 def test_snapshot_explorer_rejects_incomplete_field_catalog() -> None:
@@ -45,14 +51,14 @@ def test_snapshot_explorer_rejects_view_field_missing_from_catalog(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     fields = [{"name": definition.name} for definition in field_definitions()]
-    original = explorer_v2._view
+    original = explorer._view
 
     def invalid_view(*args: Any, **kwargs: Any) -> dict[str, Any]:
         view = original(*args, **kwargs)
         view["fields"] = ["unknown_view_field"]
         return view
 
-    monkeypatch.setattr(explorer_v2, "_view", invalid_view)
+    monkeypatch.setattr(explorer, "_view", invalid_view)
     with pytest.raises(ValueError, match=r"view .* contains unknown fields"):
         build_snapshot_explorer_data(
             {
@@ -64,7 +70,7 @@ def test_snapshot_explorer_rejects_view_field_missing_from_catalog(
         )
 
 
-def _row(instrument: Instrument, memberships: tuple[str, ...], offset: int) -> MatrixRow:
+def _row(instrument: Instrument, memberships: tuple[str, ...], offset: int) -> SnapshotRow:
     bars = fixture_bars(
         instrument,
         tuple(str(100 + offset + index) for index in range(253)),
@@ -82,7 +88,7 @@ def _row(instrument: Instrument, memberships: tuple[str, ...], offset: int) -> M
             }.items()
         )
     )
-    security = MatrixSecurity(
+    security = SnapshotSecurityEvidence(
         instrument,
         f"{instrument.symbol}.T" if instrument.mic == "XTKS" else instrument.symbol,
         memberships,
@@ -92,7 +98,7 @@ def _row(instrument: Instrument, memberships: tuple[str, ...], offset: int) -> M
         (),
         "a" * 64,
     )
-    return build_matrix_row(security, {})
+    return build_snapshot_row(security, {})
 
 
 def _store(tmp_path: Path, offset: int = 0) -> tuple[MarketSnapshotStore, dict[str, Any]]:
@@ -114,6 +120,7 @@ def _store(tmp_path: Path, offset: int = 0) -> tuple[MarketSnapshotStore, dict[s
     run_id = store.begin_run(fingerprint, request, resume=None)
     failures = tuple(
         {
+            "schema": "market-snapshot-failure/v2",
             "instrument_id": f"{row.security.instrument.mic}:{row.security.instrument.symbol}",
             "stage": "calculation",
             "field": field,
@@ -172,7 +179,7 @@ def test_snapshot_is_self_contained_without_spreadsheets(tmp_path: Path) -> None
     store, document = _store(tmp_path)
     root = Path(document["artifacts"]["manifest.json"]).parent
 
-    assert document["schema"] == "market-snapshot/v8"
+    assert document["schema"] == "market-snapshot/v9"
     assert set(path.name for path in root.iterdir()) == set(document["artifacts"])
     assert (root / "aggregates.jsonl").is_file()
     assert not list(root.glob("*.csv"))
@@ -194,7 +201,7 @@ def test_snapshot_is_self_contained_without_spreadsheets(tmp_path: Path) -> None
     assert "未取得の市場指標" in html
     assert "indicator.missing_reason" in html
     explorer_data = json.loads((root / "explorer-data.json").read_text())
-    assert explorer_data["schema"] == "explorer-data/v4"
+    assert explorer_data["schema"] == "explorer-data/v5"
     assert "securities" not in explorer_data
     assert {view["section"] for view in explorer_data["views"]} >= {
         "overview",
@@ -208,7 +215,9 @@ def test_snapshot_is_self_contained_without_spreadsheets(tmp_path: Path) -> None
     assert len((root / "explorer-data.json").read_bytes()) < 100_000
     assert len((root / "explorer.html").read_bytes()) < 100_000
     explorer_schema = json.loads(
-        (Path(__file__).parents[2] / "schemas/explorer-data/v4/schema.json").read_text()
+        (
+            Path(__file__).parents[2] / "packages/cli/schemas/explorer-data/v5/schema.json"
+        ).read_text()
     )
     Draft202012Validator(explorer_schema).validate(explorer_data)
     quality = json.loads((root / "quality-summary.json").read_text())
@@ -258,6 +267,20 @@ def test_snapshot_is_self_contained_without_spreadsheets(tmp_path: Path) -> None
         store.compare("latest", ("XNAS:MSFT",), ("unknown",))
     with pytest.raises(LookupError, match="not present"):
         store.compare("latest", ("XNAS:MISSING",), ("close",))
+
+
+def test_snapshot_rejects_pre_contract_manifest_with_rebuild_guidance(tmp_path: Path) -> None:
+    store, document = _store(tmp_path)
+    manifest_path = Path(document["artifacts"]["manifest.json"])
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["schema"] = "market-snapshot-manifest/v8"
+    manifest_path.write_text(
+        json.dumps(manifest, ensure_ascii=False, separators=(",", ":"), sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="incompatible schema; rebuild"):
+        store.show(document["snapshot_id"])
 
 
 def test_snapshot_query_supports_profile_order_limit_and_transient_budget(tmp_path: Path) -> None:
@@ -331,7 +354,7 @@ def test_financial_issuer_metrics_are_not_applicable() -> None:
         tuple(str(100 + index) for index in range(253)),
         dataset="financial-issuer",
     )
-    security = MatrixSecurity(
+    security = SnapshotSecurityEvidence(
         US_INSTRUMENT,
         "MSFT",
         ("sp500",),
@@ -342,7 +365,7 @@ def test_financial_issuer_metrics_are_not_applicable() -> None:
         "d" * 64,
     )
 
-    row = build_matrix_row(security, {})
+    row = build_snapshot_row(security, {})
     definitions = {value.name: value for value in field_definitions()}
 
     assert dict(row.missing)["debt_to_equity"] == "not_applicable"
@@ -470,7 +493,9 @@ def test_snapshot_diff_is_deterministic_and_definition_safe(tmp_path: Path) -> N
         "XTKS:7203",
     ]
     schema = json.loads(
-        (Path(__file__).parents[2] / "schemas/market-snapshot-diff/v1/schema.json").read_text()
+        (
+            Path(__file__).parents[2] / "packages/cli/schemas/market-snapshot-diff/v1/schema.json"
+        ).read_text()
     )
     Draft202012Validator(schema).validate(result)
 
@@ -531,6 +556,31 @@ class _Registry:
         return Fetcher()
 
 
+def test_market_acquisition_failure_exposes_the_exact_resume_run_id(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    registry = _Registry()
+
+    def fail(_request: EquityBatchRequest) -> ImportedEquityBatch:
+        raise RuntimeError("provider unavailable")
+
+    monkeypatch.setattr(registry.fetcher, "fetch", fail)
+    service = MarketService(
+        registry,
+        MarketSnapshotStore(tmp_path / "market-snapshots"),
+        Settings(None),
+        today=lambda: date(2026, 8, 8),
+    )
+
+    with pytest.raises(MarketSnapshotRunInterrupted) as captured:
+        service.build(MarketBuildInputs(("dow30",), ("company",), None))
+
+    resume_run_id = captured.value.resume_run_id
+    assert len(resume_run_id) == 16
+    assert (tmp_path / "market-snapshots" / "runs" / resume_run_id / "request.json").is_file()
+    assert f"marketsieve market build --resume {resume_run_id}" in str(captured.value)
+
+
 def test_market_service_builds_explicit_company_only_scope(tmp_path: Path) -> None:
     service = MarketService(
         _Registry(),
@@ -552,8 +602,8 @@ def test_market_service_builds_explicit_company_only_scope(tmp_path: Path) -> No
     assert document["request"]["producer"] == {
         "name": "marketsieve-cli",
         "version": __version__,
-        "snapshot_schema": "market-snapshot/v8",
-        "explorer_schema": "explorer-data/v4",
+        "snapshot_schema": "market-snapshot/v9",
+        "explorer_schema": "explorer-data/v5",
     }
     assert document["row_count"] == 30
     assert document["price_coverage_gate_passed"] is True
@@ -570,7 +620,9 @@ def test_market_service_builds_explicit_company_only_scope(tmp_path: Path) -> No
     assert quality["failures"]["complete_failure_security_count"] == 0
     assert service.show("latest")["snapshot_id"] == document["snapshot_id"]
     schema = json.loads(
-        (Path(__file__).parents[2] / "schemas/market-snapshot/v8/schema.json").read_text()
+        (
+            Path(__file__).parents[2] / "packages/cli/schemas/market-snapshot/v9/schema.json"
+        ).read_text()
     )
     Draft202012Validator(schema).validate(document)
 

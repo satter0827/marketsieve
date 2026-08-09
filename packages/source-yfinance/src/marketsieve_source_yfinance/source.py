@@ -24,9 +24,8 @@ from curl_cffi.requests import Response, Session
 from yfinance import multi as _yfinance_multi
 from yfinance import utils as _yfinance_utils
 
-from marketsieve.analysis.indicators import CONTEXT
-from marketsieve.data.daily import Adjustment, DailyBar, Provenance
-from marketsieve.domain import Instrument
+from marketsieve.indicators import CONTEXT
+from marketsieve.model import Adjustment, DailyBar, Instrument, Provenance
 from marketsieve_extension_api import (
     EquityAcquisitionFailure,
     EquityBatchInstrument,
@@ -1043,13 +1042,18 @@ class YFinanceSource:
                         value.provider_symbol
                     )
                     symbol_frame = None
-                item_bars = self._bars(
+                normalized_bars = self._bars(
                     symbol_frame,
                     instrument=value.instrument,
                     adjustment=request.adjustment,
                     retrieved_at=retrieved_at,
                     session_as_of=session_as_of,
                     version=version,
+                )
+                item_bars = tuple(
+                    bar
+                    for bar in normalized_bars
+                    if request.start <= bar.trading_date <= request.end
                 )
                 output[identity] = item_bars
                 if not item_bars:
@@ -1065,7 +1069,12 @@ class YFinanceSource:
                                 else str(provider_error)
                             )
                             if provider_error is not None
-                            else "history_empty",
+                            else (
+                                "stale_history"
+                                if normalized_bars
+                                and normalized_bars[-1].trading_date < request.start
+                                else "history_empty"
+                            ),
                         )
                     )
         failures.extend(self._reject_stale_histories(output, request))

@@ -1,0 +1,49 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:marketsieve:schema:security-research-manifest:9.0.0",
+    "type": "object",
+    "required": [
+        "schema",
+        "research_id",
+        "snapshot_id",
+        "instrument_id",
+        "provider_symbol",
+        "created_at",
+        "source",
+        "inputs",
+        "runtime_settings",
+        "runtime_settings_hash",
+        "price_coverage_gate_passed",
+        "temporal",
+        "artifacts"
+    ],
+    "properties": {
+        "schema": {"const": "security-research-manifest/v9"},
+        "research_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "snapshot_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "instrument_id": {"type": "string", "pattern": "^[A-Z0-9]+:.+$"},
+        "provider_symbol": {"type": "string", "minLength": 1},
+        "created_at": {"type": "string", "format": "date-time"},
+        "source": {
+            "type": "object",
+            "required": ["name", "version", "response_hash"],
+            "properties": {
+                "name": {"type": "string", "minLength": 1},
+                "version": {"type": "string", "minLength": 1},
+                "response_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+            },
+            "additionalProperties": false
+        },
+        "inputs": {"type": "object"},
+        "runtime_settings": {"type": "object"},
+        "runtime_settings_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "price_coverage_gate_passed": {"type": "boolean"},
+        "temporal": {"type": "object"},
+        "artifacts": {
+            "type": "object",
+            "minProperties": 16,
+            "additionalProperties": {"type": "string", "minLength": 1}
+        }
+    },
+    "additionalProperties": false
+}

@@ -10,8 +10,8 @@ from pathlib import Path
 from typing import Any
 
 CURRENT_SCHEMAS = {
-    "snapshot": "market-snapshot-manifest/v8",
-    "research": "security-research-manifest/v8",
+    "snapshot": "market-snapshot-manifest/v9",
+    "research": "security-research-manifest/v9",
 }
 OBJECT_ROOTS = {"snapshot": "market-snapshots", "research": "research"}
 

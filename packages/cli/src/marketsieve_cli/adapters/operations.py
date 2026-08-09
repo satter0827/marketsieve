@@ -77,6 +77,14 @@ class OperationRunStore:
             yield context
         except BaseException as error:
             ended = datetime.now(UTC)
+            resume_run_id = getattr(error, "resume_run_id", None)
+            if (
+                isinstance(resume_run_id, str)
+                and len(resume_run_id) == 16
+                and all(character in "0123456789abcdef" for character in resume_run_id)
+            ):
+                run["resumable"] = True
+                run["resume_run_id"] = resume_run_id
             run.update(
                 ended_at=ended.isoformat(),
                 status="failed",

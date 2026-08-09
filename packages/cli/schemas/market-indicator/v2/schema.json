@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:marketsieve:schema:market-indicator:2.0.0",
+  "type": "object",
+  "required": ["schema", "indicator_id", "provider_symbol", "name", "kind", "unit", "retrieved_at", "observations", "missing_reason", "not_applicable"],
+  "properties": {
+    "schema": {"const": "market-indicator/v2"},
+    "indicator_id": {"type": "string", "minLength": 1},
+    "provider_symbol": {"type": "string", "minLength": 1},
+    "name": {"type": "string", "minLength": 1},
+    "kind": {"type": "string", "minLength": 1},
+    "unit": {"type": "string", "minLength": 1},
+    "retrieved_at": {"type": "string", "format": "date-time"},
+    "observations": {"type": "array", "items": {"type": "object", "required": ["date", "value"], "properties": {"date": {"type": "string", "format": "date"}, "value": {"type": "string"}}, "additionalProperties": false}},
+    "missing_reason": {"type": ["string", "null"]},
+    "not_applicable": {"type": "array", "uniqueItems": true, "items": {"type": "string"}}
+  },
+  "additionalProperties": false
+}
