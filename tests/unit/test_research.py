@@ -102,6 +102,10 @@ def test_research_pack_is_self_contained_and_charted(tmp_path: Path) -> None:
     html = (root / "explorer.html").read_text()
     assert "<svg" in html and "https://" not in html
     assert "Microsoft" not in html and 'id="explorer-data"' not in html
+    assert "株価鮮度" in html and "財務鮮度" in html
+    assert "rticks(min,max)" in html
+    assert "CONCEPT[s.name]" in html
+    assert "reason_code:status" in html
     explorer = json.loads((root / "explorer-data.json").read_text())
     assert explorer["schema"] == "explorer-data/v4"
     assert explorer["metadata"]["object_contract"] == "security-research/v8"

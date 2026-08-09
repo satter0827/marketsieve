@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.19.2] - 2026-08-09
+
+- Correct Snapshot Explorer coverage rendering for structured quality summaries.
+- Add readable units, periods, axes, ticks, direct labels, and unit-separated market context panels.
+- Improve Research headers and time-series axes while hiding unavailable series from legends.
+- Keep Explorer observation counts aligned with the canonical applicable population.
+
 ## [0.19.1] - 2026-08-09
 
 - Sorted the internal price-only equity request used by market indicators so full live Snapshot
