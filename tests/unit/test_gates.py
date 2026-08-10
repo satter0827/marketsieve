@@ -20,7 +20,7 @@ from scripts.runtime_wheelhouse import SUPPORTED_PYTHON_VERSIONS, download_comma
 def test_release_inputs_require_pep440_version_and_complete_commit() -> None:
     validate_inputs("1.0.0", "a" * 40)
     validate_inputs("1.0.0rc1", "a" * 40)
-    validate_source_release("1.0.0rc2")
+    validate_source_release("1.0.0rc3")
 
     with pytest.raises(ValueError, match="version"):
         validate_inputs("v0.1", "a" * 40)
@@ -28,6 +28,22 @@ def test_release_inputs_require_pep440_version_and_complete_commit() -> None:
         validate_inputs("0.1.0.dev0", "a" * 40)
     with pytest.raises(ValueError, match="commit"):
         validate_inputs("0.1.0", "abc")
+
+
+def test_stable_release_notes_require_compatibility_and_provider_caveats(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    changelog = tmp_path / "CHANGELOG.md"
+    changelog.write_text("## [1.0.0] - 2026-08-10\n\nIncomplete.\n", encoding="utf-8")
+    monkeypatch.setattr(release_gate, "ROOT", tmp_path)
+    monkeypatch.setattr(
+        release_gate,
+        "load_package_catalog",
+        lambda: (type("Spec", (), {"distribution": "example", "project_version": "1.0.0"})(),),
+    )
+
+    with pytest.raises(RuntimeError, match="stable release notes"):
+        validate_source_release("1.0.0")
 
 
 def test_release_artifacts_are_secret_scanned(

@@ -26,7 +26,9 @@ Completed objects live below `.marketsieve/market-snapshots/objects` and
 `operation-run/v2` holds `updated_at`, current progress, running, completed, failed, or cancelled
 status, exit code, and published object IDs. Its event codes are limited to started, progress,
 retry, heartbeat, published, completed, failed, and cancelled. Version 1 operation records remain
-on disk but are excluded from version 2 lists. Resumable acquisition state, operation history,
+on disk but are excluded from version 2 lists. `operations run show` rejects them with an explicit
+`operations run prune RUN_ID --apply` command, which can remove the named record. Resumable
+acquisition state, operation history,
 caches, and published objects are separate. A failed acquisition operation exposes its acquisition
 `resume_run_id` and the CLI prints the exact
 `marketsieve market build --resume TOKEN` command; a UUID operation-run ID is not a Snapshot resume
@@ -53,3 +55,15 @@ Verified releases contain the four repository distributions, checksums, installa
 provenance in one GitHub Release. pip may resolve third-party dependencies from its configured
 package index. Release verification installs the same repository wheels on Ubuntu and macOS with
 Python 3.12, 3.13, and 3.14. PyPI is not a MarketSieve publication channel.
+
+All four distributions use the same exact version. Verification installs
+`marketsieve-cli==VERSION` with `--find-links` pointing to the release directory, then checks wheel
+metadata, declared suite requirements, installed versions, manifest provenance, and checksums.
+Release notes are a deterministic projection of the matching CHANGELOG section.
+
+`make release-qualify` receives the RC tag, commit, release directory, state root, exactly three JP
+and three US Snapshot IDs, two Research IDs, and the cancellation and resume operation IDs. It does
+not discover or select evidence. The authoritative JSON and its deterministic Markdown projection
+are written below `.marketsieve/artifacts/qualification/COMMIT`. Stable promotion is rejected when
+the RC-to-candidate diff exceeds version metadata, exact dependencies, lock data, CHANGELOG,
+roadmap, or release notes.

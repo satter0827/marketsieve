@@ -57,12 +57,15 @@ Researchでは、中断前に公開済みのPack IDを操作履歴に残しま�
 ディレクトリでCLIをインストールします。
 
 ```shell
-python -m pip install --find-links . "marketsieve-cli==VERSION"
+shasum -a 256 -c SHA256SUMS
+python -m pip install --find-links . "marketsieve-cli==1.0.0"
 marketsieve doctor
 ```
 
 4つのMarketSieve配布物はGitHub Releaseから取得します。外部ランタイム依存関係は、pipが設定済み
-パッケージインデックスから解決します。MarketSieveの配布物はPyPIへ公開しません。
+パッケージインデックスから解決します。4配布物は完全に同じバージョンである必要があり、欠落または
+不一致がある場合、`doctor`は準備未完了と報告します。MarketSieveの配布物はPyPIへ公開しません。
+Linuxでは`shasum`の代わりに`sha256sum -c SHA256SUMS`も使用できます。
 
 ## 保存済み証拠を確認する
 
@@ -86,6 +89,9 @@ marketsieve operations artifacts doctor --output json
 
 公開CLIは`market`、`research`、`operations`、`doctor`、`capabilities`です。公開SDKは
 `marketsieve.model`、`marketsieve.indicators`、`marketsieve.fields`です。
+現行契約はSnapshot v9、Research v9、Explorer v5、operation v2、capabilities v13です。
+1.xでは公開SDK・CLI、設定、現行成果物の読み取り互換性を維持します。1.0以前の成果物はこの
+互換範囲に含みません。
 
 詳細は[ドキュメント索引](docs/README.md)、[1.0ロードマップ](docs/roadmap.md)、
 [開発手順](CONTRIBUTING.md)を参照してください。

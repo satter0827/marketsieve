@@ -59,5 +59,11 @@ evidence.
 
 The 1.0 line freezes four independently built public distributions: `marketsieve`,
 `marketsieve-extension-api`, `marketsieve-source-yfinance`, and `marketsieve-cli`. They retain the
-same version and are published together through GitHub Releases only. PyPI is not a MarketSieve
-publication channel.
+same exact version, depend on each other by exact version, and are published together through
+GitHub Releases only. PyPI is not a MarketSieve publication channel.
+
+Release verification resolves `marketsieve-cli==VERSION` from one release directory rather than
+installing four wheel paths directly. A release candidate is qualified only from explicitly named
+Snapshot, Research, operation-run, release-manifest, tag, and commit evidence. The authoritative
+result is `release-qualification/v1`; `summary.md` is its deterministic projection. Stable promotion
+must pass the metadata-only promotion guard.

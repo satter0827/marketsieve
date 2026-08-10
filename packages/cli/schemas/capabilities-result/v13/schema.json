@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:marketsieve:schema:capabilities-result:13.0.0",
+  "title": "MarketSieve capabilities",
+  "type": "object",
+  "required": ["schema", "version", "commands"],
+  "properties": {
+    "schema": {"const": "capabilities-result/v13"},
+    "version": {"type": "string", "minLength": 1},
+    "commands": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "summary", "result", "effects"],
+        "properties": {
+          "name": {"type": "string", "minLength": 1},
+          "summary": {"type": "string", "minLength": 1},
+          "result": {
+            "oneOf": [
+              {
+                "type": "object",
+                "required": ["mode", "schema"],
+                "properties": {
+                  "mode": {"const": "document"},
+                  "schema": {"type": "string", "pattern": "^[a-z0-9-]+/v[1-9][0-9]*$"}
+                },
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "required": ["mode", "schema"],
+                "properties": {
+                  "mode": {"const": "loopback_server"},
+                  "schema": {"type": "null"}
+                },
+                "additionalProperties": false
+              }
+            ]
+          },
+          "effects": {
+            "type": "object",
+            "required": ["external_network", "loopback_server", "secrets", "writes"],
+            "properties": {
+              "external_network": {"type": "boolean"},
+              "loopback_server": {"type": "boolean"},
+              "secrets": {"type": "boolean"},
+              "writes": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

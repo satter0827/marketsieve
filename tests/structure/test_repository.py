@@ -44,7 +44,9 @@ def test_workspace_contains_only_the_supported_public_packages() -> None:
     assert set(workspace["tool"]["uv"]["workspace"]["members"]) == {
         spec.path.relative_to(ROOT).as_posix() for spec in specs
     }
-    assert all(spec.project_version == "1.0.0rc2" for spec in specs)
+    versions = {spec.project_version for spec in specs}
+    assert len(versions) == 1
+    assert re.fullmatch(r"1\.0\.0(?:rc[1-9][0-9]*)?", versions.pop())
 
 
 def test_removed_capabilities_and_packages_are_absent() -> None:
@@ -64,6 +66,39 @@ def test_removed_capabilities_and_packages_are_absent() -> None:
     )
     for removed in ("PortfolioStore", "WatchlistStore", "ExperimentService", "SnapshotService"):
         assert removed not in source
+
+
+def test_capability_document_results_reference_registered_schemas() -> None:
+    from marketsieve_cli.contracts import COMMAND_CAPABILITIES
+
+    schemas = {
+        f"{path.parent.parent.name}/{path.parent.name}"
+        for path in (ROOT / "packages/cli/schemas").glob("*/v*/schema.json")
+    }
+    for capability in COMMAND_CAPABILITIES:
+        if capability.result_mode == "document":
+            assert capability.result_schema in schemas
+            assert capability.loopback_server is False
+        else:
+            assert capability.result_mode == "loopback_server"
+            assert capability.result_schema is None
+            assert capability.loopback_server is True
+
+
+def test_market_runtime_catalog_is_the_single_cli_benchmark_identity_source() -> None:
+    from marketsieve_cli.contracts import ANALYSIS_PROFILES, MARKET_INDICES
+    from marketsieve_cli.market_catalog import INDEX_RUNTIME_CATALOG, MARKET_INDEX_GROUPS
+
+    assert tuple(INDEX_RUNTIME_CATALOG) == MARKET_INDICES
+    assert set(MARKET_INDEX_GROUPS) == {"jp", "us"}
+    assert {name for names in MARKET_INDEX_GROUPS.values() for name in names} == set(
+        INDEX_RUNTIME_CATALOG
+    )
+    assert {tuple(value["windows"]) for value in ANALYSIS_PROFILES.values()} == {
+        (1, 5, 20, 60),
+        (5, 20, 60, 120),
+        (20, 60, 120, 252),
+    }
 
 
 def test_makefile_has_explicit_inputs_and_no_legacy_workflows() -> None:

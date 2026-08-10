@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -14,8 +15,11 @@ from marketsieve.indicators import IndicatorResult, IndicatorSpec, calculate
 from marketsieve.model import DailyBar, Instrument
 from marketsieve_cli.adapters.artifacts import ArtifactInventory
 from marketsieve_cli.adapters.console import ConsoleOutput, OutputMode
+from marketsieve_cli.adapters.market_snapshots import MarketSnapshotStore
 from marketsieve_cli.adapters.operations import OperationRunStore
 from marketsieve_cli.application.acquisition_errors import MarketSnapshotRunInterrupted
+from marketsieve_cli.bootstrap import _market_operation_inputs
+from marketsieve_cli.contracts import MarketBuildInputs
 from marketsieve_cli.schema_registry import validate_document
 from marketsieve_extension_api import (
     AcquisitionProgress,
@@ -232,7 +236,11 @@ def test_operation_v2_list_excludes_legacy_v1_runs(tmp_path: Path) -> None:
 
     assert store.list()["schema"] == "operation-run-list/v2"
     assert store.list()["runs"] == []
-    assert store.show(legacy.name)["schema"] == "operation-run/v1"
+    with pytest.raises(ValueError, match=r"incompatible schema.*operations run prune"):
+        store.show(legacy.name)
+    assert store.prune((legacy.name,))["run_ids"] == [legacy.name]
+    assert store.prune((legacy.name,), apply=True)["dry_run"] is False
+    assert not legacy.exists()
 
 
 def test_operation_run_carries_a_snapshot_acquisition_resume_run_id(tmp_path: Path) -> None:
@@ -245,6 +253,30 @@ def test_operation_run_carries_a_snapshot_acquisition_resume_run_id(tmp_path: Pa
     failed = store.list(status="failed")["runs"][0]
     assert failed["resumable"] is True
     assert failed["resume_run_id"] == "0123456789abcdef"
+
+
+def test_market_resume_keeps_the_original_operation_input_fingerprint(tmp_path: Path) -> None:
+    inputs = MarketBuildInputs(("dow30",), ("company",), None)
+    input_document = {
+        "indices": ["dow30"],
+        "evidence": ["company"],
+        "history_days": None,
+        "as_of": None,
+        "mode": "current",
+        "session": None,
+    }
+    request = {"inputs": input_document}
+    encoded = json.dumps(
+        request, ensure_ascii=False, separators=(",", ":"), sort_keys=True
+    ).encode()
+    fingerprint = hashlib.sha256(encoded).hexdigest()
+    store = MarketSnapshotStore(tmp_path / "market-snapshots")
+    run_id = store.begin_run(fingerprint, request, resume=None)
+
+    initial = _market_operation_inputs(tmp_path, inputs, None)
+    resumed = _market_operation_inputs(tmp_path, None, run_id)
+
+    assert initial == resumed == {"inputs": input_document}
 
 
 def test_operation_run_filters_events_validation_and_apply_prune(tmp_path: Path) -> None:

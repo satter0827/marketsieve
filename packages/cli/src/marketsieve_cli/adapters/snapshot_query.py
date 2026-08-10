@@ -8,7 +8,8 @@ from decimal import Decimal
 from functools import cmp_to_key
 from typing import Any
 
-from marketsieve._snapshot_fields import INDEX_BENCHMARKS
+from marketsieve._snapshot_fields import MARKET_INDEX_IDS
+from marketsieve_cli.contracts import ANALYSIS_PROFILES
 
 
 def query_snapshot(
@@ -50,7 +51,7 @@ def query_snapshot(
         raise ValueError("market snapshot classification filters cannot be empty")
     if any(len(values) != len(set(values)) for values in filters.values()):
         raise ValueError("market snapshot classification filter values must be unique")
-    if invalid_indices := set(filters.get("index", ())) - set(INDEX_BENCHMARKS):
+    if invalid_indices := set(filters.get("index", ())) - set(MARKET_INDEX_IDS):
         raise ValueError(f"unknown market snapshot indices: {sorted(invalid_indices)}")
     if any(len(values) != len(set(values)) for values in (present, missing, fields, domains)):
         raise ValueError("market snapshot query field selections must be unique")
@@ -89,19 +90,14 @@ def query_snapshot(
     known_domains = {value["group"] for value in definitions} | {"quality"}
     if invalid_domains := set(domains) - known_domains:
         raise ValueError(f"unknown market snapshot domains: {sorted(invalid_domains)}")
-    profile_windows = {
-        "short-swing": {1, 5, 20, 60},
-        "swing": {5, 20, 60, 120},
-        "position": {20, 60, 120, 252},
-    }
-    if profile is not None and profile not in profile_windows:
+    if profile is not None and profile not in ANALYSIS_PROFILES:
         raise ValueError(f"unknown market snapshot profile: {profile}")
     selected_by_domain = {value["name"] for value in definitions if value["group"] in domains}
     if "quality" in domains:
         selected_by_domain.update({"price_as_of"})
     selected_source = set(fields) if fields else selected_by_domain or known
     if profile is not None and not fields:
-        windows = profile_windows[profile]
+        windows = set(ANALYSIS_PROFILES[profile]["windows"])
         selected_source = {
             name
             for name in selected_source
