@@ -5,6 +5,27 @@ Versioning for stable releases.
 
 ## [Unreleased]
 
+## [1.0.0rc3] - 2026-08-10
+
+### Changed
+
+- Advanced capabilities to v13. Each command now declares either a schema-backed document result
+  or a loopback server result, and reports external-network and loopback-server effects separately.
+- Pinned all four MarketSieve distributions to the same exact version. `doctor` and the release gate
+  reject missing distributions and every RC, stable, or patch-level mixture.
+- Centralized built-in index runtime identity and query-profile periods in CLI-owned typed
+  definitions shared by Market, Research, validation, and stored-data filtering.
+- Added an explicit-input release qualification report and a metadata-only stable-promotion guard.
+  Release notes are now generated deterministically from this section.
+
+### Fixed
+
+- Removed the nonexistent Preview document schema from the public capability contract.
+- Excluded operation v1 records from v2 lists and rejected them from `show` with an explicit,
+  functional prune command. Pre-1.0 objects remain unsupported and require reconstruction.
+- Changed isolated release verification to install `marketsieve-cli==1.0.0rc3` through the same
+  `--find-links` dependency-resolution path documented for users.
+
 ## [1.0.0rc2] - 2026-08-09
 
 ### Changed

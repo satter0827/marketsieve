@@ -58,12 +58,15 @@ Download all files from one GitHub Release, verify them against `SHA256SUMS`, th
 from that directory:
 
 ```shell
-python -m pip install --find-links . "marketsieve-cli==VERSION"
+shasum -a 256 -c SHA256SUMS
+python -m pip install --find-links . "marketsieve-cli==1.0.0"
 marketsieve doctor
 ```
 
 The four MarketSieve distributions come from the GitHub Release. pip resolves third-party runtime
-dependencies from the configured package index. MarketSieve packages are not published to PyPI.
+dependencies from the configured package index. All four distributions must have exactly the same
+version; `doctor` reports not ready when one is missing or different. MarketSieve packages are not
+published to PyPI. Linux users may run `sha256sum -c SHA256SUMS` instead of `shasum`.
 
 ## Inspect saved evidence
 
@@ -89,6 +92,9 @@ If acquisition fails before publication, the error and failed operation record e
 
 The public CLI contains `market`, `research`, `operations`, `doctor`, and `capabilities`. The public
 SDK contains `marketsieve.model`, `marketsieve.indicators`, and `marketsieve.fields`.
+Snapshot v9, Research v9, Explorer v5, operation v2, and capabilities v13 are the current contracts.
+In the 1.x line, supported public SDK and CLI behavior, settings, and current-artifact readers remain
+compatible. Pre-1.0 artifacts are outside that compatibility boundary.
 
 See the [documentation index](docs/README.md), [1.0 roadmap](docs/roadmap.md), and
 [contribution workflow](CONTRIBUTING.md).

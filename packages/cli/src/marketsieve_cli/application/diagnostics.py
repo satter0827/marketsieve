@@ -7,9 +7,13 @@ import sys
 from dataclasses import dataclass
 from importlib.metadata import PackageNotFoundError, version
 
-from marketsieve import __version__ as sdk_version
-
 SUPPORTED_PYTHON = ((3, 12), (3, 13), (3, 14))
+SUITE_DISTRIBUTIONS = (
+    ("MarketSieve SDK", "marketsieve"),
+    ("MarketSieve extension API", "marketsieve-extension-api"),
+    ("yfinance source", "marketsieve-source-yfinance"),
+    ("MarketSieve CLI", "marketsieve-cli"),
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,19 +39,16 @@ class DiagnosticsService:
         detected_python = self.python_version or sys.version_info[:3]
         python_supported = detected_python[:2] in SUPPORTED_PYTHON
 
-        try:
-            application_version = version("marketsieve-cli")
-            application_installed = True
-        except PackageNotFoundError:
-            application_version = "not installed"
-            application_installed = False
-
-        try:
-            source_version = version("marketsieve-source-yfinance")
-            source_installed = True
-        except PackageNotFoundError:
-            source_version = "not installed"
-            source_installed = False
+        installed: dict[str, str | None] = {}
+        for _label, distribution in SUITE_DISTRIBUTIONS:
+            try:
+                installed[distribution] = version(distribution)
+            except PackageNotFoundError:
+                installed[distribution] = None
+        observed_versions = {value for value in installed.values() if value is not None}
+        versions_match = len(observed_versions) == 1 and all(
+            value is not None for value in installed.values()
+        )
 
         checks = (
             DiagnosticCheck(
@@ -58,18 +59,16 @@ class DiagnosticsService:
                 if python_supported
                 else "Use Python 3.12, 3.13, or 3.14 and run make sync.",
             ),
-            DiagnosticCheck(name="MarketSieve SDK", detail=sdk_version, passed=True),
-            DiagnosticCheck(
-                name="MarketSieve CLI",
-                detail=application_version,
-                passed=application_installed,
-                action=None if application_installed else "Run make sync.",
-            ),
-            DiagnosticCheck(
-                name="yfinance source",
-                detail=source_version,
-                passed=source_installed,
-                action=None if source_installed else "Run make sync.",
+            *(
+                DiagnosticCheck(
+                    name=label,
+                    detail=installed[distribution] or "not installed",
+                    passed=versions_match,
+                    action=None
+                    if versions_match
+                    else "Install all four MarketSieve distributions at the same version.",
+                )
+                for label, distribution in SUITE_DISTRIBUTIONS
             ),
         )
         self.logger.info(

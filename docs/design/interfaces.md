@@ -75,9 +75,16 @@ symlinks, and access outside the object.
 Current top-level contracts are `market-snapshot/v9`, `market-snapshot-list/v3`,
 `market-snapshot-query-result/v3`, `market-snapshot-comparison/v3`, `market-snapshot-diff/v1`,
 `security-research/v9`, `security-research-list/v3`, `security-research-batch/v1`,
-`explorer-data/v5`, `operation-run/v2`, and `capabilities-result/v12`. Every emitted record schema is
+`explorer-data/v5`, `operation-run/v2`, and `capabilities-result/v13`. Every emitted record schema is
 registered and packaged in `marketsieve-cli`. Stable JSON keys and formal schemas are English.
 Human CLI output and Explorer labels may be localized without changing machine documents.
+
+Capabilities classify each command result as `document` or `loopback_server`. Only document results
+carry a registered schema ID. Effects report external network access and loopback server startup as
+independent booleans. Preview is a restricted loopback server and does not claim a document schema.
+
+Operation v2 lists omit older operation records. `operations run show` rejects an older record and
+returns the exact explicit prune command; that command can remove the named incompatible record.
 
 `--output json` never translates keys or enum values. Non-TTY `--output auto` resolves to JSON;
 Rich output is used only for a TTY, and plain text requires `--output text`.

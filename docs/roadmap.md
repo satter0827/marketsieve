@@ -46,6 +46,19 @@ The repeated JP and US operational checks and the complete release gate restart 
 develop commit. `v1.0.0rc2` is published as a GitHub prerelease only after the verified main build is
 matched to its annotated tag. PyPI remains outside the publication path.
 
+## 1.0.0rc3
+
+The third candidate corrects public-contract and release-qualification defects without changing
+Snapshot v9, Research v9, Explorer v5, or operation v2. Capabilities v13 distinguishes document
+results from loopback servers. The four distributions use one exact version, built-in index and
+query-profile definitions have one owner, and release qualification consumes only explicit IDs.
+
+RC3 is installed from its public build-once artifacts outside the checkout. Stable promotion
+requires three consecutive actual JP close sessions and three consecutive actual US close sessions,
+final-session Research and Preview checks, Market cancellation and identical-fingerprint resume,
+Research cancellation with retained publication, and a passing `release-qualification/v1` report.
+Any product correction creates RC4 and restarts both three-session sequences.
+
 ## 1.0.0
 
 Only release-blocking corrections are accepted after `1.0.0rc1`. A correction that changes a frozen

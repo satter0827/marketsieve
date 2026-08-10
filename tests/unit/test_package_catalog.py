@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import re
 import subprocess
 from pathlib import Path
 
 import pytest
 import scripts.package_catalog as package_catalog
-from scripts.package_catalog import PackageSpec, build_all, compatible_range, load_package_catalog
+from scripts.package_catalog import PackageSpec, build_all, load_package_catalog, suite_requirement
 
 
 def test_workspace_catalog_has_unique_buildable_public_packages() -> None:
@@ -19,22 +20,22 @@ def test_workspace_catalog_has_unique_buildable_public_packages() -> None:
     }
     assert len({spec.distribution for spec in catalog}) == len(catalog)
     assert all(spec.pyproject.is_file() for spec in catalog)
-    assert all(spec.project_version == "1.0.0rc2" for spec in catalog)
+    assert {spec.project_version for spec in catalog} == {"1.0.0rc3"}
 
 
-def test_workspace_dependencies_allow_external_minor_compatible_plugins() -> None:
+def test_workspace_dependencies_pin_the_co_released_suite() -> None:
     catalog = load_package_catalog()
     public_names = {spec.distribution for spec in catalog}
 
     for spec in catalog:
-        expected_range = compatible_range(spec.project_version)
         for requirement in spec.project_dependencies:
-            if any(requirement.startswith(name) for name in public_names):
-                assert requirement.endswith(expected_range)
+            name = re.split(r"[<>=!~ ;\[]", requirement, maxsplit=1)[0]
+            if name in public_names:
+                assert requirement == suite_requirement(name, spec.project_version)
 
 
-def test_release_candidate_dependencies_accept_the_same_candidate_line() -> None:
-    assert compatible_range("1.0.0rc2") == ">=1.0.0rc2,<1.1"
+def test_release_candidate_dependencies_require_the_exact_candidate() -> None:
+    assert suite_requirement("marketsieve", "1.0.0rc3") == "marketsieve==1.0.0rc3"
 
 
 def test_publish_workflow_reuses_one_verified_main_artifact() -> None:
@@ -46,6 +47,8 @@ def test_publish_workflow_reuses_one_verified_main_artifact() -> None:
     assert "run-id: ${{ inputs.ci_run_id }}" in workflow
     assert "python3 -m scripts.release_gate verify" in workflow
     assert "gh release create" in workflow and "--draft" in workflow
+    assert "--notes-file release/RELEASE_NOTES.md" in workflow
+    assert "--generate-notes" not in workflow
     assert 'gh release edit "$TAG" --draft=false' in workflow
     assert "uv build" not in workflow
 

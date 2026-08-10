@@ -77,7 +77,8 @@ jobs:
             prerelease=()
             [[ "$TAG" == *rc* ]] && prerelease=(--prerelease)
             gh release create "$TAG" release/* \
-              --draft --verify-tag --generate-notes --title "MarketSieve $TAG" \
+              --draft --verify-tag --notes-file release/RELEASE_NOTES.md \
+              --title "MarketSieve $TAG" \
               "${prerelease[@]}"
           fi
       - name: Publish the GitHub Release
