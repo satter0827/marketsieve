@@ -15,7 +15,13 @@ from scripts import develop_gate, governance_gate, release_gate, review_gate, ru
 from scripts.package_catalog import PackageSpec
 
 
-def _wheel(path: Path, *, name: str = "example", version: str = "0.15.0") -> Path:
+def _wheel(
+    path: Path,
+    *,
+    name: str = "example",
+    version: str = "0.15.0",
+    requirements: tuple[str, ...] = (),
+) -> Path:
     with zipfile.ZipFile(path, "w") as archive:
         archive.writestr(f"{name}/__init__.py", "")
         archive.writestr(f"{name}/py.typed", "")
@@ -24,7 +30,8 @@ def _wheel(path: Path, *, name: str = "example", version: str = "0.15.0") -> Pat
         archive.writestr(f"{name}/adapters/templates/snapshot.html", "<html></html>")
         archive.writestr(
             f"{name}-{version}.dist-info/METADATA",
-            f"Name: {name.replace('_', '-')}\nVersion: {version}\n",
+            f"Name: {name.replace('_', '-')}\nVersion: {version}\n"
+            + "".join(f"Requires-Dist: {value}\n" for value in requirements),
         )
     return path
 
@@ -201,6 +208,10 @@ def test_governance_reads_compares_and_reports_drift(
 def test_release_asset_helpers_and_integrity(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    root = tmp_path / "root"
+    root.mkdir()
+    (root / "CHANGELOG.md").write_text("## [0.15.0] - 2026-08-08\n", encoding="utf-8")
+    monkeypatch.setattr(release_gate, "ROOT", root)
     dist = tmp_path / "dist"
     dist.mkdir()
     spec = _spec(tmp_path / "package")
@@ -231,6 +242,47 @@ def test_release_directory_must_be_empty(tmp_path: Path) -> None:
     (dist / "unexpected").unlink()
     (dist / ".gitignore").write_text("*", encoding="utf-8")
     release_gate.prepare_dist_dir(dist)
+
+
+def test_release_suite_dependency_verification_rejects_missing_and_mixed_pins(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sdk_root = tmp_path / "sdk"
+    cli_root = tmp_path / "cli"
+    sdk_root.mkdir()
+    cli_root.mkdir()
+    (sdk_root / "pyproject.toml").write_text(
+        '[project]\nname = "marketsieve"\nversion = "1.0.0rc3"\ndependencies = []\n',
+        encoding="utf-8",
+    )
+    (cli_root / "pyproject.toml").write_text(
+        '[project]\nname = "marketsieve-cli"\nversion = "1.0.0rc3"\n'
+        'dependencies = ["marketsieve==1.0.0rc3"]\n',
+        encoding="utf-8",
+    )
+    catalog = (
+        PackageSpec("marketsieve", sdk_root, "marketsieve", "sdk"),
+        PackageSpec("marketsieve-cli", cli_root, "marketsieve_cli", "cli"),
+    )
+    monkeypatch.setattr(release_gate, "load_package_catalog", lambda: catalog)
+    _wheel(
+        tmp_path / "marketsieve-1.0.0rc3-py3-none-any.whl", name="marketsieve", version="1.0.0rc3"
+    )
+    cli_wheel = tmp_path / "marketsieve_cli-1.0.0rc3-py3-none-any.whl"
+    _wheel(cli_wheel, name="marketsieve_cli", version="1.0.0rc3")
+
+    with pytest.raises(RuntimeError, match="mixed MarketSieve versions"):
+        release_gate.verify_suite_dependencies(tmp_path, "1.0.0rc3")
+
+    cli_wheel.unlink()
+    _wheel(
+        cli_wheel,
+        name="marketsieve_cli",
+        version="1.0.0rc3",
+        requirements=("marketsieve==1.0.0rc2",),
+    )
+    with pytest.raises(RuntimeError, match="mixed MarketSieve versions"):
+        release_gate.verify_suite_dependencies(tmp_path, "1.0.0rc3")
 
 
 def test_release_source_validation_errors(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -325,7 +377,7 @@ def test_develop_gate_smoke_and_package_workflows(
     root = tmp_path / "root"
     evidence = root / ".marketsieve" / "evidence"
     evidence.mkdir(parents=True)
-    for name in ("doctor-result/v1", "capabilities-result/v12", "log-record/v1"):
+    for name in ("doctor-result/v1", "capabilities-result/v13", "log-record/v1"):
         directory = root / "schemas" / name
         directory.mkdir(parents=True)
         (directory / "schema.json").write_text(
@@ -344,7 +396,7 @@ def test_develop_gate_smoke_and_package_workflows(
             )
         if "capabilities" in command:
             return subprocess.CompletedProcess(
-                command, 0, stdout='{"schema":"capabilities-result/v12"}\n', stderr=""
+                command, 0, stdout='{"schema":"capabilities-result/v13"}\n', stderr=""
             )
         return subprocess.CompletedProcess(command, 0, stdout="help\n", stderr="")
 
@@ -403,7 +455,13 @@ def test_release_build_and_verify_workflow(monkeypatch: pytest.MonkeyPatch, tmp_
             _sdist(dist / "marketsieve_example-0.15.0.tar.gz")
 
     def fake_capture(command: Any, **_: Any) -> str:
-        return commit if tuple(command) == ("git", "rev-parse", "HEAD") else "0.15.0"
+        if tuple(command) == ("git", "rev-parse", "HEAD"):
+            return commit
+        if tuple(command) == ("git", "status", "--porcelain"):
+            return ""
+        if "-c" in command:
+            return "|".join(["0.15.0"] * 4)
+        return "0.15.0"
 
     monkeypatch.setattr(release_gate, "run", fake_run)
     monkeypatch.setattr(release_gate, "capture", fake_capture)

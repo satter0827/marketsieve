@@ -34,5 +34,21 @@ def test_missing_application_distribution_is_reported(monkeypatch: pytest.Monkey
 
     checks = service.collect()
 
-    assert checks[-1].detail == "not installed"
-    assert not checks[-1].passed
+    assert all(check.detail == "not installed" for check in checks[1:])
+    assert all(not check.passed for check in checks[1:])
+
+
+def test_mixed_suite_versions_are_not_ready(monkeypatch: pytest.MonkeyPatch) -> None:
+    versions = {
+        "marketsieve": "1.0.0rc3",
+        "marketsieve-extension-api": "1.0.0rc3",
+        "marketsieve-source-yfinance": "1.0.0rc2",
+        "marketsieve-cli": "1.0.0rc3",
+    }
+    monkeypatch.setattr(diagnostics_module, "version", versions.__getitem__)
+
+    checks = DiagnosticsService(logger=LOGGER, python_version=(3, 13, 0)).collect()
+
+    assert not DiagnosticsService(logger=LOGGER).succeeded(checks)
+    assert all(not check.passed for check in checks[1:])
+    assert all("same version" in (check.action or "") for check in checks[1:])

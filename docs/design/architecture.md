@@ -12,6 +12,11 @@ packages. `marketsieve-extension-api` owns typed provider contracts. `marketsiev
 implements those contracts. `marketsieve-cli` owns explicit invocation inputs, optional operational
 settings, orchestration, storage, projections, and console interfaces.
 
+The CLI owns one typed runtime catalog for built-in index ID, market, benchmark instrument,
+provider symbol, currency, and exchange timezone. Market and Research consume that catalog; provider
+identity does not enter the public SDK. Query-profile holding periods and calculation windows also
+have one CLI-owned definition used by input validation and stored-data filtering.
+
 Typed acquisition progress flows from a provider adapter through an optional extension sink into a
 CLI-owned operation context. The context serializes progress, retry, heartbeat, publication, and
 terminal events and may project them to TTY stderr. Evidence construction never reads that channel,
@@ -45,6 +50,9 @@ Snapshot and Research stores validate every machine document before atomic publi
 when reading an object. The same schemas are available from source checkouts and installed wheels.
 Renderer templates are packaged resources; generated object HTML remains deterministic and contains
 no external runtime reference.
+
+The four public distributions are a co-released suite. Internal package requirements use the exact
+suite version, so release candidates, stable versions, and patches cannot be combined.
 
 The object identity covers exact inputs, effective runtime settings, universe assets, definitions,
 source evidence, rows, aggregates, failures, and artifact inventory. Interrupted runs can resume

@@ -8,7 +8,7 @@ from datetime import datetime
 from decimal import Decimal, InvalidOperation, localcontext
 
 from marketsieve._snapshot_fields import (
-    INDEX_BENCHMARKS,
+    MARKET_INDEX_IDS,
     PERIODS,
     RELATIVE_PERIODS,
     field_definitions,
@@ -369,7 +369,7 @@ def _build_snapshot_row(
         "insufficient_history",
     )
 
-    for index in sorted(INDEX_BENCHMARKS):
+    for index in MARKET_INDEX_IDS:
         if index not in security.memberships:
             for period in RELATIVE_PERIODS:
                 put(f"relative_return_{index}_{period}d", None, "not_applicable")

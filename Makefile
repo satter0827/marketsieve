@@ -32,11 +32,20 @@ BUNDLE ?= $(REVIEW_DIR)
 VERSION ?=
 COMMIT ?=
 RELEASE_DIR ?= $(STATE_DIR)/artifacts/release/$(COMMIT)
+QUALIFICATION_DIR ?= $(STATE_DIR)/artifacts/qualification/$(COMMIT)
+RC_TAG ?=
+JP_SNAPSHOTS ?=
+US_SNAPSHOTS ?=
+JP_RESEARCH ?=
+US_RESEARCH ?=
+CANCELLED_MARKET_RUN ?=
+RESUMED_MARKET_RUN ?=
+CANCELLED_RESEARCH_RUN ?=
 
 export UV_CACHE_DIR := $(abspath $(STATE_DIR))/cache/uv
 export PYTHONPYCACHEPREFIX := $(abspath $(STATE_DIR))/cache/python
 
-.PHONY: help setup-settings doctor artifacts-doctor artifacts-list run-list market-build market-capture market-reconstruct market-resume market-list market-show market-preview market-query market-security market-compare market-diff research-build research-list research-show research-preview sync format format-check lint typecheck test secret-check check capabilities-json build evidence evidence-bundle evidence-validate review-attest governance-check release-build release-verify release-check
+.PHONY: help setup-settings doctor artifacts-doctor artifacts-list run-list market-build market-capture market-reconstruct market-resume market-list market-show market-preview market-query market-security market-compare market-diff research-build research-list research-show research-preview sync format format-check lint typecheck test secret-check check capabilities-json build evidence evidence-bundle evidence-validate review-attest governance-check release-build release-verify release-check release-qualify release-promotion-check
 
 help: ## Show operational and developer commands.
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z0-9_-]+:.*## / {printf "%-22s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -161,3 +170,13 @@ release-verify: ## Verify an existing release directory.
 	python3 -m scripts.release_gate verify --version "$(VERSION)" --commit "$(COMMIT)" --dist-dir "$(RELEASE_DIR)"
 
 release-check: release-build release-verify ## Build once and verify a release candidate.
+
+release-qualify: ## Qualify explicit published-RC operation evidence.
+	@test -n "$(VERSION)" && test -n "$(COMMIT)" && test -n "$(RC_TAG)" || { echo "VERSION, COMMIT, and RC_TAG are required" >&2; exit 2; }
+	@test "$(words $(JP_SNAPSHOTS))" -eq 3 && test "$(words $(US_SNAPSHOTS))" -eq 3 || { echo "exactly three JP_SNAPSHOTS and US_SNAPSHOTS are required" >&2; exit 2; }
+	@test -n "$(JP_RESEARCH)" && test -n "$(US_RESEARCH)" && test -n "$(CANCELLED_MARKET_RUN)" && test -n "$(RESUMED_MARKET_RUN)" && test -n "$(CANCELLED_RESEARCH_RUN)" || { echo "Research and operation evidence IDs are required" >&2; exit 2; }
+	uv run python -m scripts.release_qualification qualify --version "$(VERSION)" --commit "$(COMMIT)" --tag "$(RC_TAG)" --release-dir "$(RELEASE_DIR)" --state-root "$(STATE_DIR)" $(foreach value,$(JP_SNAPSHOTS),--jp-snapshot "$(value)") $(foreach value,$(US_SNAPSHOTS),--us-snapshot "$(value)") --jp-research "$(JP_RESEARCH)" --us-research "$(US_RESEARCH)" --cancelled-market-run "$(CANCELLED_MARKET_RUN)" --resumed-market-run "$(RESUMED_MARKET_RUN)" --cancelled-research-run "$(CANCELLED_RESEARCH_RUN)" --output-dir "$(QUALIFICATION_DIR)"
+
+release-promotion-check: ## Reject non-metadata changes after the qualified RC.
+	@test -n "$(RC_TAG)" || { echo "RC_TAG is required" >&2; exit 2; }
+	uv run python -m scripts.release_qualification guard-promotion --rc-tag "$(RC_TAG)" --candidate "$(HEAD_SHA)"

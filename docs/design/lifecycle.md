@@ -31,3 +31,9 @@ listed. Diff compares only fields with compatible type, unit, and definition ver
 and Research v9 readers reject earlier object contracts with rebuild guidance. They do not migrate,
 reinterpret, or delete those objects. Cleanup may remove caches, interrupted obsolete runs, and
 build evidence only through an explicit operation.
+
+The 1.x compatibility boundary covers the public SDK modules, documented CLI behavior, supported
+settings, and readers for current 1.x artifact contracts. Patch releases do not silently reinterpret
+or invalidate those surfaces. Pre-1.0 artifacts and operation v1 records are outside this boundary:
+they are diagnosed as incompatible and receive rebuild or explicit-prune guidance, never migration
+or automatic deletion.

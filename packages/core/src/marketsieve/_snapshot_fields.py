@@ -4,13 +4,7 @@ from __future__ import annotations
 
 from marketsieve.fields import FieldDefinition
 
-INDEX_BENCHMARKS = {
-    "dow30": "^DJI",
-    "nasdaq100": "^NDX",
-    "nikkei225": "^N225",
-    "sp500": "^GSPC",
-    "topix500": "1308.T",
-}
+MARKET_INDEX_IDS = ("dow30", "nasdaq100", "nikkei225", "sp500", "topix500")
 PERIODS = (1, 5, 20, 60, 120, 252)
 RELATIVE_PERIODS = (20, 60, 120, 252)
 
@@ -407,7 +401,7 @@ def field_definitions() -> tuple[FieldDefinition, ...]:
             ),
         )
     )
-    for index in sorted(INDEX_BENCHMARKS):
+    for index in MARKET_INDEX_IDS:
         benchmark_label = (
             "TOPIX-linked ETF proxy 1308.T" if index == "topix500" else f"{index} benchmark"
         )

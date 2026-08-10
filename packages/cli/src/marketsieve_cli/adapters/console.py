@@ -263,9 +263,14 @@ class ConsoleOutput:
         table = Table(title="CLI capabilities", box=box.ROUNDED, expand=True)
         table.add_column("Command")
         table.add_column("Purpose")
-        table.add_column("Output schema")
+        table.add_column("Result")
         for command in payload["commands"]:
-            table.add_row(command["name"], command["summary"], command["output_schema"] or "-")
+            result = command["result"]
+            table.add_row(
+                command["name"],
+                command["summary"],
+                result["schema"] or result["mode"],
+            )
         self._console.print(table)
 
     def emit_document(self, payload: dict[str, Any], *, title: str) -> None:

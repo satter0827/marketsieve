@@ -6,9 +6,9 @@ from collections.abc import Callable
 from datetime import date, timedelta
 from typing import Any, Protocol
 
-from marketsieve._snapshot_fields import INDEX_BENCHMARKS
 from marketsieve.model import Adjustment, Instrument
 from marketsieve_cli.contracts import ResearchBuildInputs, RuntimeSettings
+from marketsieve_cli.market_catalog import INDEX_RUNTIME_CATALOG
 from marketsieve_extension_api import (
     AcquisitionProgress,
     AcquisitionProgressState,
@@ -215,24 +215,12 @@ class ResearchService:
     ) -> ImportedEquityBatch | None:
         if "benchmarks" not in inputs.evidence:
             return None
-        definitions = {
-            "dow30": ("DJI", "XNYS", "USD", "America/New_York"),
-            "nasdaq100": ("NDX", "XNAS", "USD", "America/New_York"),
-            "nikkei225": ("N225", "XTKS", "JPY", "Asia/Tokyo"),
-            "sp500": ("GSPC", "XNYS", "USD", "America/New_York"),
-            "topix500": ("1308", "XTKS", "JPY", "Asia/Tokyo"),
-        }
         instruments = tuple(
             sorted(
                 (
                     EquityBatchInstrument(
-                        Instrument.create(
-                            symbol=definitions[index][0],
-                            mic=definitions[index][1],
-                            currency=definitions[index][2],
-                            exchange_timezone=definitions[index][3],
-                        ),
-                        INDEX_BENCHMARKS[index],
+                        INDEX_RUNTIME_CATALOG[index].instrument(),
+                        INDEX_RUNTIME_CATALOG[index].provider_symbol,
                         (index,),
                         True,
                     )

@@ -663,7 +663,7 @@ wheels = [
 
 [[package]]
 name = "marketsieve"
-version = "1.0.0rc2"
+version = "1.0.0rc3"
 source = { editable = "packages/core" }
 dependencies = [
     { name = "tzdata" },
@@ -674,7 +674,7 @@ requires-dist = [{ name = "tzdata", specifier = ">=2025.2" }]
 
 [[package]]
 name = "marketsieve-cli"
-version = "1.0.0rc2"
+version = "1.0.0rc3"
 source = { editable = "packages/cli" }
 dependencies = [
     { name = "click" },
@@ -697,7 +697,7 @@ requires-dist = [
 
 [[package]]
 name = "marketsieve-extension-api"
-version = "1.0.0rc2"
+version = "1.0.0rc3"
 source = { editable = "packages/extension-api" }
 dependencies = [
     { name = "marketsieve" },
@@ -708,7 +708,7 @@ requires-dist = [{ name = "marketsieve", editable = "packages/core" }]
 
 [[package]]
 name = "marketsieve-source-yfinance"
-version = "1.0.0rc2"
+version = "1.0.0rc3"
 source = { editable = "packages/source-yfinance" }
 dependencies = [
     { name = "curl-cffi" },

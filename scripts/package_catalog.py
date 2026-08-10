@@ -64,15 +64,12 @@ def _one_artifact(dist_dir: Path, pattern: str) -> Path:
     return matches[0]
 
 
-def compatible_range(version: str) -> str:
-    """Return the supported minor-series range for one public package version."""
+def suite_requirement(name: str, version: str) -> str:
+    """Return the exact requirement for one co-released MarketSieve distribution."""
 
-    match = re.fullmatch(r"([0-9]+)\.([0-9]+)\.[0-9]+(?:rc[1-9][0-9]*)?", version)
-    if match is None:
+    if re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+(?:rc[1-9][0-9]*)?", version) is None:
         raise RuntimeError(f"public package version must use X.Y.Z or X.Y.ZrcN: {version}")
-    major, minor = (int(value) for value in match.groups())
-    lower_bound = version if "rc" in version else f"{major}.{minor}"
-    return f">={lower_bound},<{major}.{minor + 1}"
+    return f"{name}=={version}"
 
 
 def load_package_catalog(root: Path = ROOT) -> tuple[PackageSpec, ...]:
@@ -125,7 +122,7 @@ def load_package_catalog(root: Path = ROOT) -> tuple[PackageSpec, ...]:
             dependency = distributions.get(name)
             if dependency is None:
                 continue
-            expected = f"{name}{compatible_range(spec.project_version)}"
+            expected = suite_requirement(name, spec.project_version)
             if requirement != expected:
                 raise RuntimeError(f"{spec.distribution} must depend on {name} through {expected}")
     return tuple(specs)

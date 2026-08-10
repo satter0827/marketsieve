@@ -35,7 +35,7 @@ def test_public_cli_is_small_and_explicit() -> None:
     assert "market build --all" in landing.stdout
     assert version.output == f"marketsieve, version {__version__}\n"
     document = json.loads(capabilities.stdout)
-    assert document["schema"] == "capabilities-result/v12"
+    assert document["schema"] == "capabilities-result/v13"
     assert set(main.commands) == {
         "market",
         "research",
@@ -45,6 +45,12 @@ def test_public_cli_is_small_and_explicit() -> None:
     }
     assert _command_paths(main) == {item.name for item in COMMAND_CAPABILITIES}
     assert {item["name"] for item in document["commands"]} == _command_paths(main)
+    preview = {item["name"]: item for item in document["commands"]}["market preview"]
+    assert preview["result"] == {"mode": "loopback_server", "schema": None}
+    assert preview["effects"]["loopback_server"] is True
+    build = {item["name"]: item for item in document["commands"]}["market build"]
+    assert build["result"] == {"mode": "document", "schema": "market-snapshot/v9"}
+    assert build["effects"]["external_network"] is True
     for removed in (
         "preview",
         "artifacts",

@@ -24,9 +24,6 @@ from marketsieve_cli.contracts import (
     MARKET_EVIDENCE as _MARKET_EVIDENCE,
 )
 from marketsieve_cli.contracts import (
-    MARKET_INDEX_GROUPS as _MARKET_INDEX_GROUPS,
-)
-from marketsieve_cli.contracts import (
     MARKET_INDICES as _MARKET_INDICES,
 )
 from marketsieve_cli.contracts import (
@@ -42,6 +39,7 @@ from marketsieve_cli.contracts import (
     ResearchBuildInputs as _ResearchBuildInputs,
 )
 from marketsieve_cli.contracts import capabilities_document as _capabilities_document
+from marketsieve_cli.market_catalog import MARKET_INDEX_GROUPS as _MARKET_INDEX_GROUPS
 from marketsieve_cli.observability import configure_logger
 
 MARKET_EVIDENCE = _MARKET_EVIDENCE
@@ -110,6 +108,15 @@ def build_market_service(
     )
 
 
+def _market_operation_inputs(
+    resolved_root: Path, inputs: MarketBuildInputs | None, resume: str | None
+) -> dict[str, Any]:
+    if resume is None:
+        return {"inputs": _input_document(inputs)}
+    request = MarketSnapshotStore(resolved_root / "market-snapshots").run_request(resume)
+    return {"inputs": request["inputs"]}
+
+
 def build_market_snapshot(
     settings_path: Path | None,
     inputs: MarketBuildInputs | None,
@@ -118,15 +125,16 @@ def build_market_snapshot(
     command: str = "market build",
     observer: OperationObserver | None = None,
 ) -> dict[str, Any]:
-    runs = OperationRunStore(state_root())
+    resolved_root = state_root()
+    service = build_market_service(settings_path, state_root=resolved_root)
+    operation_inputs = _market_operation_inputs(resolved_root, inputs, resume)
+    runs = OperationRunStore(resolved_root)
     with runs.track(
         command,
-        {"inputs": _input_document(inputs), "resume": resume},
+        operation_inputs,
         observer=observer,
     ) as operation:
-        document = build_market_service(settings_path).build(
-            inputs, resume=resume, progress=operation
-        )
+        document = service.build(inputs, resume=resume, progress=operation)
         snapshot_id = document.get("snapshot_id")
         if isinstance(snapshot_id, str):
             operation.publish(snapshot_id)

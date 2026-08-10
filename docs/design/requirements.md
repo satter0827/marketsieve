@@ -21,3 +21,7 @@
 - **OPS-03:** Formatter, lint, type, test, package, installation, and release gates must pass.
 - **OPS-04:** Releases use GitHub Releases only and install on macOS and Ubuntu with Python 3.12
   through 3.14.
+- **OPS-05:** All four public distributions use one exact version, and diagnostics and release
+  verification reject every missing or mixed suite.
+- **OPS-06:** Stable promotion requires a passing `release-qualification/v1` report built only from
+  explicit published-RC artifact and operation identities.

@@ -67,7 +67,11 @@ def test_rich_doctor_shows_failure_and_recovery_action() -> None:
 def test_capabilities_support_text_and_rich_projections() -> None:
     payload = {
         "commands": [
-            {"name": "report", "summary": "Generate a report.", "output_schema": "urn:test"}
+            {
+                "name": "report",
+                "summary": "Generate a report.",
+                "result": {"mode": "document", "schema": "urn:test"},
+            }
         ]
     }
     text_output, text_stdout, _ = console(OutputMode.TEXT)

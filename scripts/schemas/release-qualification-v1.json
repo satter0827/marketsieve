@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:marketsieve:review-schema:release-qualification:1.0.0",
+  "type": "object",
+  "required": ["schema", "status", "version", "commit", "tag", "release_manifest_sha256", "snapshots", "research", "operations"],
+  "properties": {
+    "schema": {"const": "release-qualification/v1"},
+    "status": {"const": "ready"},
+    "version": {"type": "string", "pattern": "^1\\.0\\.0rc[1-9][0-9]*$"},
+    "commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "tag": {"type": "string", "pattern": "^v1\\.0\\.0rc[1-9][0-9]*$"},
+    "release_manifest_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "snapshots": {
+      "type": "object",
+      "required": ["jp", "us"],
+      "properties": {
+        "jp": {"$ref": "#/$defs/snapshots"},
+        "us": {"$ref": "#/$defs/snapshots"}
+      },
+      "additionalProperties": false
+    },
+    "research": {"type": "array", "minItems": 2, "maxItems": 2, "uniqueItems": true, "items": {"$ref": "#/$defs/objectId"}},
+    "operations": {
+      "type": "object",
+      "required": ["cancelled_market", "resumed_market", "cancelled_research"],
+      "properties": {
+        "cancelled_market": {"$ref": "#/$defs/runId"},
+        "resumed_market": {"$ref": "#/$defs/runId"},
+        "cancelled_research": {"$ref": "#/$defs/runId"}
+      },
+      "additionalProperties": false
+    }
+  },
+  "$defs": {
+    "objectId": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "runId": {"type": "string", "pattern": "^[0-9a-f-]{36}$"},
+    "snapshots": {"type": "array", "minItems": 3, "maxItems": 3, "uniqueItems": true, "items": {"$ref": "#/$defs/objectId"}}
+  },
+  "additionalProperties": false
+}

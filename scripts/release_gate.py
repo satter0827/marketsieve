@@ -24,7 +24,7 @@ ROOT = Path(__file__).parents[1]
 VERSION = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+(?:rc[1-9][0-9]*)?$")
 COMMIT = re.compile(r"^[0-9a-f]{40}$")
 CHANGELOG_HEADING = re.compile(r"^## \[([^]]+)] - (\d{4}-\d{2}-\d{2})$", re.MULTILINE)
-GENERATED_ASSETS = ("VERIFY.md", "SHA256SUMS", "release.json")
+GENERATED_ASSETS = ("VERIFY.md", "RELEASE_NOTES.md", "SHA256SUMS", "release.json")
 
 
 def run(command: Sequence[str], *, cwd: Path = ROOT) -> None:
@@ -52,6 +52,14 @@ def validate_source_release(version: str) -> None:
     released = {match.group(1) for match in CHANGELOG_HEADING.finditer(changelog)}
     if version not in released:
         raise RuntimeError(f"CHANGELOG does not contain a dated {version} release")
+    if version == "1.0.0":
+        notes = changelog_release_notes(version).lower()
+        required = ("pre-1.0", "rebuild", "1.x", "yfinance", "partial")
+        if any(value not in notes for value in required):
+            raise RuntimeError(
+                "stable release notes must cover pre-1.0 rebuild, 1.x compatibility, "
+                "and known yfinance partial failures"
+            )
 
 
 def sha256(path: Path) -> str:
@@ -92,18 +100,56 @@ def metadata_version(wheel: Path) -> str:
     )
 
 
+def metadata_requirements(wheel: Path) -> tuple[str, ...]:
+    """Return declared runtime requirements from one built wheel."""
+
+    with zipfile.ZipFile(wheel) as archive:
+        metadata_name = next(
+            name for name in archive.namelist() if name.endswith(".dist-info/METADATA")
+        )
+        metadata = archive.read(metadata_name).decode("utf-8")
+    return tuple(
+        line.removeprefix("Requires-Dist: ")
+        for line in metadata.splitlines()
+        if line.startswith("Requires-Dist: ")
+    )
+
+
+def requirement_name(requirement: str) -> str:
+    return re.split(r"[<>=!~ ;\[]", requirement, maxsplit=1)[0]
+
+
+def changelog_release_notes(version: str) -> str:
+    """Render the exact dated CHANGELOG section for one release."""
+
+    changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    heading = re.search(
+        rf"^## \[{re.escape(version)}] - \d{{4}}-\d{{2}}-\d{{2}}$", changelog, re.MULTILINE
+    )
+    if heading is None:
+        raise RuntimeError(f"CHANGELOG does not contain release notes for {version}")
+    next_heading = re.search(r"^## ", changelog[heading.end() :], re.MULTILINE)
+    end = heading.end() + next_heading.start() if next_heading is not None else len(changelog)
+    return f"# MarketSieve {version}\n" + changelog[heading.end() : end].strip() + "\n"
+
+
 def write_release_assets(dist_dir: Path, version: str) -> None:
     instructions_path = dist_dir / "VERIFY.md"
     instructions_path.write_text(
         "# Verify and install MarketSieve\n\n"
-        "Verify the downloaded files against `SHA256SUMS`, then install the CLI wheel. "
+        "Verify the downloaded files against `SHA256SUMS`, then install the CLI. "
         "Repository distributions are resolved from this directory; third-party dependencies "
         "are resolved by pip from the configured package index.\n\n"
         "```shell\n"
+        "# macOS\n"
+        "shasum -a 256 -c SHA256SUMS\n"
+        "# Linux\n"
+        "sha256sum -c SHA256SUMS\n"
         f'python -m pip install --find-links . "marketsieve-cli=={version}"\n'
         "```\n",
         encoding="utf-8",
     )
+    (dist_dir / "RELEASE_NOTES.md").write_text(changelog_release_notes(version), encoding="utf-8")
     checksum_paths = tuple(
         sorted(
             path
@@ -124,6 +170,14 @@ def verify_release_assets(dist_dir: Path, version: str) -> None:
         raise RuntimeError("release verification assets are incomplete")
     if f'"marketsieve-cli=={version}"' not in instructions.read_text(encoding="utf-8"):
         raise RuntimeError("release installation instructions do not match the version")
+    if "shasum -a 256 -c SHA256SUMS" not in instructions.read_text(encoding="utf-8"):
+        raise RuntimeError("release checksum instructions are incomplete")
+    if "sha256sum -c SHA256SUMS" not in instructions.read_text(encoding="utf-8"):
+        raise RuntimeError("release Linux checksum instructions are incomplete")
+    if (dist_dir / "RELEASE_NOTES.md").read_text(encoding="utf-8") != changelog_release_notes(
+        version
+    ):
+        raise RuntimeError("release notes are not the deterministic CHANGELOG projection")
     expected_checksums = {
         path.name: sha256(path)
         for path in release_assets(dist_dir, include_manifest=False)
@@ -175,6 +229,33 @@ def verify_contents(dist_dir: Path) -> None:
         raise RuntimeError(f"release contains private or generated files: {violations}")
 
 
+def verify_suite_dependencies(dist_dir: Path, version: str) -> None:
+    """Reject wheels that allow a mixed MarketSieve suite installation."""
+
+    catalog = load_package_catalog()
+    names = {spec.distribution for spec in catalog}
+    violations: list[str] = []
+    for spec in catalog:
+        expected = {
+            re.sub(r"\s+", "", requirement)
+            for requirement in spec.project_dependencies
+            if requirement_name(requirement) in names
+        }
+        actual = set()
+        for requirement in metadata_requirements(spec.wheel(dist_dir)):
+            name = requirement_name(requirement)
+            if name in names:
+                actual.add(re.sub(r"\s+", "", requirement))
+        if actual != expected or any(
+            requirement != f"{requirement_name(requirement)}=={version}" for requirement in actual
+        ):
+            violations.append(
+                f"{spec.distribution}: expected {sorted(expected)}, found {sorted(actual)}"
+            )
+    if violations:
+        raise RuntimeError(f"release permits mixed MarketSieve versions: {violations}")
+
+
 def verify_secrets(paths: Sequence[Path]) -> None:
     command = [sys.executable, str(ROOT / "scripts" / "secret_gate.py")]
     for path in paths:
@@ -202,6 +283,8 @@ def build(version: str, commit: str, dist_dir: Path) -> None:
     validate_source_release(version)
     if capture(("git", "rev-parse", "HEAD")) != commit:
         raise RuntimeError("commit does not match the checked-out HEAD")
+    if capture(("git", "status", "--porcelain")):
+        raise RuntimeError("release build requires a clean checkout")
     prepare_dist_dir(dist_dir)
     catalog = load_package_catalog()
     with tempfile.TemporaryDirectory(prefix="marketsieve-release-build-") as temporary:
@@ -236,6 +319,7 @@ def build(version: str, commit: str, dist_dir: Path) -> None:
     run(("uv", "run", "twine", "check", *(str(path) for path in (*wheels, *sdists))))
     if any(metadata_version(wheel) != version for wheel in wheels):
         raise RuntimeError("built wheel versions do not match the requested version")
+    verify_suite_dependencies(dist_dir, version)
     verify_contents(dist_dir)
     write_release_assets(dist_dir, version)
     manifest = {
@@ -272,6 +356,7 @@ def verify(version: str, commit: str, dist_dir: Path) -> None:
             raise RuntimeError(f"release checksum mismatch: {path.name}")
     if any(metadata_version(wheel) != version for wheel in wheels):
         raise RuntimeError("wheel metadata versions do not match the request")
+    verify_suite_dependencies(dist_dir, version)
     verify_contents(dist_dir)
     verify_release_assets(dist_dir, version)
     verify_secrets((*wheels, *sdists, *(dist_dir / name for name in GENERATED_ASSETS)))
@@ -286,7 +371,9 @@ def verify(version: str, commit: str, dist_dir: Path) -> None:
                 "pip",
                 "install",
                 "--disable-pip-version-check",
-                *(str(wheel) for wheel in wheels),
+                "--find-links",
+                str(dist_dir.resolve()),
+                f"marketsieve-cli=={version}",
             )
         )
         catalog = load_package_catalog()
@@ -295,15 +382,19 @@ def verify(version: str, commit: str, dist_dir: Path) -> None:
             (
                 str(isolated),
                 "-c",
-                imports + "; import marketsieve.model; import marketsieve.indicators; "
+                "from importlib.metadata import version; "
+                + imports
+                + "; import marketsieve.model; import marketsieve.indicators; "
                 "import marketsieve.fields; import marketsieve_extension_api.testing; "
-                "print(marketsieve.__version__)",
+                "print('|'.join(version(name) for name in "
+                "('marketsieve','marketsieve-extension-api','marketsieve-source-yfinance',"
+                "'marketsieve-cli')))",
             )
         )
         cli_module = next(spec.module for spec in catalog if spec.role == "cli")
         run((str(isolated), "-m", cli_module, "doctor", "--output", "json"))
-    if installed != version:
-        raise RuntimeError("isolated installation version does not match the request")
+    if installed.split("|") != [version] * 4:
+        raise RuntimeError("isolated MarketSieve suite versions do not match the request")
 
 
 def parse_args() -> argparse.Namespace:

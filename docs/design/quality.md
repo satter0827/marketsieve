@@ -27,6 +27,14 @@ review, governance, and gate modules. Evidence records the commit, configuration
 targets. A reviewed commit is immutable evidence; proven descendant changes use a delta semantic
 review, while discontinuous history requires a new full review.
 
+Release qualification names all evidence explicitly. It requires three unique consecutive close
+sessions for each exchange, current RC-produced Snapshots with the standard scope and passing
+quality gates, independently verified Research Packs from both final Snapshots, loopback Preview,
+healthy artifact inventory, exact Market cancellation and resume fingerprints, and retained
+Research publication after cancellation. Provider partial failures remain acceptable only when
+they are explicit and pass the artifact quality contract. Corruption, reconstruction, duplicate
+sessions, concealed missing evidence, or manual repair fail qualification.
+
 Snapshot and Research objects separate `quality-summary.json`, `quality-details.jsonl`,
 `quality-outliers.jsonl`, and `failures.jsonl`. Normal missing values and `not_applicable` remain
 with their security row; outlier candidates retain rule, population, threshold, severity, and value

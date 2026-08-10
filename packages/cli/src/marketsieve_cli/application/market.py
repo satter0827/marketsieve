@@ -16,7 +16,7 @@ from marketsieve._snapshot import (
     SnapshotSecurityEvidence,
     build_snapshot_row,
 )
-from marketsieve._snapshot_fields import INDEX_BENCHMARKS, field_definitions
+from marketsieve._snapshot_fields import field_definitions
 from marketsieve.fields import FieldDefinition
 from marketsieve.model import Adjustment, Instrument
 from marketsieve_cli.application.acquisition_errors import (
@@ -31,6 +31,7 @@ from marketsieve_cli.contracts import (
     MarketQueryInputs,
     RuntimeSettings,
 )
+from marketsieve_cli.market_catalog import INDEX_RUNTIME_CATALOG
 from marketsieve_extension_api import (
     EquityAcquisitionFailure,
     EquityBatchFetcher,
@@ -309,10 +310,10 @@ class MarketService:
         }
         benchmarks: dict[str, tuple[Any, ...]] = {}
         benchmark_failure_reasons: dict[str, str] = {}
-        for index, symbol in INDEX_BENCHMARKS.items():
+        for index, definition in INDEX_RUNTIME_CATALOG.items():
             if index not in inputs.indices or "benchmarks" not in inputs.evidence:
                 continue
-            benchmark_identity = benchmark_ids[symbol]
+            benchmark_identity = benchmark_ids[definition.provider_symbol]
             observation = observations.get(benchmark_identity)
             benchmarks[index] = observation.bars if observation is not None else ()
             reasons = [
@@ -852,22 +853,10 @@ def _load_universe(
 
 
 def _benchmark_seeds(indices: tuple[str, ...]) -> tuple[EquityBatchInstrument, ...]:
-    definitions = {
-        "dow30": ("DJI", "XNYS", "USD", "America/New_York"),
-        "nasdaq100": ("NDX", "XNAS", "USD", "America/New_York"),
-        "nikkei225": ("N225", "XTKS", "JPY", "Asia/Tokyo"),
-        "sp500": ("GSPC", "XNYS", "USD", "America/New_York"),
-        "topix500": ("1308", "XTKS", "JPY", "Asia/Tokyo"),
-    }
     return tuple(
         EquityBatchInstrument(
-            Instrument.create(
-                symbol=definitions[index][0],
-                mic=definitions[index][1],
-                currency=definitions[index][2],
-                exchange_timezone=definitions[index][3],
-            ),
-            INDEX_BENCHMARKS[index],
+            INDEX_RUNTIME_CATALOG[index].instrument(),
+            INDEX_RUNTIME_CATALOG[index].provider_symbol,
             (index,),
             True,
         )

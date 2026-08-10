@@ -321,7 +321,13 @@ class OperationRunStore:
         return {"schema": "operation-run-list/v2", "runs": runs}
 
     def show(self, run_id: str) -> dict[str, Any]:
-        return self._read(self._path(run_id) / "run.json")
+        document = self._read(self._path(run_id) / "run.json")
+        if document.get("schema") != "operation-run/v2":
+            raise ValueError(
+                "operation run uses an incompatible schema; prune it with "
+                f"marketsieve operations run prune {run_id} --apply"
+            )
+        return document
 
     def events(self, run_id: str, *, level: str | None = None) -> dict[str, Any]:
         items = self._read_jsonl(self._path(run_id) / "events.jsonl")
@@ -337,13 +343,20 @@ class OperationRunStore:
         status: str | None = None,
         apply: bool = False,
     ) -> dict[str, Any]:
+        if run_ids:
+            candidates = [self._read(self._path(run_id) / "run.json") for run_id in run_ids]
+        else:
+            candidates = self.list(status=status)["runs"]
         selected = []
-        for item in self.list(status=status)["runs"]:
-            if run_ids and item["run_id"] not in run_ids:
+        for item in candidates:
+            if status is not None and item.get("status") != status:
                 continue
             if before is not None and datetime.fromisoformat(item["started_at"]).date() >= before:
                 continue
-            selected.append(item["run_id"])
+            run_id = item.get("run_id")
+            if not isinstance(run_id, str) or run_id not in (run_ids or (run_id,)):
+                raise ValueError("operation run document has an invalid run ID")
+            selected.append(run_id)
         if apply:
             for run_id in selected:
                 shutil.rmtree(self._path(run_id))
